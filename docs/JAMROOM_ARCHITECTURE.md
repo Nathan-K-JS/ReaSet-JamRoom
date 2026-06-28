@@ -1,8 +1,10 @@
-﻿# ReaSet Jam Room Architecture
+# ReaSet Jam Room Architecture
 
 Status: inspection-only architecture note for `feature/jamroom-stem-controls`.
 
 This document records the current local architecture before any application behavior changes. It is based on inspection of `README.md`, `LICENSE`, `ReaSet.html`, `Sortable.min.js`, all Lua files under `Requirements/`, and the local repository file list. No local REAPER-owned `main.js` file is present in this repository.
+
+The Jam Room control architecture is now an approved, locked decision: ReaSet will expose dynamic, song-specific browser controls that map onto fixed semantic REAPER/X32 playback slots.
 
 ## 1. Current Codebase Map
 
@@ -76,25 +78,33 @@ Live state:
 - It updates active row CSS, progress fills, remaining time, lyrics/chord titles, live view, canvas view, loop counters, and special marker triggers.
 - `queuedRegion`, `lastActiveID`, native-loop globals, and special-trigger guards hold transient playback state.
 
+Future Jam Room stem state:
+
+- Jam Room browser controls are dynamic per song and come from `[JR:SLOT_ID] Display Label` parent/folder buses in REAPER.
+- Each dynamic control maps to one fixed playback slot ID, not to a globally fixed display label.
+- One dynamic control may represent one raw source stem or multiple child source stems grouped below the parent bus.
+- The web state should store the bridge-published controls for the active top-level song region in fixed playback-slot order, including display label, slot ID, availability, confirmed mute state, and configuration diagnostics.
+- Empty or unused fixed slots should not appear in the browser panel for that song.
+
 ## 4. Safest Jam Room Stem-Control Integration Point
 
 The safest integration point is a modular addition to `ReaSet.html` that does not alter existing setlist, transport, lyrics, chord, loop, or marker parsing behavior:
 
-- Add a `BACKING STEMS` panel near the existing main controls or sidebar area, styled with existing button/toggle patterns.
-- Add new JavaScript state dedicated to Jam Room stems, separate from `displayList`, `setlists`, `g_subRegionMap`, and `window.subStates`.
-- Poll a new Lua/ReaScript bridge through `GET/PROJEXTSTATE/ReaSetJamRoom/stems` or similarly named project extstate.
+- Add a `BACKING STEMS` or Jam Room panel near the existing main controls or sidebar area, styled with existing button/toggle patterns.
+- Add new JavaScript state dedicated to Jam Room controls, separate from `displayList`, `setlists`, `g_subRegionMap`, and `window.subStates`.
+- Poll a new Lua/ReaScript bridge through `GET/PROJEXTSTATE/ReaSetJamRoom/controls` or similarly named project extstate.
 - Send user commands through a small command extstate key, such as `SET/PROJEXTSTATE/ReaSetJamRoom/command/...`, then let Lua apply the change and publish actual confirmed state back.
-- Update availability whenever the active song region changes, using the existing `currentPos`/`activeRegion` derivation as the browser-side song context.
+- Update control discovery and availability whenever the active top-level song region changes, using the existing `currentPos`/`activeRegion` derivation as the browser-side song context.
 
-This keeps stem logic beside, but not inside, the existing region/setlist control path.
+This keeps Jam Room logic beside, but not inside, the existing region/setlist control path. The browser interface must never infer or alter X32 channel names. ReaSet labels are dynamic and song-specific; X32 labels are permanent playback-slot labels.
 
 ## 5. Can The Current Architecture Read And Control REAPER Track Mute Directly?
 
 Not reliably in its current form.
 
-The existing browser architecture can send REAPER web commands, poll transport/regions/markers/extstate, and trigger action IDs. It does not currently request track lists, track names, media items, or track mute values. The existing app also has no track-name-to-track mapping and no representation of whether a named track contains media in the active song region.
+The existing browser architecture can send REAPER web commands, poll transport/regions/markers/extstate, and trigger action IDs. It does not currently request track lists, folder hierarchy, track names, media items, parent-bus mute values, or hardware-output routing. The existing app also has no track-name-to-slot mapping and no representation of whether a Jam Room bus contains child source media in the active song region.
 
-Even if a generic REAPER action could toggle some selected track's mute state, that would be unsafe for this feature because Version 1 requires exact track-name matching, actual state refresh, and media availability within the active song region. The browser does not currently have enough information to do that directly.
+Even if a generic REAPER action could toggle some selected track's mute state, that would be unsafe for this feature because Version 1 requires exact `[JR:SLOT_ID] Display Label` parsing, duplicate-slot validation, actual parent-bus mute-state refresh, and child media availability within the active song region. The browser does not currently have enough information to do that directly.
 
 ## 6. Is A New Lua/ReaScript Bridge Required?
 
@@ -102,28 +112,72 @@ Yes. A small bridge is required for reliable Version 1 behavior.
 
 The bridge should run in the background like the existing lyrics/chords/native-loop scripts and should:
 
-- Find exact track names: `STEM_DRUMS`, `STEM_BASS`, `STEM_GUITAR_1`, `STEM_GUITAR_2`, `STEM_KEYS`, `STEM_VOCALS`, `STEM_CLICK`.
-- Read each track's actual mute state via REAPER track APIs.
-- Check whether each stem track has at least one media item overlapping the active song region.
-- Accept commands from the web UI to set a role audible/muted or set all stems audible.
-- Apply mute changes to the actual matching tracks.
+- Discover `[JR:SLOT_ID] Display Label` parent/folder buses associated with the active top-level song region.
+- Parse the slot ID and display label from each bus name.
+- Validate that the slot ID is one of the fixed permitted IDs: `DRUMS`, `PERC_FX`, `BASS`, `GTR1`, `GTR2`, `KEYS`, `BVS`, `LEAD_VOX`, `CLICK`, or `EXTRA`.
+- Treat each valid active bus as one ReaSet user-facing control.
+- Determine whether the bus has child source media items overlapping the active song region.
+- Read the parent bus's actual mute state via REAPER track APIs.
+- Expose dynamic display labels to ReaSet.
+- Expose the fixed slot ID for validation and diagnostics.
+- Publish controls in fixed playback-slot order.
+- Omit empty or unused slots from the normal browser panel.
+- Report configuration errors when a slot ID is invalid, more than one active bus claims the same slot within one song, a `[JR:...]` bus has no child source media overlapping the active song region, or a bus label is missing or malformed.
+- Accept commands from the web UI to set a valid bus audible/muted or set all active valid buses audible.
+- Apply mute changes to the matching parent bus, thereby muting or unmuting all raw child source stems beneath that bus together.
 - Publish confirmed state back to project extstate for the web UI to poll.
-- Publish missing-track, unavailable-stem, and bridge-health/error states.
+- Publish bridge-health and stale/error states.
 
-The bridge is small but important because the required source of truth is REAPER's track model, not the browser's current setlist model.
+The bridge is small but important because the required source of truth is REAPER's track/folder/media model, not the browser's current setlist model.
 
-## 7. Proposed File-Change Plan
+## 7. Locked Dynamic-Bus And Fixed-Slot Model
+
+The system has two separate layers:
+
+- Dynamic, song-specific ReaSet controls: these are the labels seen in the browser/tablet interface. They may differ for every song. One control may contain one raw source stem or many source stems grouped together.
+- Fixed semantic REAPER/X32 playback slots: these preserve stable X32 channel names and stable personal-IEM mixing from song to song. The X32 must never receive arbitrary changing instrument roles on the same channel.
+
+Each song is represented by a top-level REAPER region. When preparing a song, the user creates only the control buses that make musical sense for that song. Each control bus is a parent/folder bus, with the raw Karaoke Version or other source stems beneath it as children.
+
+Each control bus is named exactly:
+
+`[JR:SLOT_ID] Display Label`
+
+Examples:
+
+- `[JR:DRUMS] Drums`
+- `[JR:PERC_FX] EDrum / SFX`
+- `[JR:BASS] Bass`
+- `[JR:GTR1] Guitar 1 / Acoustic`
+- `[JR:GTR2] Guitar 2 / Lead`
+- `[JR:KEYS] Keys`
+- `[JR:BVS] Backing Vocals`
+- `[JR:LEAD_VOX] Lead Vocal`
+- `[JR:CLICK] Click`
+
+The parent bus routes to the corresponding fixed REAPER hardware-output slot. Its child tracks contain the raw source stems. One ReaSet toggle controls the mute state of the matching parent `[JR:SLOT_ID]` bus.
+
+Architectural rationale:
+
+- Raw stem names and numbers vary by song.
+- Musicians need dynamic, intelligible song-specific labels in ReaSet.
+- Personal IEM mixing requires fixed X32 channel semantics.
+- Therefore, dynamic ReaSet labels must map to fixed playback slots.
+- Only one active control bus may use each fixed slot within a song.
+- The `PB CLICK` slot remains permanently excluded from room speakers, while available to selected IEM mixes.
+
+## 8. Proposed File-Change Plan
 
 Existing files to modify after approval:
 
-- `ReaSet.html`: Add Jam Room panel markup/CSS/JS, bridge polling, command dispatch, state rendering, and error display. Keep changes modular and avoid altering setlist/transport behavior except reading the active song region already computed by the app.
+- `ReaSet.html`: Add Jam Room panel markup/CSS/JS, bridge polling, command dispatch, confirmed state rendering, and error display. Keep changes modular and avoid altering setlist/transport behavior except reading the active song region already computed by the app.
 - `README.md`: Add short setup pointer after implementation, preserving upstream attribution and existing bilingual style if desired.
 
 New files to add after approval:
 
-- `Requirements/ReaSet_JamRoom_Stems.lua`: Background bridge for stem discovery, availability, mute state, commands, and extstate publishing.
-- `docs/JAMROOM_SETUP.md`: Track naming convention, preparing song regions, placing media items, installing/running the Lua bridge, launching the interface, and troubleshooting.
-- `docs/JAMROOM_TEST_PLAN.md`: Manual verification matrix for stem state, missing stems, direct REAPER mute changes, song changes, refreshes, play/stop, lyrics/chords, and offline LAN use.
+- `Requirements/ReaSet_JamRoom_Stems.lua`: Background bridge for `[JR:SLOT_ID] Display Label` bus discovery, fixed-slot validation, child-media availability, parent-bus mute state, commands, diagnostics, and extstate publishing.
+- `docs/JAMROOM_SETUP.md`: Dynamic bus naming convention, fixed playback-slot map, preparing song regions, routing parent buses to hardware outputs, placing raw source stems as children, installing/running the Lua bridge, launching the interface, and troubleshooting.
+- `docs/JAMROOM_TEST_PLAN.md`: Manual verification matrix for dynamic controls, fixed slot validation, duplicate slots, empty buses, direct REAPER mute changes, song changes, refreshes, play/stop, lyrics/chords, and offline LAN use.
 
 Files to remain untouched:
 
@@ -132,7 +186,7 @@ Files to remain untouched:
 - Existing X-Raym scripts unless a separate compatibility fix is explicitly approved.
 - `LICENSE`: Do not alter GPL text.
 
-## 8. Compatibility And Licensing Risks
+## 9. Compatibility And Licensing Risks
 
 - GPL v3 applies to this repository. Keep copyright/license notices and provide source for distributed modified versions.
 - SortableJS is MIT licensed; because it is minified third-party code, avoid modifying it and preserve its header.
@@ -141,10 +195,12 @@ Files to remain untouched:
 - The current lyrics script contains a likely typo in `GetNextTrackItem`: it references `item` instead of `start_item`. This does not affect default behavior because `next = false`, but it is a known risk if next-lyrics support is enabled later.
 - `reaper.ULT_GetMediaItemNote` may require a compatible API environment such as Ultraschall API, as noted in the README.
 - REAPER web interface command support is supplied externally by REAPER's `main.js`; the repo cannot be fully tested standalone.
-- ExtState polling should remain modest. The app already has frequent transport and lyrics polling; stem state polling should be small and avoid adding unnecessary load.
-- Track name matching should be exact for stem tracks and case behavior should be documented. The existing lyrics/chords scripts use case-insensitive matching.
+- ExtState polling should remain modest. The app already has frequent transport and lyrics polling; Jam Room state polling should be small and avoid adding unnecessary load.
+- Bus naming should use exact `[JR:SLOT_ID] Display Label` syntax and fixed permitted slot IDs. Case behavior should be documented before implementation.
+- The fixed playback-slot map exhausts the 16 reserved REAPER playback lanes. Version 1 must not propose additional fixed slots.
+- The browser must not rename, infer, or mutate X32 channel labels. X32 and personal-monitor apps keep permanent playback-slot labels.
 
-## 9. Manual Test Plan
+## 10. Manual Test Plan
 
 Baseline before Jam Room changes:
 
@@ -155,25 +211,32 @@ Baseline before Jam Room changes:
 Jam Room Version 1 tests after implementation:
 
 - Bridge health: panel shows a clear unavailable/offline state when the Lua bridge is not running.
-- Track discovery: all seven standard stem tracks are recognized by exact expected names.
-- Missing track: a missing standard track is shown as unavailable, not silently assumed off/on.
-- Availability: if a stem track has no media item overlapping the active song region, its control is disabled or marked unavailable.
-- State display: initial buttons reflect actual REAPER mute state, not browser defaults.
-- Individual toggle: tapping each role changes REAPER mute state and the UI updates only from confirmed refreshed state.
-- Direct REAPER change: changing mute inside REAPER is reflected in the browser on the next poll.
-- Song change: selecting/cueing another song refreshes stem availability for that region without resetting mute choices.
-- All stems on: the explicit action unmutes all available stem tracks and then refreshes confirmed state.
-- Browser refresh: state after refresh reflects actual REAPER track mute state.
-- Playback: play/stop/cue behavior remains unchanged while toggling stems.
+- Valid bus discovery: active `[JR:SLOT_ID] Display Label` parent buses are recognized for the selected top-level song region.
+- Fixed order: the panel shows active valid buses in fixed playback-slot order, not arbitrary track order.
+- Dynamic labels: browser buttons use the song-specific display label while diagnostics retain the fixed slot ID.
+- Empty slots: unused fixed playback slots are not shown in the normal panel.
+- Invalid slot: an unrecognized `[JR:...]` slot reports a configuration error.
+- Duplicate slot: more than one active bus claiming the same slot in one song reports a configuration error.
+- Malformed label: missing or malformed bus labels report a configuration error.
+- Empty bus: a `[JR:...]` parent bus with no child source media overlapping the active song region reports a configuration error or unavailable state.
+- State display: initial buttons reflect actual parent-bus mute state, not browser defaults.
+- Individual toggle: tapping each valid control changes the parent bus mute state and the UI updates only from confirmed refreshed state.
+- Grouped child stems: muting one parent bus mutes all raw child source stems beneath it together.
+- Direct REAPER change: changing parent-bus mute inside REAPER is reflected in the browser on the next poll.
+- Song change: selecting/cueing another song refreshes dynamic controls and availability without resetting mute choices.
+- All stems on: the explicit action unmutes all active valid parent buses and then refreshes confirmed state.
+- Click routing: `CLICK` maps to `PB CLICK` and remains permanently excluded from room speakers while available to selected IEM mixes by mixer/project routing.
+- Browser refresh: state after refresh reflects actual REAPER parent-bus mute state.
+- Playback: play/stop/cue behavior remains unchanged while toggling Jam Room controls.
 - Lyrics/chords: existing lyric and chord displays continue to update with their scripts running.
 - Offline/local network: no external network/CDN dependency is introduced.
 - Error state: communication loss or malformed bridge payload produces a clear non-destructive UI state.
 
-## 10. Recommended First Implementation Milestone
+## 11. Recommended First Implementation Milestone
 
 Start with a read-only bridge and display.
 
-Milestone 1 should add `Requirements/ReaSet_JamRoom_Stems.lua` and a small read-only panel that shows each standard stem role as present/missing, available/unavailable for the active region, and muted/audible according to actual REAPER state. No mute buttons should be interactive until this state path is proven reliable.
+Milestone 1 should add `Requirements/ReaSet_JamRoom_Stems.lua` and a small read-only panel that shows each active valid `[JR:SLOT_ID] Display Label` control for the selected song in fixed playback-slot order. It should show the dynamic display label, fixed slot ID diagnostics, availability based on overlapping child source media, confirmed parent-bus mute state, and configuration errors. No mute buttons should be interactive until this state path is proven reliable.
 
 ## Milestone Plan
 
@@ -183,26 +246,30 @@ Milestone 0: repository and integration analysis
 - Confirm the branch and clean worktree.
 - Confirm no local `main.js` exists and do not modify REAPER-owned files.
 - Identify the need for a small Lua bridge.
+- Lock the dynamic ReaSet controls plus fixed REAPER/X32 playback slots design.
 
 Milestone 1: read-only stem availability/status display
 
 - Add the Lua bridge in read-only mode.
-- Publish bridge heartbeat, track presence, mute state, and active-region availability.
-- Add a non-interactive web panel that renders confirmed bridge state.
+- Discover active `[JR:SLOT_ID] Display Label` parent buses for the selected top-level song region.
+- Validate permitted slot IDs, duplicate slot claims, malformed labels, and child-media overlap.
+- Publish bridge heartbeat, dynamic labels, fixed slot IDs, parent-bus mute state, and active-region availability.
+- Add a non-interactive web panel that renders confirmed bridge state in fixed playback-slot order.
+- Hide empty/unused slots from the normal panel while surfacing configuration diagnostics.
 - Preserve existing ReaSet behavior.
 
 Milestone 2: interactive mute/unmute controls
 
-- Add commands for individual role mute/unmute.
-- Add `ALL STEMS ON` command.
+- Add commands for individual parent-bus mute/unmute.
+- Add `ALL STEMS ON` command for active valid buses.
 - Keep button state driven by refreshed actual REAPER state, not optimistic UI state.
-- Ensure unavailable/missing stems cannot be toggled misleadingly.
+- Ensure unavailable, malformed, duplicate, invalid, or empty-bus controls cannot be toggled misleadingly.
 
 Milestone 3: robust state synchronisation and error handling
 
 - Add stale-data/bridge-offline detection.
-- Verify direct REAPER mute changes are reflected by polling.
-- Add clear UI states for missing tracks, unavailable stems, and communication loss.
+- Verify direct REAPER parent-bus mute changes are reflected by polling.
+- Add clear UI states for invalid slots, duplicate slots, malformed labels, empty buses, and communication loss.
 - Add docs and manual test plan.
 
 Milestone 4: future tempo/transposition investigation
@@ -214,7 +281,30 @@ Milestone 4: future tempo/transposition investigation
 
 ## Human Decisions Needed Before Coding
 
-- Where should the Backing Stems panel live in the current UI: main screen under transport, sidebar section, Live View, or a dedicated Jam Room mode toggle?
-- Should stem track matching be strictly case-sensitive, or should it accept case-insensitive matches while warning about non-standard names?
-- When a standard track is missing, should the UI show the role as hidden, disabled, or visible with an explicit missing warning?
-- Should `STEM_CLICK` default to the same global speaker path as the other stems, or is it expected to be routed separately in REAPER while still controlled from this panel?
+- Where should the Jam Room panel live in the current UI: main screen under transport, sidebar section, Live View, or a dedicated Jam Room mode toggle?
+- Should `[JR:SLOT_ID]` parsing be strictly case-sensitive, or should lowercase variants be accepted with a warning?
+- For configuration errors, should the normal player-facing panel hide invalid controls while a separate diagnostics area lists them, or should invalid controls appear disabled inline?
+- Should `ALL STEMS ON` include `CLICK`, or should `CLICK` require a separate explicit action because it is IEM-only?
+
+## Locked Decisions
+
+The approved control convention is:
+
+`[JR:SLOT_ID] Display Label`
+
+Fixed playback slots:
+
+| Slot ID | REAPER hardware output | X32 mixer channel(s) | Permanent X32 label | Format |
+| --- | ---: | ---: | --- | --- |
+| `DRUMS` | 1-2 | 17-18 | `PB DRUMS` | Stereo |
+| `PERC_FX` | 3 | 19 | `PB PERC/FX` | Mono |
+| `BASS` | 4 | 20 | `PB BASS` | Mono |
+| `GTR1` | 5-6 | 21-22 | `PB GTR 1` | Stereo |
+| `GTR2` | 7-8 | 23-24 | `PB GTR 2` | Stereo |
+| `KEYS` | 9-10 | 25-26 | `PB KEYS` | Stereo |
+| `BVS` | 11-12 | 27-28 | `PB BVs` | Stereo |
+| `LEAD_VOX` | 13 | 29 | `PB LEAD VOX` | Mono |
+| `CLICK` | 14 | 30 | `PB CLICK` | Mono, IEM-only |
+| `EXTRA` | 15-16 | 31-32 | `PB EXTRA` | Stereo |
+
+This exhausts the 16 reserved REAPER playback lanes. Do not add fixed slots in Version 1.
