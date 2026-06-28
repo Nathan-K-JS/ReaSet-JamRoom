@@ -94,13 +94,19 @@ Future Jam Room stem state:
 
 The safest integration point is a modular addition to `ReaSet.html` that does not alter existing setlist, transport, lyrics, chord, loop, or marker parsing behavior:
 
-- Add a compact, touch-friendly Jam Room panel on the main ReaSet screen immediately below the existing transport controls, styled with existing button/toggle patterns.
+- Add a new top-level ReaSet tab named `Tracks` in the existing top-level tab system, alongside existing tabs such as `Show`, `Lyrics`, `Chords`, `Live`, and `Canvas`.
+- Place Jam Room controls inside the `Tracks` tab only. Do not clutter the main `Show` screen with Jam Room controls.
+- Preserve all existing ReaSet tabs and behavior.
 - Add new JavaScript state dedicated to Jam Room controls, separate from `displayList`, `setlists`, `g_subRegionMap`, and `window.subStates`.
 - Poll a new Lua/ReaScript bridge through `GET/PROJEXTSTATE/ReaSetJamRoom/controls` or similarly named project extstate.
 - Send user commands through a small command extstate key, such as `SET/PROJEXTSTATE/ReaSetJamRoom/command/...`, then let Lua apply the change and publish actual confirmed state back.
 - Update control discovery and availability whenever the active top-level song region changes, using the existing `currentPos`/`activeRegion` derivation as the browser-side song context.
 
-This keeps Jam Room logic beside, but not inside, the existing region/setlist control path. Player-facing controls show dynamic labels only. Fixed slot IDs and permanent `PB` bus names remain diagnostic/setup information rather than the main visible control name. The browser interface must never infer or alter X32 channel names. ReaSet labels are dynamic and song-specific; permanent `PB` buses and X32 labels are fixed template infrastructure.
+The `Tracks` tab is the player-facing view for dynamic Jam Room controls. For Milestone 1 it contains the title `Tracks`, a small subdued `Status only` badge, a vertical list of active valid dynamic controls in fixed playback-slot order, an explicit confirmed `Audible` or `Muted` state for each row, a collapsed-by-default `Setup issues` area below the normal list, and the exact no-controls message `No backing stems configured for this song`.
+
+This keeps Jam Room logic beside, but not inside, the existing region/setlist control path. Player-facing controls show dynamic labels only. The normal player-facing portion of the `Tracks` tab must not show fixed slot IDs, permanent `PB` bus names, REAPER routing, or X32 terminology. Those details remain diagnostic/setup information. The browser interface must never infer or alter X32 channel names. ReaSet labels are dynamic and song-specific; permanent `PB` buses and X32 labels are fixed template infrastructure.
+
+A future separate top-level tab named `Tempo & Key` is reserved for global tempo and transposition controls. Do not add an empty placeholder tab in Version 1. The future `Tempo & Key` tab is outside Milestone 1 and Milestone 2, and must not affect the fixed-slot or permanent `PB` bus design.
 
 ## 5. Can The Current Architecture Read And Control REAPER Track Mute Directly?
 
@@ -223,7 +229,7 @@ Architectural rationale:
 
 Existing files to modify after approval:
 
-- `ReaSet.html`: Add Jam Room panel markup/CSS/JS below the existing transport controls, bridge polling, command dispatch to control resolved permanent `PB` buses, confirmed state rendering, no-stems message, and expandable setup diagnostics. Keep changes modular and avoid altering setlist/transport behavior except reading the active song region already computed by the app.
+- `ReaSet.html`: Add a new top-level `Tracks` tab in the existing ReaSet tab system, with Jam Room markup/CSS/JS inside that tab only, bridge polling, command dispatch to control resolved permanent `PB` buses, confirmed state rendering, no-stems message, and expandable setup diagnostics. Keep changes modular and avoid altering existing tabs, setlist, or transport behavior except reading the active song region already computed by the app.
 - `README.md`: Add short setup pointer after implementation, preserving upstream attribution and existing bilingual style if desired.
 
 New files to add after approval:
@@ -265,12 +271,15 @@ Baseline before Jam Room changes:
 
 Jam Room Version 1 tests after implementation:
 
-- Panel placement: Jam Room controls appear on the main ReaSet screen immediately below the existing transport controls.
+- Tracks tab placement: a new top-level `Tracks` tab appears alongside the existing top-level tabs, and existing tabs such as `Show`, `Lyrics`, `Chords`, `Live`, and `Canvas` keep their current behavior.
+- Show screen preservation: Jam Room controls do not appear on or clutter the main `Show` screen.
+- Tracks tab structure: Milestone 1 shows title `Tracks`, a subdued `Status only` badge, a vertical list of active valid dynamic controls, and a collapsed-by-default `Setup issues` area.
 - Bridge health: panel shows a clear unavailable/offline state when the Lua bridge is not running.
 - Valid bus discovery: active `[JR:SLOT_ID] Display Label` parent buses are recognized for the selected top-level song region.
 - Active bus definition: a bus is active only when at least one direct or nested descendant media item has non-zero overlap with the active song region.
 - Fixed order: the panel shows active valid buses in fixed playback-slot order, not arbitrary track order.
-- Dynamic labels: browser buttons use the song-specific display label only, while diagnostics retain the fixed slot ID.
+- Dynamic labels: player-facing rows use the song-specific display label only, while diagnostics retain the fixed slot ID.
+- Player-facing terminology: the normal `Tracks` tab list does not show fixed slot IDs, permanent `PB` bus names, REAPER routing, or X32 terminology.
 - PB bus resolution: a valid `[JR:GTR1] Guitar 1 / Acoustic` bus resolves to the permanent `PB GTR 1` bus.
 - PB buses hidden: permanent `PB` buses never appear as dynamic ReaSet controls.
 - Empty slots and inactive buses: unused fixed playback slots and `[JR:...]` buses with no overlapping descendant media are not shown in the normal panel and are not reported as per-bus configuration errors.
@@ -299,7 +308,7 @@ Jam Room Version 1 tests after implementation:
 
 Start with a read-only bridge and display.
 
-Milestone 1 should add `Requirements/ReaSet_JamRoom_Stems.lua` and a small read-only panel below the existing transport controls. It should show each active valid `[JR:SLOT_ID] Display Label` control for the selected song in fixed playback-slot order, using dynamic display labels as the player-facing names. It should publish fixed slot IDs and resolved `PB` bus names only for diagnostics, confirm resolved `PB` bus mute state, ignore inactive buses with no overlapping descendant media, display `No backing stems configured for this song` when appropriate, and expose malformed/invalid/duplicate/missing-PB active candidates in an expandable setup area. No mute buttons should be interactive until this state path is proven reliable.
+Milestone 1 should add `Requirements/ReaSet_JamRoom_Stems.lua` and a new top-level `Tracks` tab in the existing ReaSet tab system. The tab should contain the title `Tracks`, a small subdued `Status only` badge, and a vertical read-only list of each active valid `[JR:SLOT_ID] Display Label` control for the selected song in fixed playback-slot order. Each player-facing row should show only the dynamic display label and explicit confirmed state, `Audible` or `Muted`. Fixed slot IDs and resolved `PB` bus names should be published only for diagnostics, not the normal list. The tab should confirm resolved `PB` bus mute state, ignore inactive buses with no overlapping descendant media, display `No backing stems configured for this song` when appropriate, and expose malformed/invalid/duplicate/missing-PB active candidates in a collapsed-by-default `Setup issues` area. No mute buttons should be interactive until this state path is proven reliable.
 
 ## Milestone Plan
 
@@ -320,7 +329,9 @@ Milestone 1: read-only stem availability/status display
 - Resolve each active valid slot ID to the exact permanent `PB` bus name.
 - Validate permitted slot IDs, duplicate normalized slot claims, malformed tags, missing labels, and missing required `PB` buses only among active candidate buses.
 - Publish bridge heartbeat, dynamic labels, fixed slot IDs, resolved `PB` bus names, `PB` bus mute state, and active-region availability.
-- Add a non-interactive web panel below the transport controls that renders confirmed bridge state in fixed playback-slot order.
+- Add a non-interactive `Tracks` tab in the existing top-level ReaSet tab system that renders confirmed bridge state in fixed playback-slot order.
+- Keep Jam Room controls out of the main `Show` screen.
+- Show title `Tracks`, a subdued `Status only` badge, dynamic display labels, and confirmed `Audible`/`Muted` states in the player-facing list.
 - Hide empty/unused slots and inactive buses from the normal panel.
 - Add the no-stems message and expandable setup diagnostics.
 - Do not require proof of final `PB` hardware-output routing in Version 1.
@@ -366,7 +377,11 @@ Slot IDs are case-insensitive and normalized to uppercase internally. Display la
 
 A bus is active for a song only when at least one direct or nested descendant media item has non-zero overlap with the active top-level song region. Inactive `[JR:...]` buses are ignored for that song. When no active valid Jam Room buses are found, the browser displays `No backing stems configured for this song`.
 
-The Jam Room panel is locked to the main ReaSet screen immediately below the existing transport controls. Player-facing controls show dynamic labels only; fixed slot IDs appear only in setup/diagnostic contexts.
+The Jam Room UI is locked to a new top-level ReaSet tab named `Tracks`, placed alongside existing tabs such as `Show`, `Lyrics`, `Chords`, `Live`, and `Canvas`. Jam Room controls live inside the `Tracks` tab only and must not clutter the main `Show` screen. Player-facing controls show dynamic labels only; fixed slot IDs and permanent `PB` bus names appear only in setup/diagnostic contexts.
+
+For Milestone 1, the `Tracks` tab contains title `Tracks`, a small subdued `Status only` badge, a vertical list of active valid dynamic controls in fixed playback-slot order, explicit confirmed `Audible` or `Muted` state per row, a collapsed-by-default `Setup issues` area, and the exact no-controls message `No backing stems configured for this song`.
+
+A future separate top-level tab named `Tempo & Key` is reserved for global tempo and transposition controls. Do not add an empty placeholder tab in Version 1. The future `Tempo & Key` tab is outside Milestone 1 and Milestone 2 and must not affect the fixed-slot or permanent `PB` bus design.
 
 The bulk action label is `ALL BACKING ON`. It unmutes only the permanent `PB` buses corresponding to active valid non-click controls in the current song. `CLICK` remains a separate explicit control because it is IEM-only. REAPER routes `CLICK` to the fixed `PB CLICK` playback slot; X32 configuration, not ReaSet, keeps that slot out of room speakers.
 
