@@ -317,6 +317,11 @@
             color: var(--text-secondary);
         }
 
+        .vtab.active {
+            color: var(--text-primary);
+            border-bottom-color: rgba(255, 255, 255, 0.45);
+        }
+
         .vtab.t-show {
             color: var(--color-brand);
             border-bottom-color: var(--color-brand);
@@ -497,6 +502,146 @@
         .app-content::-webkit-scrollbar-thumb {
             background: rgba(255, 255, 255, 0.12);
             border-radius: 2px;
+        }
+
+        /* Jam Room — Milestone 1 */
+        .tracks-panel {
+            display: none;
+            flex: 1;
+            overflow-y: auto;
+            padding: 18px 14px 16px;
+            scrollbar-width: thin;
+            scrollbar-color: rgba(255, 255, 255, 0.10) transparent;
+        }
+
+        .tracks-panel.open {
+            display: block;
+        }
+
+        .tracks-head {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            margin: 0 0 14px;
+        }
+
+        .tracks-title {
+            margin: 0;
+            color: var(--text-primary);
+            font-size: 28px;
+            font-weight: 800;
+            letter-spacing: 0;
+        }
+
+        .tracks-status-badge {
+            padding: 3px 8px;
+            border: 1px solid rgba(255, 255, 255, 0.12);
+            border-radius: var(--radius-sm);
+            color: rgba(255, 255, 255, 0.48);
+            background: rgba(255, 255, 255, 0.06);
+            font-size: 11px;
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+
+        .tracks-health {
+            margin: 0 0 14px;
+            padding: 10px 12px;
+            border: 1px solid rgba(255, 255, 255, 0.09);
+            border-radius: var(--radius-sm);
+            color: rgba(255, 255, 255, 0.58);
+            background: rgba(255, 255, 255, 0.04);
+            font-size: 13px;
+            line-height: 1.4;
+        }
+
+        .tracks-list {
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+        }
+
+        .tracks-row {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 12px;
+            min-height: 68px;
+            padding: 12px 14px;
+            border: 1px solid rgba(255, 255, 255, 0.11);
+            border-radius: var(--radius-card);
+            background: rgba(255, 255, 255, 0.07);
+            color: var(--text-primary);
+            user-select: none;
+        }
+
+        .tracks-label {
+            min-width: 0;
+            overflow-wrap: anywhere;
+            font-size: 18px;
+            font-weight: 750;
+            letter-spacing: 0;
+        }
+
+        .tracks-state {
+            flex-shrink: 0;
+            padding: 5px 10px;
+            border-radius: var(--radius-sm);
+            font-size: 12px;
+            font-weight: 800;
+            letter-spacing: 0.4px;
+            text-transform: uppercase;
+        }
+
+        .tracks-state.audible {
+            color: #1ED760;
+            background: rgba(30, 215, 96, 0.12);
+            border: 1px solid rgba(30, 215, 96, 0.24);
+        }
+
+        .tracks-state.muted {
+            color: #FF9F0A;
+            background: rgba(255, 159, 10, 0.12);
+            border: 1px solid rgba(255, 159, 10, 0.24);
+        }
+
+        .tracks-empty {
+            padding: 22px 14px;
+            color: rgba(255, 255, 255, 0.48);
+            text-align: center;
+            font-size: 15px;
+        }
+
+        .tracks-issues {
+            margin-top: 18px;
+            border-top: 1px solid rgba(255, 255, 255, 0.08);
+            padding-top: 12px;
+        }
+
+        .tracks-issues summary {
+            cursor: pointer;
+            color: rgba(255, 255, 255, 0.58);
+            font-size: 13px;
+            font-weight: 700;
+        }
+
+        .tracks-issue-list {
+            display: flex;
+            flex-direction: column;
+            gap: 7px;
+            margin-top: 10px;
+        }
+
+        .tracks-issue {
+            padding: 9px 10px;
+            border-radius: var(--radius-sm);
+            border: 1px solid rgba(255, 69, 58, 0.22);
+            background: rgba(255, 69, 58, 0.08);
+            color: rgba(255, 255, 255, 0.76);
+            font-size: 12px;
+            line-height: 1.35;
+            overflow-wrap: anywhere;
         }
 
         /* ── SONG CARDS ── */
@@ -3392,6 +3537,9 @@
             <div class="vtab" id="tab-btn-chords" onclick="toggleChordsPanel()">
                 <span class="vtab-icon">♭</span><span>CHORDS</span>
             </div>
+            <div class="vtab" id="tab-btn-tracks" onclick="openTracksTab()">
+                <span class="vtab-icon">≡</span><span>TRACKS</span>
+            </div>
             <div class="vtab" id="tab-btn-live" onclick="openLiveView()">
                 <span class="vtab-icon">▶</span><span>LIVE</span>
             </div>
@@ -3439,6 +3587,20 @@
 
         <div class="app-content">
             <ul id="setlist" style="list-style: none; padding: 0; margin: 0; padding-bottom: 20px;"></ul>
+        </div>
+
+        <!-- Jam Room — Milestone 1 -->
+        <div id="tracks-panel" class="tracks-panel" aria-live="polite">
+            <div class="tracks-head">
+                <h1 class="tracks-title">Tracks</h1>
+                <span class="tracks-status-badge">Status only</span>
+            </div>
+            <div id="tracks-health" class="tracks-health"></div>
+            <div id="tracks-list" class="tracks-list"></div>
+            <details id="tracks-issues" class="tracks-issues">
+                <summary>Setup issues</summary>
+                <div id="tracks-issue-list" class="tracks-issue-list"></div>
+            </details>
         </div>
 
         <!-- TRANSPORT FOOTER -->
@@ -4026,6 +4188,8 @@
         // X-Raym exact approach: poll PROJEXTSTATE every 10ms batched
         wwr_req_recur("GET/PROJEXTSTATE/XR_Lyrics/text;GET/PROJEXTSTATE/XR_Lyrics/next", 10);
         wwr_req_recur("GET/PROJEXTSTATE/XR_Chords/text", 200);
+        // Jam Room — Milestone 1: read-only bridge status, polled no faster than 500 ms.
+        wwr_req_recur("GET/PROJEXTSTATE/ReaSetJamRoom/controls", 500);
         // Auto-detect ReaSet_NativeLoop.lua: one-shot probe, plus refresh every 10s
         wwr_req("GET/EXTSTATE/ReaSet/nativeLoopReady");
         wwr_req_recur("GET/EXTSTATE/ReaSet/nativeLoopReady", 10000);
@@ -4362,6 +4526,20 @@
         var chordsVisible = false;
         var chordsLastRaw = "";
 
+        // Jam Room — Milestone 1
+        var jamRoomTracksVisible = false;
+        var jamRoomState = {
+            payload: null,
+            lastHeartbeat: 0,
+            lastReceivedAt: 0,
+            bridgeSeen: false,
+            malformed: false,
+            error: ""
+        };
+        setInterval(function () {
+            if (jamRoomTracksVisible) jamRoomRenderTracks();
+        }, 1000);
+
         // Show timer state
         var showStartTime = null;         // Date.now() when show first started
         var showAccumulatedMs = 0;        // ms accumulated before last pause
@@ -4393,6 +4571,12 @@
             var x;
             for (x = 0; x < ar.length; x++) {
                 var tok = ar[x].split("\t");
+
+                // Jam Room — Milestone 1
+                if (tok.length > 2 && tok[1] === "ReaSetJamRoom" && tok[2] === "controls") {
+                    jamRoomHandleExtstateReply(tok.slice(3).join('\t') || "");
+                    continue;
+                }
 
                 // === X-RAYM LYRICS ENGINE (exact port) ===
                 // Check tok[1]/tok[2] WITHOUT checking tok[0] — same as X-Raym_Lyrics.html
@@ -6117,6 +6301,7 @@
         var initialX, initialY, currentX, currentY;
 
         function openCanvasMode() {
+            if (jamRoomTracksVisible) closeTracksTab();
             canvasOpen = true;
             document.getElementById("canvas-mode").classList.add("open");
             var tabBtn = document.getElementById('tab-btn-canvas'); if (tabBtn) tabBtn.classList.add('active');
@@ -6319,6 +6504,7 @@
             var panel = document.getElementById("lyrics-panel");
             var btn = document.getElementById("lyrics-btn");
             if (lyricsVisible) {
+                if (jamRoomTracksVisible) closeTracksTab();
                 panel.classList.add("open"); if (btn) btn.classList.add("panel-open");
                 wwr_req("GET/EXTSTATE/XR_Lyrics/text");
             } else {
@@ -6352,6 +6538,7 @@
             var panel = document.getElementById("chords-panel");
             var btn = document.getElementById("chords-btn");
             if (chordsVisible) {
+                if (jamRoomTracksVisible) closeTracksTab();
                 panel.classList.add("open"); if (btn) btn.classList.add("panel-open");
             } else {
                 panel.classList.remove("open"); if (btn) btn.classList.remove("panel-open");
@@ -6453,11 +6640,133 @@
             setGridView(!isGridView);
         }
 
+        // Jam Room — Milestone 1
+        function jamRoomEscapeHtml(value) {
+            return String(value == null ? "" : value)
+                .replace(/&/g, "&amp;")
+                .replace(/</g, "&lt;")
+                .replace(/>/g, "&gt;")
+                .replace(/"/g, "&quot;")
+                .replace(/'/g, "&#39;");
+        }
+
+        function jamRoomHandleExtstateReply(rawPayload) {
+            jamRoomState.bridgeSeen = true;
+            jamRoomState.lastReceivedAt = Date.now();
+            jamRoomState.malformed = false;
+            jamRoomState.error = "";
+            if (!rawPayload) {
+                jamRoomState.payload = null;
+                jamRoomState.malformed = true;
+                jamRoomState.error = "Bridge returned an empty payload.";
+                jamRoomRenderTracks();
+                return;
+            }
+            try {
+                var parsed = JSON.parse(rawPayload);
+                if (!parsed || parsed.schema !== 1 || !Array.isArray(parsed.controls) || !Array.isArray(parsed.issues)) {
+                    throw new Error("Unexpected Jam Room schema");
+                }
+                jamRoomState.payload = parsed;
+                jamRoomState.lastHeartbeat = Number(parsed.heartbeat) || 0;
+            } catch (err) {
+                jamRoomState.payload = null;
+                jamRoomState.malformed = true;
+                jamRoomState.error = "Bridge returned malformed Jam Room data.";
+            }
+            jamRoomRenderTracks();
+        }
+
+        function jamRoomStatusText() {
+            if (!jamRoomState.bridgeSeen) return "Jam Room bridge not detected.";
+            if (jamRoomState.malformed) return jamRoomState.error || "Bridge returned malformed Jam Room data.";
+            if (!jamRoomState.payload) return "Waiting for Jam Room bridge data.";
+            if (Date.now() - jamRoomState.lastReceivedAt > 2200) return "Jam Room bridge data is stale.";
+            if (jamRoomState.payload.status === "no_active_song") return "No active top-level song region.";
+            if (jamRoomState.payload.status && jamRoomState.payload.status !== "ok") return "Jam Room bridge status: " + jamRoomState.payload.status;
+            return "";
+        }
+
+        function jamRoomRenderTracks() {
+            var health = document.getElementById("tracks-health");
+            var list = document.getElementById("tracks-list");
+            var issues = document.getElementById("tracks-issues");
+            var issueList = document.getElementById("tracks-issue-list");
+            if (!health || !list || !issues || !issueList) return;
+
+            var status = jamRoomStatusText();
+            health.style.display = status ? "" : "none";
+            health.textContent = status;
+
+            var payload = jamRoomState.payload;
+            var controls = payload && Array.isArray(payload.controls) ? payload.controls : [];
+            var html = "";
+            if (controls.length) {
+                for (var i = 0; i < controls.length; i++) {
+                    var c = controls[i] || {};
+                    var muted = !!c.muted;
+                    var stateText = muted ? "Muted" : "Audible";
+                    html += '<div class="tracks-row" aria-disabled="true">'
+                        + '<div class="tracks-label">' + jamRoomEscapeHtml(c.label || "") + '</div>'
+                        + '<div class="tracks-state ' + (muted ? "muted" : "audible") + '">' + stateText + '</div>'
+                        + '</div>';
+                }
+            } else if (payload && payload.status !== "no_active_song" && !jamRoomState.malformed) {
+                html = '<div class="tracks-empty">No backing stems configured for this song</div>';
+            }
+            list.innerHTML = html;
+
+            var setupIssues = payload && Array.isArray(payload.issues) ? payload.issues : [];
+            issues.open = false;
+            issues.style.display = setupIssues.length ? "" : "none";
+            var issueHtml = "";
+            for (var j = 0; j < setupIssues.length; j++) {
+                var item = setupIssues[j] || {};
+                var details = [];
+                if (item.type) details.push(item.type);
+                if (item.slot) details.push("slot " + item.slot);
+                if (item.track) details.push(item.track);
+                if (item.pb) details.push(item.pb);
+                var message = item.message || details.join(" - ") || "Setup issue";
+                issueHtml += '<div class="tracks-issue">' + jamRoomEscapeHtml(message) + '</div>';
+            }
+            issueList.innerHTML = issueHtml;
+        }
+
+        function openTracksTab() {
+            jamRoomTracksVisible = true;
+            if (lyricsVisible) toggleLyricsPanel();
+            if (chordsVisible) toggleChordsPanel();
+            var setlistRow = document.querySelector(".app-setlist-row");
+            var infoRow = document.querySelector(".app-info-row");
+            var content = document.querySelector(".app-content");
+            var panel = document.getElementById("tracks-panel");
+            if (setlistRow) setlistRow.style.display = "none";
+            if (infoRow) infoRow.style.display = "none";
+            if (content) content.style.display = "none";
+            if (panel) panel.classList.add("open");
+            jamRoomRenderTracks();
+            updateTopTabs();
+        }
+
+        function closeTracksTab() {
+            jamRoomTracksVisible = false;
+            var setlistRow = document.querySelector(".app-setlist-row");
+            var infoRow = document.querySelector(".app-info-row");
+            var content = document.querySelector(".app-content");
+            var panel = document.getElementById("tracks-panel");
+            if (setlistRow) setlistRow.style.display = "";
+            if (infoRow) infoRow.style.display = "";
+            if (content) content.style.display = "";
+            if (panel) panel.classList.remove("open");
+        }
+
         // F14: Update top tab active state
         function showMainView() {
             // Close any open panels/overlays and return to main show view
             if (lyricsVisible) toggleLyricsPanel();
             if (chordsVisible) toggleChordsPanel();
+            if (jamRoomTracksVisible) closeTracksTab();
             // Live View and Canvas are fullscreen modals — they have their own close buttons
             updateTopTabs();
         }
@@ -6465,13 +6774,15 @@
         function updateTopTabs() {
             var lyricsOpen = document.getElementById('lyrics-panel').classList.contains('open');
             var chordsOpen = document.getElementById('chords-panel').classList.contains('open');
-            var noneOpen = !lyricsOpen && !chordsOpen && !liveViewOpen && !canvasOpen;
+            var noneOpen = !lyricsOpen && !chordsOpen && !jamRoomTracksVisible && !liveViewOpen && !canvasOpen;
             var showBtn = document.getElementById('tab-btn-show');
             var lbtn = document.getElementById('tab-btn-lyrics');
             var cbtn = document.getElementById('tab-btn-chords');
+            var tbtn = document.getElementById('tab-btn-tracks');
             if (showBtn) showBtn.classList.toggle('active', noneOpen);
             if (lbtn) lbtn.classList.toggle('active', lyricsOpen);
             if (cbtn) cbtn.classList.toggle('active', chordsOpen);
+            if (tbtn) tbtn.classList.toggle('active', jamRoomTracksVisible);
         }
 
         // F11: Chords font/size/color prefs
@@ -6785,6 +7096,7 @@
 
         // --- 14. LIVE VIEW ---
         function openLiveView() {
+            if (jamRoomTracksVisible) closeTracksTab();
             liveViewOpen = true;
             document.getElementById("live-view").classList.add("open");
             document.getElementById("live-setlist-name").innerText = currentSetlistName;
