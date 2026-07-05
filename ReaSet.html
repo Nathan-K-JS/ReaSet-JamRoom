@@ -3373,6 +3373,134 @@
             box-shadow: 0 0 7px rgba(255,255,255,0.55);
         }
 
+        /* ══════════════════════════════════════════════
+   JAM ROOM — TRACKS PANEL (see docs/JAMROOM_DESIGN.md)
+══════════════════════════════════════════════ */
+        #tracks-panel {
+            position: fixed;
+            inset: 0;
+            background: var(--bg-app);
+            z-index: 200;
+            display: none;
+            flex-direction: column;
+            padding: 20px;
+            overflow-y: auto;
+        }
+
+        #tracks-panel.open {
+            display: flex;
+        }
+
+        .jr-badge {
+            background: rgba(255, 159, 10, 0.15);
+            border: 1px solid rgba(255, 159, 10, 0.35);
+            color: var(--color-timer);
+            border-radius: var(--radius-pill);
+            padding: 3px 10px;
+            font-size: 11px;
+            font-weight: 700;
+            letter-spacing: 0.5px;
+            vertical-align: middle;
+            margin-left: 8px;
+        }
+
+        .jr-body {
+            max-width: 720px;
+            width: 100%;
+            margin: 0 auto;
+        }
+
+        .jr-song-name {
+            font-size: 15px;
+            font-weight: 700;
+            color: var(--text-primary);
+            margin: 6px 0 14px;
+        }
+
+        .jr-row {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            background: var(--bg-card);
+            border-radius: var(--radius-card);
+            padding: 18px 20px;
+            margin-bottom: 10px;
+            min-height: 64px;
+        }
+
+        .jr-row-label {
+            font-size: 18px;
+            font-weight: 700;
+            color: var(--text-primary);
+        }
+
+        .jr-state {
+            font-size: 13px;
+            font-weight: 800;
+            letter-spacing: 1px;
+            padding: 6px 14px;
+            border-radius: var(--radius-pill);
+            white-space: nowrap;
+        }
+
+        .jr-state-audible {
+            color: var(--color-chain);
+            background: rgba(48, 209, 88, 0.12);
+        }
+
+        .jr-state-muted {
+            color: var(--color-skip);
+            background: rgba(255, 69, 58, 0.12);
+        }
+
+        .jr-state-unavail {
+            color: var(--text-subdued);
+            background: rgba(128, 128, 128, 0.12);
+        }
+
+        .jr-section-title {
+            font-size: 11px;
+            font-weight: 700;
+            letter-spacing: 1.2px;
+            color: var(--text-subdued);
+            margin: 18px 0 8px;
+        }
+
+        .jr-panel-msg {
+            text-align: center;
+            color: var(--text-subdued);
+            padding: 60px 20px;
+            font-size: 16px;
+            line-height: 1.7;
+        }
+
+        .jr-panel-msg b {
+            color: var(--text-primary);
+        }
+
+        #jr-issues {
+            margin-top: 22px;
+        }
+
+        #jr-issues summary {
+            cursor: pointer;
+            color: var(--text-subdued);
+            font-size: 12px;
+            font-weight: 700;
+            letter-spacing: 0.8px;
+        }
+
+        .jr-issue {
+            background: rgba(255, 159, 10, 0.08);
+            border-left: 3px solid var(--color-timer);
+            color: var(--text-secondary);
+            font-size: 12.5px;
+            padding: 8px 12px;
+            margin-top: 8px;
+            border-radius: var(--radius-sm);
+            font-family: var(--font-mono);
+        }
+
     </style>
 </head>
 
@@ -3397,6 +3525,9 @@
             </div>
             <div class="vtab" id="tab-btn-canvas" onclick="openCanvasMode()">
                 <span class="vtab-icon">▣</span><span>CANVAS</span>
+            </div>
+            <div class="vtab" id="tab-btn-tracks" onclick="toggleTracksPanel()">
+                <span class="vtab-icon">▥</span><span>TRACKS</span>
             </div>
 
             <div class="vtab-spacer"></div>
@@ -3797,6 +3928,17 @@
         <div class="chord-label" id="chord-label">Enable the Lua chords script in REAPER</div>
     </div>
 
+    <!-- JAM ROOM TRACKS PANEL -->
+    <div id="tracks-panel">
+        <div class="panel-header">
+            <span class="panel-title">Tracks<span class="jr-badge">STATUS ONLY</span></span>
+            <span class="panel-close-btn" onclick="toggleTracksPanel()">✕</span>
+        </div>
+        <div class="jr-body" id="jr-body">
+            <div class="jr-panel-msg">Waiting for REAPER…</div>
+        </div>
+    </div>
+
     <!-- LIVE VIEW -->
     <div id="live-view">
         <button class="chord-close-btn" onclick="closeLiveView()"
@@ -4029,6 +4171,12 @@
         // Auto-detect ReaSet_NativeLoop.lua: one-shot probe, plus refresh every 10s
         wwr_req("GET/EXTSTATE/ReaSet/nativeLoopReady");
         wwr_req_recur("GET/EXTSTATE/ReaSet/nativeLoopReady", 10000);
+
+        // Jam Room bridge (ReaSet_JamRoom.lua): tiny status poll only —
+        // payload chunks are burst-fetched on demand when meta's generation changes
+        wwr_req_recur("GET/EXTSTATE/ReaSetJR/heartbeat;GET/EXTSTATE/ReaSetJR/meta", 500);
+        // Jam Room: live per-track mute state straight from REAPER (mute = flags & 8)
+        wwr_req_recur("TRACK", 500);
         wwr_start();
 
         // --- 2. STATE ---
@@ -4391,6 +4539,7 @@
             if (isDragging) return;
             var ar = results.split("\n");
             var x;
+            var _jrTrkBatch = null; // TRACK rows arrive as one batch per reply, no list framing
             for (x = 0; x < ar.length; x++) {
                 var tok = ar[x].split("\t");
 
@@ -4474,7 +4623,18 @@
                             syncRegions();
                         }
                         break;
+                    case "TRACK":
+                        // Jam Room: TRACK <idx> <name> <flags> ... — mute bit = flags & 8
+                        // (verified live; see docs/JAMROOM_DESIGN.md M0 findings)
+                        if (!_jrTrkBatch) _jrTrkBatch = {};
+                        _jrTrkBatch[jrNormName(tok[2])] = {
+                            idx: parseInt(tok[1]),
+                            muted: (parseInt(tok[3]) & 8) === 8
+                        };
+                        break;
                     case "EXTSTATE":
+                        // Jam Room bridge payload/heartbeat
+                        if (tok[1] === "ReaSetJR") { jrHandleExtState(tok); break; }
                         // Auto-detection: ReaSet_NativeLoop.lua writes "ReaSet/nativeLoopReady=1"
                         if (tok[1] === "ReaSet" && tok[2] === "nativeLoopReady") {
                             var nlReady = (tok[3] === "1");
@@ -4489,6 +4649,12 @@
                         // the sub-region — prevents JS from re-jumping after Lua finishes.
                         break;
                 }
+            }
+
+            // Jam Room: commit the TRACK batch and refresh confirmed mute display
+            if (_jrTrkBatch) {
+                g_jrTracks = _jrTrkBatch;
+                if (tracksPanelOpen) renderTracksPanel();
             }
 
             // === X-RAYM LYRICS DISPLAY (exact logic from X-Raym_Lyrics.html) ===
@@ -6458,6 +6624,7 @@
             // Close any open panels/overlays and return to main show view
             if (lyricsVisible) toggleLyricsPanel();
             if (chordsVisible) toggleChordsPanel();
+            if (tracksPanelOpen) toggleTracksPanel();
             // Live View and Canvas are fullscreen modals — they have their own close buttons
             updateTopTabs();
         }
@@ -6465,13 +6632,16 @@
         function updateTopTabs() {
             var lyricsOpen = document.getElementById('lyrics-panel').classList.contains('open');
             var chordsOpen = document.getElementById('chords-panel').classList.contains('open');
-            var noneOpen = !lyricsOpen && !chordsOpen && !liveViewOpen && !canvasOpen;
+            var tracksOpen = document.getElementById('tracks-panel').classList.contains('open');
+            var noneOpen = !lyricsOpen && !chordsOpen && !tracksOpen && !liveViewOpen && !canvasOpen;
             var showBtn = document.getElementById('tab-btn-show');
             var lbtn = document.getElementById('tab-btn-lyrics');
             var cbtn = document.getElementById('tab-btn-chords');
+            var tbtn = document.getElementById('tab-btn-tracks');
             if (showBtn) showBtn.classList.toggle('active', noneOpen);
             if (lbtn) lbtn.classList.toggle('active', lyricsOpen);
             if (cbtn) cbtn.classList.toggle('active', chordsOpen);
+            if (tbtn) tbtn.classList.toggle('active', tracksOpen);
         }
 
         // F11: Chords font/size/color prefs
@@ -7755,6 +7925,192 @@
             };
             alert(msgs[topic] || "");
         }
+
+        // --- 19. JAM ROOM TRACKS (see docs/JAMROOM_DESIGN.md) ---
+        // Musician-facing backing-group status for the current song.
+        // Sources of truth — never cached, never optimistic:
+        //   structure/labels: ReaSet_JamRoom.lua via chunked ReaSetJR extstate
+        //   mute state:       REAPER's native TRACK poll (flags & 8)
+        var tracksPanelOpen = false;
+        var g_jrTracks = null;      // normalized track name -> {idx, muted}, latest TRACK poll
+        var g_jrData = null;        // assembled bridge payload {songs, globalIssues}
+        var g_jrDataGen = null;     // generation of g_jrData
+        var g_jrHb = { val: null, changedAt: 0 };
+        var g_jrFetch = null;       // chunk burst in flight: {gen, count, chunks, got}
+        var g_jrLastHtml = "";
+
+        function jrNormName(s) {
+            return (s || '').replace(/^\s+|\s+$/g, '').toUpperCase();
+        }
+
+        // Bridge is trusted only while its heartbeat keeps advancing. The Lua
+        // side bumps ~1/s and clears all keys on exit; non-persistent extstate
+        // means nothing survives a REAPER restart either.
+        function jrBridgeOnline() {
+            return g_jrHb.val !== null && (Date.now() - g_jrHb.changedAt) < 3500;
+        }
+
+        function jrHandleExtState(tok) {
+            var key = tok[2];
+            var val = tok.length > 3 ? tok.slice(3).join('\t') : '';
+            if (key === 'heartbeat') {
+                if (val === '') {
+                    // Bridge cleared its keys (stopped) or was never running
+                    g_jrHb.val = null; g_jrData = null; g_jrDataGen = null;
+                } else if (val !== g_jrHb.val) {
+                    g_jrHb.val = val; g_jrHb.changedAt = Date.now();
+                }
+            } else if (key === 'meta') {
+                if (val === '') return;
+                var parts = val.split(':');
+                var gen = parts[0], count = parseInt(parts[1]);
+                if (isNaN(count)) return;
+                if (gen !== g_jrDataGen && (!g_jrFetch || g_jrFetch.gen !== gen)) {
+                    g_jrFetch = { gen: gen, count: count, chunks: [], got: 0 };
+                    var req = [];
+                    for (var i = 0; i < count; i++) req.push('GET/EXTSTATE/ReaSetJR/d' + i);
+                    if (req.length) wwr_req(req.join(';'));
+                    else jrAssemble();
+                }
+            } else if (/^d\d+$/.test(key)) {
+                if (!g_jrFetch || val === '') return;
+                var ci = parseInt(key.slice(1));
+                var sep = val.indexOf(':');
+                if (sep < 0) return;
+                if (val.slice(0, sep) !== g_jrFetch.gen) {
+                    // A rescan raced our read; drop it — the meta poll retries
+                    g_jrFetch = null;
+                    return;
+                }
+                if (ci < g_jrFetch.count && g_jrFetch.chunks[ci] === undefined) {
+                    g_jrFetch.chunks[ci] = val.slice(sep + 1);
+                    g_jrFetch.got++;
+                    if (g_jrFetch.got === g_jrFetch.count) jrAssemble();
+                }
+            }
+        }
+
+        function jrAssemble() {
+            var f = g_jrFetch;
+            g_jrFetch = null;
+            if (!f) return;
+            try {
+                g_jrData = f.count === 0 ? { schema: 1, songs: {}, globalIssues: [] }
+                                         : JSON.parse(f.chunks.join(''));
+                g_jrDataGen = f.gen;
+            } catch (e) {
+                g_jrData = null; g_jrDataGen = null;
+            }
+            if (tracksPanelOpen) renderTracksPanel();
+        }
+
+        // Active song joined by TIME RANGE (payload carries start/end), so no
+        // dependency on region-ID equivalence between web API and Lua.
+        function jrActiveSong() {
+            if (!g_jrData || !g_jrData.songs) return null;
+            for (var id in g_jrData.songs) {
+                var s = g_jrData.songs[id];
+                if (currentPos >= s.start && currentPos < s['end']) return s;
+            }
+            return null;
+        }
+
+        function jrInsideAnyRegion() {
+            // g_regions raw rows: REGION <name> <id> <start> <end> ...
+            for (var i = 0; i < g_regions.length; i++) {
+                var st = parseFloat(g_regions[i][3]), en = parseFloat(g_regions[i][4]);
+                if (!isNaN(st) && !isNaN(en) && currentPos >= st && currentPos < en) return true;
+            }
+            return false;
+        }
+
+        function jrEsc(s) {
+            return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;')
+                            .replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+        }
+
+        function renderTracksPanel() {
+            var body = document.getElementById('jr-body');
+            if (!body) return;
+            var html;
+
+            if (!jrBridgeOnline()) {
+                html = '<div class="jr-panel-msg"><b>Backing-track bridge is not running.</b><br>'
+                    + 'In REAPER: Actions &rarr; run <b>ReaSet_JamRoom.lua</b>.<br>'
+                    + 'Track states cannot be shown until it is running.</div>';
+            } else if (!g_jrData) {
+                html = '<div class="jr-panel-msg">Loading backing-track data…</div>';
+            } else {
+                var song = jrActiveSong();
+                if (!song) {
+                    html = '<div class="jr-panel-msg">' + (jrInsideAnyRegion()
+                        ? 'No backing stems configured for this song'
+                        : 'No active song.<br>Select a song on the Show tab.') + '</div>';
+                } else {
+                    html = '<div class="jr-song-name">' + jrEsc(song.name) + '</div>';
+                    var controls = (song.controls || []).slice()
+                        .sort(function (a, b) { return a.order - b.order; });
+                    var main = [], click = [];
+                    for (var i = 0; i < controls.length; i++) {
+                        var c = controls[i];
+                        var t = g_jrTracks ? g_jrTracks[jrNormName(c.pb)] : null;
+                        var cls, txt;
+                        if (!t)          { cls = 'jr-state-unavail'; txt = 'UNAVAILABLE'; }
+                        else if (t.muted){ cls = 'jr-state-muted';   txt = '✕ MUTED'; }
+                        else             { cls = 'jr-state-audible'; txt = '● AUDIBLE'; }
+                        var row = '<div class="jr-row"><span class="jr-row-label">'
+                            + jrEsc(c.label) + '</span><span class="jr-state ' + cls + '">'
+                            + txt + '</span></div>';
+                        (c.click ? click : main).push(row);
+                    }
+                    if (!main.length && !click.length) {
+                        html += '<div class="jr-panel-msg">No backing stems configured for this song</div>';
+                    } else {
+                        html += main.join('');
+                        if (click.length) {
+                            html += '<div class="jr-section-title">CLICK / METRONOME</div>' + click.join('');
+                        }
+                    }
+                    var issues = (song.issues || []).concat(g_jrData.globalIssues || []);
+                    if (issues.length) {
+                        html += '<details id="jr-issues"><summary>SETUP ISSUES ('
+                            + issues.length + ')</summary>';
+                        for (var k = 0; k < issues.length; k++) {
+                            html += '<div class="jr-issue">' + jrEsc(issues[k].msg || issues[k].type) + '</div>';
+                        }
+                        html += '</details>';
+                    }
+                }
+            }
+
+            if (html === g_jrLastHtml) return; // avoid resetting <details> open state
+            var wasOpen = false;
+            var det = document.getElementById('jr-issues');
+            if (det && det.hasAttribute('open')) wasOpen = true;
+            g_jrLastHtml = html;
+            body.innerHTML = html;
+            det = document.getElementById('jr-issues');
+            if (det && wasOpen) det.setAttribute('open', '');
+        }
+
+        function toggleTracksPanel() {
+            tracksPanelOpen = !tracksPanelOpen;
+            var panel = document.getElementById('tracks-panel');
+            if (tracksPanelOpen) {
+                panel.classList.add('open');
+                g_jrLastHtml = "";
+                renderTracksPanel();
+            } else {
+                panel.classList.remove('open');
+            }
+            updateTopTabs();
+        }
+
+        // Staleness watchdog: if REAPER/bridge stops replying entirely there are
+        // no onreply ticks, so re-evaluate the heartbeat age on a timer too.
+        setInterval(function () {
+            if (tracksPanelOpen) renderTracksPanel();
+        }, 2000);
     </script>
 </body>
 
