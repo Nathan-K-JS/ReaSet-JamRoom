@@ -54,9 +54,14 @@ Key properties:
 4. **~1 KB per-value limit** observed through the HTTP path (1,500-char value
    truncated to 998). Multi-key batched GET replies are NOT capped overall
    (1.8 KB across two keys returned fully). Hence the chunked payload below.
-5. Region-ID equivalence (web `REGION` id field vs Lua `EnumProjectMarkers`
-   markrgnindexnumber) — still to confirm at M1 first-run (no regions in the
-   project open during M0). Fallback if they differ: match by name + start.
+5. Region-ID equivalence CONFIRMED at M1: web `REGION` id field == Lua
+   `EnumProjectMarkers` markrgnindexnumber. (The browser joins the active song
+   by time range anyway, so nothing depends on this.)
+6. **Reply escaping:** the web interface escapes EXTSTATE values in replies:
+   `\` → `\\`, TAB → `\t`, LF → `\n`; quotes pass through. The browser must
+   unescape (`jrUnescape()` in ReaSet.html) or JSON payloads containing
+   escaped quotes fail to parse. Found via live M1 test.
+7. TRACK flags: bit 1 = folder (PB folder bus showed 137 = 128+8+1 muted).
 
 ## Extstate contract (namespace `ReaSetJR`, all non-persistent global)
 
@@ -122,8 +127,13 @@ missing PB bus, duplicate PB bus names, routing mismatch.
 ## Milestones
 
 - **M0** ✅ live web-API verification (this document).
-- **M1** Lua bridge + read-only Tracks tab (labels + confirmed Audible/Muted,
-  offline/no-song/no-stems states, Setup issues area, "Status only" badge).
+- **M1** ✅ Lua bridge + read-only Tracks tab, live-verified end-to-end
+  (real bridge in REAPER + headless browser against the deployed page):
+  discovery/validation payload exactly as designed for a 20-track test
+  project (built by `Requirements/ReaSet_JamRoom_TestProject.lua`), live
+  mute join, per-song labels switching on the same slot with mute state
+  persisting across songs, offline detection on heartbeat stall, all four
+  deliberate misconfigurations reported, zero JS console errors.
 - **M2** Interactive: tap-to-toggle mute (confirmed-state display only),
   `ALL BACKING ON` (never touches PB CLICK), separate CLICK control.
 - **M3** Operator guide `docs/JAMROOM_SETUP.md`.

@@ -7943,6 +7943,15 @@
             return (s || '').replace(/^\s+|\s+$/g, '').toUpperCase();
         }
 
+        // REAPER's web interface escapes EXTSTATE values in replies:
+        // '\' -> '\\', TAB -> '\t', LF -> '\n' (verified live; quotes pass
+        // through). Reverse it or JSON payloads containing escapes break.
+        function jrUnescape(s) {
+            return s.replace(/\\([\\tn])/g, function (m, c) {
+                return c === 't' ? '\t' : (c === 'n' ? '\n' : '\\');
+            });
+        }
+
         // Bridge is trusted only while its heartbeat keeps advancing. The Lua
         // side bumps ~1/s and clears all keys on exit; non-persistent extstate
         // means nothing survives a REAPER restart either.
@@ -7952,7 +7961,7 @@
 
         function jrHandleExtState(tok) {
             var key = tok[2];
-            var val = tok.length > 3 ? tok.slice(3).join('\t') : '';
+            var val = tok.length > 3 ? jrUnescape(tok.slice(3).join('\t')) : '';
             if (key === 'heartbeat') {
                 if (val === '') {
                     // Bridge cleared its keys (stopped) or was never running
