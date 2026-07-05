@@ -134,6 +134,12 @@ missing PB bus, duplicate PB bus names, routing mismatch.
   mute join, per-song labels switching on the same slot with mute state
   persisting across songs, offline detection on heartbeat stall, all four
   deliberate misconfigurations reported, zero JS console errors.
-- **M2** Interactive: tap-to-toggle mute (confirmed-state display only),
-  `ALL BACKING ON` (never touches PB CLICK), separate CLICK control.
-- **M3** Operator guide `docs/JAMROOM_SETUP.md`.
+- **M2** ✅ Interactive: tap-to-toggle mute (confirmed-state display only,
+  pending dot until the TRACK poll confirms), `ALL BACKING ON` (never touches
+  PB CLICK), separate CLICK control. Live-verified: in-page tap muted
+  PB DRUMS in REAPER; ALL BACKING ON restored it with the click left muted.
+- **M3** ✅ Operator guide `docs/JAMROOM_SETUP.md`.
+
+Remaining before rehearsal use: a human pass on a real tablet (touch feel,
+sizes), the real project template with actual stems, and X32-side routing
+(fixed channel plan above; nothing in this feature talks to the X32).
