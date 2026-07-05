@@ -3391,19 +3391,6 @@
             display: flex;
         }
 
-        .jr-badge {
-            background: rgba(255, 159, 10, 0.15);
-            border: 1px solid rgba(255, 159, 10, 0.35);
-            color: var(--color-timer);
-            border-radius: var(--radius-pill);
-            padding: 3px 10px;
-            font-size: 11px;
-            font-weight: 700;
-            letter-spacing: 0.5px;
-            vertical-align: middle;
-            margin-left: 8px;
-        }
-
         .jr-body {
             max-width: 720px;
             width: 100%;
@@ -3426,6 +3413,50 @@
             padding: 18px 20px;
             margin-bottom: 10px;
             min-height: 64px;
+            cursor: pointer;
+            user-select: none;
+            -webkit-user-select: none;
+            -webkit-tap-highlight-color: transparent;
+        }
+
+        .jr-row:active {
+            background: var(--bg-hover);
+        }
+
+        .jr-row.jr-disabled {
+            cursor: default;
+            opacity: 0.55;
+        }
+
+        .jr-allon {
+            display: block;
+            width: 100%;
+            padding: 16px;
+            margin: 0 0 14px;
+            font-size: 15px;
+            font-weight: 800;
+            letter-spacing: 1px;
+            color: #000;
+            background: var(--color-brand);
+            border: none;
+            border-radius: var(--radius-pill);
+            cursor: pointer;
+            font-family: var(--font-ui);
+        }
+
+        .jr-allon:active {
+            filter: brightness(1.2);
+        }
+
+        .jr-pend {
+            margin-left: 8px;
+            display: inline-block;
+            animation: jrPulse 0.8s ease-in-out infinite;
+        }
+
+        @keyframes jrPulse {
+            0%, 100% { opacity: 0.2; }
+            50%      { opacity: 1; }
         }
 
         .jr-row-label {
@@ -3931,7 +3962,7 @@
     <!-- JAM ROOM TRACKS PANEL -->
     <div id="tracks-panel">
         <div class="panel-header">
-            <span class="panel-title">Tracks<span class="jr-badge">STATUS ONLY</span></span>
+            <span class="panel-title">Tracks</span>
             <span class="panel-close-btn" onclick="toggleTracksPanel()">✕</span>
         </div>
         <div class="jr-body" id="jr-body">
@@ -4651,9 +4682,17 @@
                 }
             }
 
-            // Jam Room: commit the TRACK batch and refresh confirmed mute display
+            // Jam Room: commit the TRACK batch and refresh confirmed mute display.
+            // Only a batch containing MASTER (idx 0) is the authoritative full
+            // list; anything else (e.g. a single TRACK/<n> reply) just merges.
             if (_jrTrkBatch) {
-                g_jrTracks = _jrTrkBatch;
+                if (_jrTrkBatch['MASTER']) {
+                    g_jrTracks = _jrTrkBatch;
+                } else {
+                    g_jrTracks = g_jrTracks || {};
+                    for (var _tn in _jrTrkBatch) g_jrTracks[_tn] = _jrTrkBatch[_tn];
+                }
+                jrConfirmPending();
                 if (tracksPanelOpen) renderTracksPanel();
             }
 
@@ -7938,6 +7977,53 @@
         var g_jrHb = { val: null, changedAt: 0 };
         var g_jrFetch = null;       // chunk burst in flight: {gen, count, chunks, got}
         var g_jrLastHtml = "";
+        var g_jrPending = {};       // normalized PB name -> {want:bool, at:ms} awaiting confirmation
+
+        // Drop a pending command once the TRACK poll confirms it (or after a
+        // timeout, so the display simply returns to the confirmed truth).
+        function jrConfirmPending() {
+            for (var pb in g_jrPending) {
+                var t = g_jrTracks && g_jrTracks[pb];
+                var p = g_jrPending[pb];
+                if ((t && t.muted === p.want) || (Date.now() - p.at) > 2500) {
+                    delete g_jrPending[pb];
+                }
+            }
+        }
+
+        // Tap on a control row: toggle its PB bus mute. Index is resolved by
+        // name from the LATEST TRACK poll; state text changes only when the
+        // next poll confirms — never optimistically.
+        function jrTapControl(pbNorm) {
+            if (!jrBridgeOnline()) return;
+            var t = g_jrTracks && g_jrTracks[pbNorm];
+            if (!t || g_jrPending[pbNorm]) return;
+            var want = !t.muted;
+            g_jrPending[pbNorm] = { want: want, at: Date.now() };
+            wwr_req("SET/TRACK/" + t.idx + "/MUTE/" + (want ? 1 : 0));
+            renderTracksPanel();
+        }
+
+        // Unmute every non-click PB bus with an active valid control in the
+        // current song. Never touches the click's PB bus.
+        function jrAllBackingOn() {
+            if (!jrBridgeOnline() || !g_jrData) return;
+            var song = jrActiveSong();
+            if (!song || !song.controls) return;
+            var cmds = [];
+            for (var i = 0; i < song.controls.length; i++) {
+                var c = song.controls[i];
+                if (c.click) continue;
+                var pb = jrNormName(c.pb);
+                var t = g_jrTracks && g_jrTracks[pb];
+                if (t && t.muted && !g_jrPending[pb]) {
+                    g_jrPending[pb] = { want: false, at: Date.now() };
+                    cmds.push("SET/TRACK/" + t.idx + "/MUTE/0");
+                }
+            }
+            if (cmds.length) wwr_req(cmds.join(';'));
+            renderTracksPanel();
+        }
 
         function jrNormName(s) {
             return (s || '').replace(/^\s+|\s+$/g, '').toUpperCase();
@@ -8062,19 +8148,25 @@
                     var main = [], click = [];
                     for (var i = 0; i < controls.length; i++) {
                         var c = controls[i];
-                        var t = g_jrTracks ? g_jrTracks[jrNormName(c.pb)] : null;
+                        var pbn = jrNormName(c.pb);
+                        var t = g_jrTracks ? g_jrTracks[pbn] : null;
                         var cls, txt;
                         if (!t)          { cls = 'jr-state-unavail'; txt = 'UNAVAILABLE'; }
                         else if (t.muted){ cls = 'jr-state-muted';   txt = '✕ MUTED'; }
                         else             { cls = 'jr-state-audible'; txt = '● AUDIBLE'; }
-                        var row = '<div class="jr-row"><span class="jr-row-label">'
+                        var pend = g_jrPending[pbn] ? '<span class="jr-pend">●</span>' : '';
+                        var row = '<div class="jr-row' + (t ? '' : ' jr-disabled')
+                            + '" data-pb="' + jrEsc(pbn) + '"><span class="jr-row-label">'
                             + jrEsc(c.label) + '</span><span class="jr-state ' + cls + '">'
-                            + txt + '</span></div>';
+                            + txt + pend + '</span></div>';
                         (c.click ? click : main).push(row);
                     }
                     if (!main.length && !click.length) {
                         html += '<div class="jr-panel-msg">No backing stems configured for this song</div>';
                     } else {
+                        if (main.length) {
+                            html += '<button id="jr-allon" class="jr-allon">ALL BACKING ON</button>';
+                        }
                         html += main.join('');
                         if (click.length) {
                             html += '<div class="jr-section-title">CLICK / METRONOME</div>' + click.join('');
@@ -8114,6 +8206,20 @@
             }
             updateTopTabs();
         }
+
+        // Tap handling via delegation (rows are rebuilt by innerHTML)
+        document.getElementById('jr-body').addEventListener('click', function (ev) {
+            var el = ev.target;
+            while (el && el !== this) {
+                if (el.id === 'jr-allon') { jrAllBackingOn(); return; }
+                if (el.classList && el.classList.contains('jr-row')) {
+                    var pb = el.getAttribute('data-pb');
+                    if (pb) jrTapControl(pb);
+                    return;
+                }
+                el = el.parentNode;
+            }
+        });
 
         // Staleness watchdog: if REAPER/bridge stops replying entirely there are
         // no onreply ticks, so re-evaluate the heartbeat age on a timer too.
