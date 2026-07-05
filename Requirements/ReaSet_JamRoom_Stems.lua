@@ -160,10 +160,10 @@ local function track_name(track)
 end
 
 local function parse_jr_name(name)
-    if not name:match("^%[JR") then
+    if not name:match("^%s*%[[Jj][Rr]") then
         return nil, nil, "not_jr"
     end
-    local slot, label = name:match("^%[JR:([^%]]+)%]%s*(.*)$")
+    local slot, label = name:match("^%s*%[[Jj][Rr]:([^%]]+)%]%s*(.*)$")
     if not slot then
         return nil, nil, "malformed_tag"
     end
@@ -174,15 +174,16 @@ local function parse_jr_name(name)
     return normalized, label, nil
 end
 
-local function find_track_by_name(name)
+local function find_tracks_by_name(name)
+    local matches = {}
     local count = reaper.CountTracks(0)
     for i = 0, count - 1 do
         local track = reaper.GetTrack(0, i)
         if track_name(track) == name then
-            return track
+            matches[#matches + 1] = track
         end
     end
-    return nil
+    return matches
 end
 
 local function descendant_range(parent_index)
@@ -243,7 +244,7 @@ local function discover(song)
     for i = 0, track_count - 1 do
         local track = reaper.GetTrack(0, i)
         local name = track_name(track)
-        if name:match("^%[JR") then
+        if name:match("^%s*%[[Jj][Rr]") then
             local first_child, last_child = descendant_range(i)
             if last_child >= first_child and has_descendant_overlap(i, song) then
                 local slot, label, parse_error = parse_jr_name(name)
@@ -298,8 +299,8 @@ local function discover(song)
         else
             local candidate = candidates[1]
             local pb_name = PB_BY_SLOT[slot]
-            local pb_track = pb_name and find_track_by_name(pb_name) or nil
-            if not pb_track then
+            local pb_tracks = pb_name and find_tracks_by_name(pb_name) or {}
+            if #pb_tracks == 0 then
                 issues[#issues + 1] = {
                     type = "missing_pb",
                     track = candidate.track_name,
@@ -307,7 +308,16 @@ local function discover(song)
                     pb = pb_name,
                     message = "Missing permanent PB bus: " .. tostring(pb_name)
                 }
+            elseif #pb_tracks > 1 then
+                issues[#issues + 1] = {
+                    type = "duplicate_pb",
+                    track = candidate.track_name,
+                    slot = slot,
+                    pb = pb_name,
+                    message = "Duplicate permanent PB bus: " .. tostring(pb_name)
+                }
             else
+                local pb_track = pb_tracks[1]
                 controls_by_slot[slot] = {
                     slot = slot,
                     label = candidate.label,
@@ -331,7 +341,7 @@ end
 local last_payload_clock = 0
 local function main_loop()
     local now = reaper.time_precise()
-    if now - last_payload_clock >= 0.20 then
+    if now - last_payload_clock >= 0.50 then
         last_payload_clock = now
         local song = find_active_song_region(get_position())
         if not song then

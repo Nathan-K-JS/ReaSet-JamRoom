@@ -4531,6 +4531,7 @@
         var jamRoomState = {
             payload: null,
             lastHeartbeat: 0,
+            lastHeartbeatChangedAt: 0,
             lastReceivedAt: 0,
             bridgeSeen: false,
             malformed: false,
@@ -6667,8 +6668,15 @@
                 if (!parsed || parsed.schema !== 1 || !Array.isArray(parsed.controls) || !Array.isArray(parsed.issues)) {
                     throw new Error("Unexpected Jam Room schema");
                 }
+                var heartbeat = Number(parsed.heartbeat);
+                if (!isFinite(heartbeat) || heartbeat <= 0) {
+                    throw new Error("Invalid Jam Room heartbeat");
+                }
                 jamRoomState.payload = parsed;
-                jamRoomState.lastHeartbeat = Number(parsed.heartbeat) || 0;
+                if (heartbeat !== jamRoomState.lastHeartbeat) {
+                    jamRoomState.lastHeartbeat = heartbeat;
+                    jamRoomState.lastHeartbeatChangedAt = Date.now();
+                }
             } catch (err) {
                 jamRoomState.payload = null;
                 jamRoomState.malformed = true;
@@ -6677,11 +6685,18 @@
             jamRoomRenderTracks();
         }
 
+        function jamRoomBridgeIsFresh() {
+            return !!jamRoomState.payload
+                && jamRoomState.lastHeartbeat > 0
+                && jamRoomState.lastHeartbeatChangedAt > 0
+                && Date.now() - jamRoomState.lastHeartbeatChangedAt <= 2200;
+        }
+
         function jamRoomStatusText() {
             if (!jamRoomState.bridgeSeen) return "Jam Room bridge not detected.";
             if (jamRoomState.malformed) return jamRoomState.error || "Bridge returned malformed Jam Room data.";
             if (!jamRoomState.payload) return "Waiting for Jam Room bridge data.";
-            if (Date.now() - jamRoomState.lastReceivedAt > 2200) return "Jam Room bridge data is stale.";
+            if (!jamRoomBridgeIsFresh()) return "Jam Room bridge data is stale.";
             if (jamRoomState.payload.status === "no_active_song") return "No active top-level song region.";
             if (jamRoomState.payload.status && jamRoomState.payload.status !== "ok") return "Jam Room bridge status: " + jamRoomState.payload.status;
             return "";
@@ -6699,7 +6714,9 @@
             health.textContent = status;
 
             var payload = jamRoomState.payload;
-            var controls = payload && Array.isArray(payload.controls) ? payload.controls : [];
+            var isFresh = jamRoomBridgeIsFresh();
+            var canShowConfirmedRows = isFresh && payload && payload.status === "ok" && !jamRoomState.malformed;
+            var controls = canShowConfirmedRows && Array.isArray(payload.controls) ? payload.controls : [];
             var html = "";
             if (controls.length) {
                 for (var i = 0; i < controls.length; i++) {
@@ -6711,13 +6728,12 @@
                         + '<div class="tracks-state ' + (muted ? "muted" : "audible") + '">' + stateText + '</div>'
                         + '</div>';
                 }
-            } else if (payload && payload.status !== "no_active_song" && !jamRoomState.malformed) {
+            } else if (canShowConfirmedRows) {
                 html = '<div class="tracks-empty">No backing stems configured for this song</div>';
             }
             list.innerHTML = html;
 
-            var setupIssues = payload && Array.isArray(payload.issues) ? payload.issues : [];
-            issues.open = false;
+            var setupIssues = canShowConfirmedRows && Array.isArray(payload.issues) ? payload.issues : [];
             issues.style.display = setupIssues.length ? "" : "none";
             var issueHtml = "";
             for (var j = 0; j < setupIssues.length; j++) {
@@ -6759,6 +6775,7 @@
             if (infoRow) infoRow.style.display = "";
             if (content) content.style.display = "";
             if (panel) panel.classList.remove("open");
+            setTimeout(updateTopTabs, 0);
         }
 
         // F14: Update top tab active state
