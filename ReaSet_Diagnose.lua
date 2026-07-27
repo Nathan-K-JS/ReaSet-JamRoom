@@ -31,6 +31,28 @@ local function normalize_track_name(name)
     return s
 end
 
+-- Byte-identical to Reaset.lua's lookup, so the self-test below proves the
+-- real pipeline rather than a lookalike.
+local function item_at_pos(track, pos)
+    local n = reaper.GetTrackNumMediaItems(track)
+    for i = 0, n - 1 do
+        local item = reaper.GetTrackMediaItem(track, i)
+        local p = reaper.GetMediaItemInfo_Value(item, "D_POSITION")
+        if p <= pos then
+            local len = reaper.GetMediaItemInfo_Value(item, "D_LENGTH")
+            if p + len > pos then return item end
+        end
+    end
+    return nil
+end
+
+local function read_note(item)
+    if not reaper.ULT_GetMediaItemNote then return "" end
+    local ok, n = pcall(reaper.ULT_GetMediaItemNote, item)
+    if ok and n then return n end
+    return ""
+end
+
 local function truncate(s, n)
     s = s:gsub("[\r\n]+", " / ")
     if #s > n then return s:sub(1, n) .. "..." end
@@ -113,7 +135,9 @@ end
 rule()
 
 -- 4) Which track would each bridge pick? ------------------------------------
-local function report_bridge(keyword, ext_name)
+-- cur_pos is passed in: it is declared below this function, so referencing it
+-- directly would compile to a global lookup and arrive as nil.
+local function report_bridge(keyword, ext_name, cur_pos)
     out("")
     out(">>> " .. keyword:upper() .. " BRIDGE")
 
@@ -174,10 +198,52 @@ local function report_bridge(keyword, ext_name)
         out("  FIX: double-click an item > Notes, and type the text there.")
     end
 
+    -- Where is the cursor relative to this track's items? "No data" is the
+    -- CORRECT answer whenever nothing covers the cursor, so spell that out
+    -- instead of leaving it as arithmetic for the reader.
+    local covering = item_at_pos(chosen.tr, cur_pos)
+    if covering then
+        local note = read_note(covering)
+        out("  CURSOR: inside an item -> should be showing:")
+        out("    " .. (note == "" and "(item has EMPTY notes)" or truncate(note, 50)))
+    else
+        local best_gap, best_pos, best_dir
+        for k = 0, chosen.items - 1 do
+            local it  = reaper.GetTrackMediaItem(chosen.tr, k)
+            local p   = reaper.GetMediaItemInfo_Value(it, "D_POSITION")
+            local l   = reaper.GetMediaItemInfo_Value(it, "D_LENGTH")
+            local gap, dir
+            if p > cur_pos then gap, dir = p - cur_pos, "AFTER the cursor"
+            else                gap, dir = cur_pos - (p + l), "BEFORE the cursor" end
+            if gap >= 0 and (not best_gap or gap < best_gap) then
+                best_gap, best_pos, best_dir = gap, p, dir
+            end
+        end
+        out("  CURSOR: NOT inside any item -> 'no data' is CORRECT right now.")
+        if best_gap then
+            out(string.format("    nearest item starts at %.2fs — %.2fs %s",
+                best_pos, best_gap, best_dir))
+            out("    Move the playhead into an item (or press play) to see text.")
+        end
+    end
+
+    -- Prove the lookup works at a position we KNOW is inside an item, so a
+    -- badly-parked cursor can never be mistaken for a broken bridge.
+    local it0 = reaper.GetTrackMediaItem(chosen.tr, 0)
+    local p0  = reaper.GetMediaItemInfo_Value(it0, "D_POSITION")
+    local l0  = reaper.GetMediaItemInfo_Value(it0, "D_LENGTH")
+    local mid = p0 + l0 / 2
+    if item_at_pos(chosen.tr, mid) then
+        out(string.format("  SELF-TEST at %.2fs (middle of item 1): PASS -> '%s'",
+            mid, truncate(read_note(item_at_pos(chosen.tr, mid)), 40)))
+    else
+        out(string.format("  SELF-TEST at %.2fs: FAIL — the item lookup is broken.", mid))
+    end
+
     -- What is currently published to the web interface?
     local _, cur = reaper.GetProjExtState(0, ext_name, "text")
     if cur == STR_NO_TEXT then
-        cur = "(no item under the cursor right now)"
+        cur = "(nothing — matches the CURSOR line above)"
     elseif cur == "" then
         cur = "(nothing published yet - is Reaset.lua running?)"
     else
@@ -194,8 +260,8 @@ out(string.format("Cursor position used by the bridges: %.2fs  (%s)",
 out("Only the item UNDER this position is published. If no item covers it,")
 out("the panel correctly shows 'no data'.")
 
-report_bridge("lyrics", "XR_Lyrics")
-report_bridge("chords", "XR_Chords")
+report_bridge("lyrics", "XR_Lyrics", cur_pos)
+report_bridge("chords", "XR_Chords", cur_pos)
 
 out("")
 rule()
