@@ -346,15 +346,18 @@ local first_frame = true
 -- current teleprompter line (the whole point of the redesign — the line
 -- being tapped in right now must be unmistakable at a glance), and the same
 -- weight for the big ARM/TAP button label. 'sans-serif' is ReaImGui's
--- cross-platform alias for the system default font. Creation is wrapped in
--- pcall: if it fails for any reason, FONT.x stays nil and every push site
--- below just skips it (see push_font/pop_font), falling back to the default
--- font instead of erroring the whole script out.
+-- cross-platform alias for the system default font; ReaImGui reads style
+-- hints appended directly to the family string ('b' = bold, 'i' = italic —
+-- e.g. 'sans-serifb'), NOT a separate flags argument: reaper.ImGui_CreateFont
+-- takes exactly 2 arguments (family, size) on this install. Creation is
+-- wrapped in pcall regardless: if it fails for any reason, FONT.x stays nil
+-- and every push site below just skips it (see push_font/pop_font), falling
+-- back to the default font instead of erroring the whole script out.
 local FONT = {}
 local function safe_create_font(size, bold)
     local ok, font = pcall(function()
-        local f = reaper.ImGui_CreateFont('sans-serif', size,
-            bold and ImGui.FontFlags_Bold or 0)
+        local family = bold and 'sans-serifb' or 'sans-serif'
+        local f = reaper.ImGui_CreateFont(family, size)
         reaper.ImGui_Attach(ctx, f)
         return f
     end)
