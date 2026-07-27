@@ -242,9 +242,16 @@ optically centred no matter how long the neighbouring chord names are.
 > per change to get the left/right context.
 
 #### Transitions and the status strip
-Lyric and chord changes are **animated** (~0.3 s fade, with a slight vertical shift for
-lyrics and a lateral one for chords) instead of snapping. `prefers-reduced-motion` is
-honoured: if your system asks for less motion, nothing animates.
+Verse and chord changes **scroll like a conveyor belt** rather than all refreshing at
+once: the whole stack moves as one block, so the current line travels up into the
+"previous" slot while the next line rises into the centre. Chords do the same thing
+horizontally, sliding left. The motion is measured from where the incoming line already
+sits on screen (a FLIP transition), so it lands exactly in place.
+
+Only a genuine one-step move earns the slide. A seek, a song change or an edit is not a
+step along the belt, so those **crossfade** instead — sliding would imply a continuity
+that did not happen. `prefers-reduced-motion` is honoured: if your system asks for less
+motion, nothing animates.
 
 Diagnostics never occupy the reading area — they live in a very faint strip at the bottom
 of the panel, with two visibility levels:
@@ -659,9 +666,16 @@ y atenuados. Se reserva el mismo espacio a ambos lados, así el acorde actual qu
 > por cambio para tener el contexto izquierda/derecha.
 
 #### Transiciones y franja de estado
-Los cambios de letra y de acorde se **animan** (fundido de ~0.3 s, con un leve
-desplazamiento vertical en letras y lateral en acordes) en vez de cambiar de golpe. Se
-respeta `prefers-reduced-motion`: si tu sistema pide menos movimiento, no se anima.
+Los cambios de verso y de acorde **se desplazan como una cinta transportadora** en vez de
+refrescarse los tres a la vez: el bloque entero se mueve como una unidad, así la línea
+actual sube al hueco de "anterior" mientras la siguiente asciende al centro. Los acordes
+hacen lo mismo en horizontal, deslizándose hacia la izquierda. El movimiento se mide desde
+donde la línea entrante ya está en pantalla (transición FLIP), así que encaja exacto.
+
+Solo un avance real de un paso merece el deslizamiento. Un salto de posición, un cambio de
+canción o una edición no son un paso en la cinta, así que esos hacen **fundido** — deslizar
+implicaría una continuidad que no ocurrió. Se respeta `prefers-reduced-motion`: si tu
+sistema pide menos movimiento, no se anima nada.
 
 Los mensajes de diagnóstico **no ocupan el área de lectura**: viven en una franja muy
 tenue al pie del panel, con dos niveles de visibilidad.

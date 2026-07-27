@@ -2265,14 +2265,25 @@
         .panel-status.alert { opacity: 0.55; }
 
         /* === PANEL TRANSITIONS ===
-           Lyrics rebuild their markup on every change, so the animation fires
-           on element insertion. Chords reuse their nodes, so JS restarts these
-           by toggling a class (see _restartAnim). The implicit `to` keyframe
-           lands on each element's own resting style, which matters because the
-           context lines rest at reduced opacity. */
-        @keyframes reasetFadeUp {
-            from { opacity: 0; transform: translateY(0.22em); }
+           The three lines move as ONE block, so the eye reads "we advanced by a
+           verse" instead of "all three lines changed". JS positions the stack
+           with FLIP and this transition carries it home. */
+        .lyrics-stack {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            width: 100%;
+            will-change: transform;
         }
+
+        .lyrics-stack.sliding {
+            transition: transform 0.34s cubic-bezier(0.22, 0.61, 0.36, 1);
+        }
+
+        /* Non-sequential changes (seek, song change) crossfade: sliding there
+           would imply a continuity that did not happen. */
+        @keyframes reasetStackFade { from { opacity: 0; } }
+        .lyrics-stack.fading { animation: reasetStackFade 0.26s ease-out; }
 
         @keyframes reasetFadeSide {
             from { opacity: 0; transform: translateX(0.3em); }
@@ -2282,16 +2293,16 @@
             from { opacity: 0; transform: scale(0.94); }
         }
 
-        .lyrics-cur { animation: reasetFadeUp 0.3s ease-out; }
-        .lyrics-ctx { animation: reasetFadeUp 0.3s ease-out; }
+        .chord-row.sliding { transition: transform 0.3s cubic-bezier(0.22, 0.61, 0.36, 1); }
 
         #chord-display.anim { animation: reasetChordIn 0.26s ease-out; }
         .chord-ctx.anim     { animation: reasetFadeSide 0.26s ease-out; }
 
         /* Never animate for users who asked the OS to keep motion down. */
         @media (prefers-reduced-motion: reduce) {
-            .lyrics-cur,
-            .lyrics-ctx,
+            .lyrics-stack.sliding,
+            .chord-row.sliding { transition: none !important; }
+            .lyrics-stack.fading,
             #chord-display.anim,
             .chord-ctx.anim { animation: none !important; }
         }
@@ -4709,6 +4720,94 @@
         // X-Raym encodes newlines as the literal two-character sequence \n.
         // Reaset.lua additionally converts real newlines to <br> before publishing.
         function _fmtLyric(s) { return s.split("\\n").join('<br>'); }
+
+        var _reduceMotion = !!(window.matchMedia &&
+                               window.matchMedia('(prefers-reduced-motion: reduce)').matches);
+
+        // Remembers the last rendered triplet so the next render can tell an
+        // ordinary one-step advance from an arbitrary jump.
+        var _lyrLast = { p: '', t: '', n: '' };
+
+        function _lyricsStackHtml(p, t, n, lines) {
+            // Missing neighbours keep their box (class "empty" hides them via
+            // visibility) so the active line never jumps. Rendered even when the
+            // current verse is empty: during an instrumental gap, seeing what
+            // just passed and what is coming is exactly what the performer
+            // wants. Diagnostics go to the faint bottom strip, never in here.
+            return '<span class="lyrics-ctx lyrics-prev' + (p === "" ? " empty" : "") + '">' +
+                       (p === "" ? "&nbsp;" : _fmtLyric(p)) + '</span>' +
+                   '<span class="lyrics-cur">' +
+                       (t === "" ? "&nbsp;" : lines.join('<br>')) + '</span>' +
+                   '<span class="lyrics-ctx lyrics-next' + (n === "" ? " empty" : "") + '">' +
+                       (n === "" ? "&nbsp;" : _fmtLyric(n)) + '</span>';
+        }
+
+        // Renders the three-line stack with a conveyor-belt transition.
+        //
+        // Animating each line separately made all three refresh at once, which
+        // reads as "everything changed" rather than "we moved on by one". So we
+        // move the WHOLE stack instead, using FLIP: measure where the incoming
+        // line already sits on screen, swap the content, then start the stack
+        // from that offset and let it settle to zero. The lines travel together,
+        // exactly like scrolling down a lyric sheet.
+        //
+        // Only a genuine one-step advance (or rewind) earns the slide. A seek,
+        // a song change or an edit is not a step along the belt, so those
+        // crossfade instead — sliding there would imply a continuity that isn't
+        // real.
+        function _renderLyrics(p, t, n, lines) {
+            var host = document.getElementById("lyrics-content");
+            if (!host) return;
+
+            var stack = host.querySelector(".lyrics-stack");
+            // The verse that just arrived in the middle is the one that was
+            // sitting in a neighbouring slot: that is a step along the belt.
+            // Deliberately NOT requiring the other slots to line up too — coming
+            // out of an instrumental gap the middle was empty, yet the incoming
+            // verse still physically travels up from the bottom slot.
+            var dir = 0;
+            if (!_reduceMotion && stack && t !== "") {
+                if (_lyrLast.n !== "" && t === _lyrLast.n)      dir = 1;   // moved forward
+                else if (_lyrLast.p !== "" && t === _lyrLast.p) dir = -1;  // moved back
+            }
+
+            // FIRST: where does the incoming current line sit right now?
+            var anchorTop = null;
+            if (dir !== 0) {
+                var a = stack.querySelector(dir === 1 ? ".lyrics-next" : ".lyrics-prev");
+                if (a) anchorTop = a.getBoundingClientRect().top;
+            }
+
+            if (!stack) {
+                host.innerHTML = '<div class="lyrics-stack"></div>';
+                stack = host.querySelector(".lyrics-stack");
+            }
+            stack.classList.remove("sliding", "fading");
+            stack.style.transform = "";
+            stack.innerHTML = _lyricsStackHtml(p, t, n, lines);
+
+            // LAST + INVERT + PLAY
+            if (anchorTop !== null) {
+                var cur = stack.querySelector(".lyrics-cur");
+                if (cur) {
+                    var delta = anchorTop - cur.getBoundingClientRect().top;
+                    if (Math.abs(delta) > 1) {
+                        stack.style.transform = "translateY(" + delta + "px)";
+                        void stack.offsetWidth;          // commit the start offset
+                        stack.classList.add("sliding");
+                        stack.style.transform = "translateY(0)";
+                        _lyrLast = { p: p, t: t, n: n };
+                        return;
+                    }
+                }
+            }
+
+            if (!_reduceMotion) {
+                void stack.offsetWidth;
+                stack.classList.add("fading");
+            }
+            _lyrLast = { p: p, t: t, n: n };
+        }
         var lyricsVisible = false;
 
         // Chords state
@@ -5005,20 +5104,7 @@
                 if (t !== xr_lyrics_last || n !== xr_lyrics_last_next || p !== xr_lyrics_last_prev) {
                     // Exact X-Raym method: split on \\n, join with <br>
                     var lines = t.split("\\n");
-                    // Three stacked lines: previous verse, current, next.
-                    // Missing neighbours keep their box (class "empty" hides
-                    // them via visibility) so the active line never jumps.
-                    // Rendered even when the current verse is empty: during an
-                    // instrumental gap, seeing what just passed and what is
-                    // coming is exactly what the performer wants. Diagnostics
-                    // go to the faint bottom strip, never in here.
-                    lyricsContent.innerHTML =
-                        '<span class="lyrics-ctx lyrics-prev' + (p === "" ? " empty" : "") + '">' +
-                            (p === "" ? "&nbsp;" : _fmtLyric(p)) + '</span>' +
-                        '<span class="lyrics-cur">' +
-                            (t === "" ? "&nbsp;" : lines.join('<br>')) + '</span>' +
-                        '<span class="lyrics-ctx lyrics-next' + (n === "" ? " empty" : "") + '">' +
-                            (n === "" ? "&nbsp;" : _fmtLyric(n)) + '</span>';
+                    _renderLyrics(p, t, n, lines);
                     xr_lyrics_last = t;
                     xr_lyrics_last_next = n;
                     xr_lyrics_last_prev = p;
@@ -6882,28 +6968,72 @@
             el.classList.add("anim");
         }
 
-        function _setChordCtx(id, token) {
+        // Writes a side slot without animating. Returns true if it changed.
+        function _setChordCtxText(id, token) {
             var el = document.getElementById(id);
-            if (!el) return;
-            if (el.innerText === token) return;   // unchanged: don't re-animate
+            if (!el) return false;
+            if (el.innerText === token) return false;
             el.innerText = token;
             if (token === "") el.classList.add("empty");
-            else { el.classList.remove("empty"); _restartAnim(el); }
+            else el.classList.remove("empty");
+            return true;
         }
+
+        var _chordLast = { p: '', t: '', n: '' };
 
         function updateChordsDisplay() {
             var disp = document.getElementById("chord-display");
             if (!disp) return;
+            var row = document.querySelector(".chord-row");
 
-            var cur   = _chordToken(xr_chords_text);
-            var shown = (cur === "") ? "♪" : cur;
-            if (disp.innerText !== shown) {
-                disp.innerText = shown;
-                if (cur !== "") _restartAnim(disp);
+            var cur  = _chordToken(xr_chords_text);
+            var pTok = _chordToken(xr_chords_prev);
+            var nTok = _chordToken(xr_chords_next);
+
+            // Same conveyor idea as the lyrics stack, laid out horizontally:
+            // on a genuine one-step move the whole row slides sideways so the
+            // next chord travels into the centre, instead of every slot
+            // blinking to a new value at once.
+            var dir = 0;
+            if (!_reduceMotion && row && cur !== "") {
+                if (_chordLast.n !== "" && cur === _chordLast.n)      dir = 1;
+                else if (_chordLast.p !== "" && cur === _chordLast.p) dir = -1;
             }
 
-            _setChordCtx("chord-prev", _chordToken(xr_chords_prev));
-            _setChordCtx("chord-next", _chordToken(xr_chords_next));
+            // FIRST: where the incoming chord currently sits.
+            var anchorLeft = null;
+            if (dir !== 0) {
+                var a = document.getElementById(dir === 1 ? "chord-next" : "chord-prev");
+                if (a && a.innerText !== "") anchorLeft = a.getBoundingClientRect().left;
+            }
+
+            var shown = (cur === "") ? "♪" : cur;
+            var curChanged = (disp.innerText !== shown);
+            if (curChanged) disp.innerText = shown;
+            var pChanged = _setChordCtxText("chord-prev", pTok);
+            var nChanged = _setChordCtxText("chord-next", nTok);
+
+            if (row) { row.classList.remove("sliding"); row.style.transform = ""; }
+
+            // LAST + INVERT + PLAY
+            var slid = false;
+            if (anchorLeft !== null && row) {
+                var delta = anchorLeft - disp.getBoundingClientRect().left;
+                if (Math.abs(delta) > 1) {
+                    row.style.transform = "translateX(" + delta + "px)";
+                    void row.offsetWidth;
+                    row.classList.add("sliding");
+                    row.style.transform = "translateX(0)";
+                    slid = true;
+                }
+            }
+            if (!slid && !_reduceMotion) {
+                // Not a step along the belt — pulse only what actually changed.
+                if (curChanged && cur !== "") _restartAnim(disp);
+                if (pChanged && pTok !== "") _restartAnim(document.getElementById("chord-prev"));
+                if (nChanged && nTok !== "") _restartAnim(document.getElementById("chord-next"));
+            }
+            _chordLast = { p: pTok, t: cur, n: nTok };
 
             // Diagnostics belong in the bottom strip, not next to the chord.
             var lbl = document.getElementById("chord-label");
