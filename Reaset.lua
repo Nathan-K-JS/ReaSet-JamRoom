@@ -156,15 +156,15 @@ end
 -- One reusable bridge object per named track. Sends the item-note text under
 -- the play/edit cursor to a Project ExtState the web interface polls.
 
-local NEXT_SUPPORT = false  -- keep parity with shipped scripts (next item preview off)
-
-local function bridge_new(track_name, ext_name, status_key)
+local function bridge_new(track_name, ext_name, status_key, context)
     return {
         track_name = track_name,
         ext_name   = ext_name,
         status_key = status_key,  -- ExtState key ReaSet.html polls for diagnostics
+        context    = context,     -- also publish the previous/next item's notes
         track      = nil,
         text       = nil,
+        prev_text  = nil,
         next_text  = nil,
         status     = nil,
     }
@@ -244,13 +244,33 @@ local function item_at_pos(track, pos)
     return nil
 end
 
-local function next_item(track, pos)
+-- Resolves the item under the cursor plus its neighbours, in ONE pass.
+-- Items on a track are stored in timeline order, so:
+--   * everything that ends at/before pos keeps overwriting `prev`
+--   * the first item covering pos is `cur` (its successor is `nxt`)
+--   * if we reach an item starting after pos, we are in a gap: `cur` stays nil
+--     and that item is `nxt`, while `prev` already holds the preceding one.
+-- Returning all three from one scan keeps the per-frame cost the same as the
+-- old single lookup.
+local function items_around(track, pos)
     local n = reaper.GetTrackNumMediaItems(track)
+    local prev, cur, nxt = nil, nil, nil
     for i = 0, n - 1 do
         local item = reaper.GetTrackMediaItem(track, i)
-        if reaper.GetMediaItemInfo_Value(item, "D_POSITION") > pos then return item end
+        local p    = reaper.GetMediaItemInfo_Value(item, "D_POSITION")
+        if p > pos then
+            nxt = item
+            break
+        end
+        local l = reaper.GetMediaItemInfo_Value(item, "D_LENGTH")
+        if p + l > pos then
+            cur = item
+            if i + 1 < n then nxt = reaper.GetTrackMediaItem(track, i + 1) end
+            break
+        end
+        prev = item
     end
-    return nil
+    return prev, cur, nxt
 end
 
 -- Resolves the text for the item under the cursor and publishes it.
@@ -330,15 +350,23 @@ local function bridge_tick(b, cur_pos, tick)
     local _, tname = reaper.GetTrackName(b.track)
     bridge_publish_status(b, tname)
     local verify = (tick % 60 == 0)   -- ~1 s: cheap self-heal, no project dirtying
-    local item = item_at_pos(b.track, cur_pos)
-    b.text = process_notes(b.ext_name, "text", item, b.text, verify)
-    if NEXT_SUPPORT then
-        b.next_text = process_notes(b.ext_name, "next", next_item(b.track, cur_pos), b.next_text, verify)
+
+    if b.context then
+        -- Publish the surrounding verses too, so the panel can show what just
+        -- passed and what is coming next.
+        local prev_it, cur_it, next_it = items_around(b.track, cur_pos)
+        b.text      = process_notes(b.ext_name, "text", cur_it,  b.text,      verify)
+        b.prev_text = process_notes(b.ext_name, "prev", prev_it, b.prev_text, verify)
+        b.next_text = process_notes(b.ext_name, "next", next_it, b.next_text, verify)
+    else
+        b.text = process_notes(b.ext_name, "text", item_at_pos(b.track, cur_pos), b.text, verify)
     end
 end
 
-local lyrics = bridge_new("lyrics", "XR_Lyrics", "lyricsTrack")
-local chords = bridge_new("chords", "XR_Chords", "chordsTrack")
+-- Lyrics publishes prev/next as well (the panel shows surrounding verses).
+-- Chords does not: it would only add project writes nothing consumes.
+local lyrics = bridge_new("lyrics", "XR_Lyrics", "lyricsTrack", true)
+local chords = bridge_new("chords", "XR_Chords", "chordsTrack", false)
 
 ----------------------------------------------------------------------------
 -- MAIN DEFER LOOP  — drives all three subsystems from one tick
@@ -393,6 +421,7 @@ end
 
 local function on_exit()
     reaper.SetProjExtState(0, "XR_Lyrics", "text", "")
+    reaper.SetProjExtState(0, "XR_Lyrics", "prev", "")
     reaper.SetProjExtState(0, "XR_Lyrics", "next", "")
     reaper.SetProjExtState(0, "XR_Chords", "text", "")
     reaper.SetProjExtState(0, "XR_Chords", "next", "")

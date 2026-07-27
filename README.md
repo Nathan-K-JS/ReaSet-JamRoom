@@ -213,6 +213,23 @@ Copy to REAPER web folder (where `main.js` is located):
 - **Live View**: Triggers a performance-focused layout showing a gigantic track name, progress bar, time remaining, the next queued song, and localized transport controls.
 - **Lyrics & Chords (Floating Widgets)**: You can overlay floating widgets dynamically synced to the `Lyrics` and `Chords` text tracks on REAPER. They contain a contextual toolbar to adjust font sizes, typeface, and colors mapping locally on your screen.
 
+#### Lyrics panel — three-line view
+The lyrics panel shows the **previous verse above** and the **next verse below** the
+current one, both smaller and dimmed so the active line stays dominant. Missing
+neighbours (start of a song, or a gap between items) keep their space reserved, so the
+current line never jumps around while you are reading it.
+
+A discreet **⚙ gear** in the panel header opens a small popover to adjust:
+
+| Setting | Options |
+|---|---|
+| **Tamaño** | 16–120 px slider (scales all three lines together) |
+| **Grosor** | Fino · Medio · Negrita · Black |
+| **Color** | 5 presets + a custom colour picker |
+| **Context lines** | Toggle the previous/next verses off entirely |
+
+All four persist in `localStorage`, so your reading setup survives a reload.
+
 ### Lyrics & Chords Track Naming
 ReaSet reads lyrics and chords from **two dedicated REAPER tracks**, identified by their
 name. `Reaset.lua` scans the project and looks for these two keywords:
@@ -584,6 +601,24 @@ Copiar en la carpeta web de REAPER (donde existe `main.js`):
 ### Modos y herramientas (Canvas)
 - **Live View (Modo Directo)**: Activa una interfaz enfocada para performance con nombre gigante de la canción actual, progreso, siguiente canción y botones de transporte.
 - **Letras y Acordes (Widgets fltantes)**: Puedes activar la visión superpuesta de pistas de Letras (`Lyrics`) y Acordes (`Chords`). En la esquina superior derecha del widget dispones de un selector de fuentes, tamaño, y personalización de color para adaptarlo a tu pantalla. 
+
+#### Panel de letras — vista de tres líneas
+El panel de letras muestra el **verso anterior arriba** y el **verso siguiente abajo** del
+actual, ambos más pequeños y atenuados para que la línea activa siga siendo la dominante.
+Cuando falta un vecino (inicio de la canción, o un hueco entre items) su espacio se
+reserva igualmente, así la línea actual **no salta** mientras la estás leyendo.
+
+Un **⚙ engranaje** discreto en la cabecera del panel abre un popover para ajustar:
+
+| Ajuste | Opciones |
+|---|---|
+| **Tamaño** | Slider de 16–120 px (escala las tres líneas a la vez) |
+| **Grosor** | Fino · Medio · Negrita · Black |
+| **Color** | 5 presets + selector de color personalizado |
+| **Versos de contexto** | Interruptor para ocultar el anterior/siguiente |
+
+Los cuatro ajustes se guardan en `localStorage`, así que tu configuración de lectura
+sobrevive a una recarga.
 
 ### Nombres de las pistas de Letras y Acordes
 ReaSet lee las letras y los acordes desde **dos pistas dedicadas de REAPER**, identificadas

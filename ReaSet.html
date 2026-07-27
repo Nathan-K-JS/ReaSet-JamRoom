@@ -2246,13 +2246,145 @@
             line-height: 1.6;
         }
 
-        .lyrics-next {
+        /* Current verse: inherits the size/weight/colour set in the gear popover. */
+        .lyrics-cur {
             display: block;
-            font-size: 0.65em;
-            opacity: 0.45;
-            margin-top: 12px;
+        }
+
+        /* Surrounding verses: sized in `em` so one font-size slider scales all
+           three lines together, and dimmed so the active line stays dominant. */
+        .lyrics-ctx {
+            display: block;
+            font-size: 0.42em;
+            opacity: 0.34;
+            font-weight: 500;
+            line-height: 1.45;
             font-style: italic;
-            line-height: 1.5;
+            max-width: 90%;
+        }
+
+        .lyrics-prev { margin-bottom: 0.5em; }
+        .lyrics-next { margin-top: 0.5em; }
+
+        /* Hidden rather than removed: keeps the current line vertically centred
+           instead of letting it jump when a neighbour is missing. */
+        .lyrics-ctx.empty { visibility: hidden; }
+
+        .lyrics-content.no-context .lyrics-ctx { display: none; }
+
+        /* === LYRICS SETTINGS (gear popover) === */
+        .lyrics-hdr-actions {
+            display: flex;
+            align-items: center;
+            gap: 14px;
+        }
+
+        .lyrics-gear {
+            cursor: pointer;
+            color: var(--text2);
+            font-size: 17px;
+            opacity: 0.5;
+            transition: opacity 0.15s, transform 0.15s;
+            user-select: none;
+        }
+
+        .lyrics-gear:hover,
+        .lyrics-gear.active {
+            opacity: 1;
+            transform: rotate(45deg);
+        }
+
+        .lyrics-settings {
+            position: absolute;
+            top: 58px;
+            right: 20px;
+            z-index: 20;
+            display: none;
+            width: 246px;
+            padding: 14px 16px 16px;
+            border-radius: 10px;
+            background: var(--bg-card, #1c1c1c);
+            border: 1px solid var(--border);
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.55);
+            font-family: var(--font-ui);
+            text-align: left;
+        }
+
+        .lyrics-settings.open { display: block; }
+
+        .lyrics-settings .ls-row { margin-bottom: 13px; }
+        .lyrics-settings .ls-row:last-child { margin-bottom: 0; }
+
+        .lyrics-settings .ls-label {
+            display: flex;
+            justify-content: space-between;
+            font-size: 11px;
+            font-weight: 700;
+            letter-spacing: 0.06em;
+            text-transform: uppercase;
+            color: var(--text2);
+            margin-bottom: 7px;
+        }
+
+        .lyrics-settings input[type="range"] { width: 100%; }
+
+        .ls-btn-group { display: flex; gap: 6px; }
+
+        .ls-btn {
+            flex: 1;
+            padding: 6px 0;
+            font-size: 12px;
+            border-radius: 6px;
+            border: 1px solid var(--border);
+            background: transparent;
+            color: var(--text2);
+            cursor: pointer;
+            font-family: var(--font-ui);
+        }
+
+        .ls-btn:hover { color: var(--text-primary); }
+
+        .ls-btn.active {
+            background: var(--accent);
+            border-color: var(--accent);
+            color: #fff;
+            font-weight: 700;
+        }
+
+        .ls-swatches {
+            display: flex;
+            gap: 7px;
+            align-items: center;
+            flex-wrap: wrap;
+        }
+
+        .ls-swatch {
+            width: 22px;
+            height: 22px;
+            border-radius: 50%;
+            cursor: pointer;
+            border: 2px solid transparent;
+            box-shadow: 0 0 0 1px var(--border);
+        }
+
+        .ls-swatch.active { border-color: var(--text-primary); }
+
+        .ls-swatch input[type="color"] {
+            opacity: 0;
+            width: 100%;
+            height: 100%;
+            cursor: pointer;
+            border: 0;
+            padding: 0;
+        }
+
+        .ls-toggle {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            font-size: 12px;
+            color: var(--text2);
+            cursor: pointer;
         }
 
         /* === CHORDS PANEL === */
@@ -3782,8 +3914,58 @@
     <div id="lyrics-panel">
         <div class="panel-header">
             <span class="panel-title" id="lyrics-song-title">Lyrics</span>
-            <span class="panel-close-btn" onclick="toggleLyricsPanel()">✕</span>
+            <span class="lyrics-hdr-actions">
+                <span class="lyrics-gear" id="lyrics-gear" title="Ajustes de letra"
+                      onclick="toggleLyricsSettings(event)">&#9881;</span>
+                <span class="panel-close-btn" onclick="toggleLyricsPanel()">✕</span>
+            </span>
         </div>
+
+        <!-- Discreet settings popover: size / weight / colour / context lines -->
+        <div class="lyrics-settings" id="lyrics-settings" onclick="event.stopPropagation()">
+            <div class="ls-row">
+                <div class="ls-label"><span>Tamaño</span><span id="ls-size-val">42px</span></div>
+                <input type="range" id="ls-size" min="16" max="120" step="1"
+                       oninput="applyLyricsSize(this.value)">
+            </div>
+            <div class="ls-row">
+                <div class="ls-label"><span>Grosor</span></div>
+                <div class="ls-btn-group" id="ls-weight-group">
+                    <button class="ls-btn" data-weight="400" onclick="applyLyricsWeight(400)">Fino</button>
+                    <button class="ls-btn" data-weight="600" onclick="applyLyricsWeight(600)">Medio</button>
+                    <button class="ls-btn" data-weight="700" onclick="applyLyricsWeight(700)">Negrita</button>
+                    <button class="ls-btn" data-weight="900" onclick="applyLyricsWeight(900)">Black</button>
+                </div>
+            </div>
+            <div class="ls-row">
+                <div class="ls-label"><span>Color</span></div>
+                <div class="ls-swatches" id="ls-swatches">
+                    <span class="ls-swatch" data-color="#ffffff" style="background:#ffffff"
+                          onclick="applyLyricsColor('#ffffff')"></span>
+                    <span class="ls-swatch" data-color="#ffd166" style="background:#ffd166"
+                          onclick="applyLyricsColor('#ffd166')"></span>
+                    <span class="ls-swatch" data-color="#8ecae6" style="background:#8ecae6"
+                          onclick="applyLyricsColor('#8ecae6')"></span>
+                    <span class="ls-swatch" data-color="#a7f3d0" style="background:#a7f3d0"
+                          onclick="applyLyricsColor('#a7f3d0')"></span>
+                    <span class="ls-swatch" data-color="#f4978e" style="background:#f4978e"
+                          onclick="applyLyricsColor('#f4978e')"></span>
+                    <span class="ls-swatch" id="ls-swatch-custom" title="Color personalizado"
+                          style="background:linear-gradient(135deg,#f00,#0f0,#00f)">
+                        <input type="color" id="ls-color-custom"
+                               oninput="applyLyricsColor(this.value)">
+                    </span>
+                </div>
+            </div>
+            <div class="ls-row">
+                <label class="ls-toggle">
+                    <span>Mostrar versos anterior/siguiente</span>
+                    <input type="checkbox" id="ls-context" checked
+                           onchange="applyLyricsContext(this.checked)">
+                </label>
+            </div>
+        </div>
+
         <div class="lyrics-content" id="lyrics-content">
             <div class="lyrics-no-data">Enable the "X-Raym Convert Lyrics" Lua script in REAPER to see live lyrics.
             </div>
@@ -4024,7 +4206,7 @@
         wwr_req_recur("REGION", 1000);
         wwr_req_recur("MARKER", 1000);
         // X-Raym exact approach: poll PROJEXTSTATE every 10ms batched
-        wwr_req_recur("GET/PROJEXTSTATE/XR_Lyrics/text;GET/PROJEXTSTATE/XR_Lyrics/next", 10);
+        wwr_req_recur("GET/PROJEXTSTATE/XR_Lyrics/text;GET/PROJEXTSTATE/XR_Lyrics/prev;GET/PROJEXTSTATE/XR_Lyrics/next", 10);
         wwr_req_recur("GET/PROJEXTSTATE/XR_Chords/text", 200);
         // Auto-detect Reaset.lua + read the lyrics/chords bridge diagnostics.
         // One-shot probe so the empty-state message is accurate immediately,
@@ -4429,6 +4611,12 @@
         var xr_lyrics_last = "";
         var xr_lyrics_next = "";
         var xr_lyrics_last_next = "";
+        var xr_lyrics_prev = "";
+        var xr_lyrics_last_prev = "";
+
+        // X-Raym encodes newlines as the literal two-character sequence \n.
+        // Reaset.lua additionally converts real newlines to <br> before publishing.
+        function _fmtLyric(s) { return s.split("\\n").join('<br>'); }
         var lyricsVisible = false;
 
         // Chords state
@@ -4549,6 +4737,9 @@
                 }
                 if (tok.length > 1 && tok[1] === "XR_Lyrics" && tok[2] === "next") {
                     xr_lyrics_next = tok.slice(3).join('\t') || "";
+                }
+                if (tok.length > 1 && tok[1] === "XR_Lyrics" && tok[2] === "prev") {
+                    xr_lyrics_prev = tok.slice(3).join('\t') || "";
                 }
                 if (tok.length > 1 && tok[1] === "XR_Chords" && tok[2] === "text") {
                     var newChord = tok.slice(3).join('\t') || "";
@@ -4671,20 +4862,29 @@
             if (lyricsContent) {
                 var t = xr_lyrics_text;
                 var n = xr_lyrics_next;
+                var p = xr_lyrics_prev;
                 if (t === "--XR-NO-TEXT--") t = "";
                 if (n === "--XR-NO-TEXT--") n = "";
-                if (t !== xr_lyrics_last || n !== xr_lyrics_last_next) {
+                if (p === "--XR-NO-TEXT--") p = "";
+                if (t !== xr_lyrics_last || n !== xr_lyrics_last_next || p !== xr_lyrics_last_prev) {
+                    // Exact X-Raym method: split on \\n, join with <br>
+                    var lines = t.split("\\n");
                     if (t === "") {
                         lyricsContent.innerHTML = '<div class="lyrics-no-data">Sin datos de letra.<br><small>' + _bridgeHint('lyrics') + '</small></div>';
                     } else {
-                        // Exact X-Raym method: split on \\n, join with <br>
-                        var lines = t.split("\\n");
-                        var nextBlock = "";
-                        if (n !== "") nextBlock = '<br><span class="lyrics-next">' + n + '</span>';
-                        lyricsContent.innerHTML = lines.join('<br>') + nextBlock;
+                        // Three stacked lines: previous verse, current, next.
+                        // Missing neighbours keep their box (class "empty" hides
+                        // them via visibility) so the active line never jumps.
+                        lyricsContent.innerHTML =
+                            '<span class="lyrics-ctx lyrics-prev' + (p === "" ? " empty" : "") + '">' +
+                                (p === "" ? "&nbsp;" : _fmtLyric(p)) + '</span>' +
+                            '<span class="lyrics-cur">' + lines.join('<br>') + '</span>' +
+                            '<span class="lyrics-ctx lyrics-next' + (n === "" ? " empty" : "") + '">' +
+                                (n === "" ? "&nbsp;" : _fmtLyric(n)) + '</span>';
                     }
                     xr_lyrics_last = t;
                     xr_lyrics_last_next = n;
+                    xr_lyrics_last_prev = p;
 
                     // --- Canvas lyrics sync (same source, same format) ---
                     if (canvasOpen) {
@@ -6601,7 +6801,69 @@
             if (lbl) lbl.innerText = val + "px";
             var slider = document.getElementById("font-size-slider");
             if (slider) slider.value = val;
+            // Keep the gear popover in sync with the sidebar control.
+            var lsv = document.getElementById("ls-size-val");
+            if (lsv) lsv.innerText = val + "px";
+            var lss = document.getElementById("ls-size");
+            if (lss) lss.value = val;
         }
+
+        function applyLyricsWeight(w) {
+            var el = document.getElementById("lyrics-content");
+            if (el) el.style.fontWeight = w;
+            localStorage.setItem("lyrics_weight", w);
+            var btns = document.querySelectorAll("#ls-weight-group .ls-btn");
+            for (var i = 0; i < btns.length; i++) {
+                if (btns[i].getAttribute("data-weight") === String(w)) btns[i].classList.add("active");
+                else btns[i].classList.remove("active");
+            }
+        }
+
+        function applyLyricsColor(c) {
+            var el = document.getElementById("lyrics-content");
+            if (el) el.style.color = c;
+            localStorage.setItem("lyrics_color", c);
+            var sw = document.querySelectorAll("#ls-swatches .ls-swatch");
+            for (var i = 0; i < sw.length; i++) {
+                if (sw[i].getAttribute("data-color") === c) sw[i].classList.add("active");
+                else sw[i].classList.remove("active");
+            }
+            var cust = document.getElementById("ls-color-custom");
+            if (cust && /^#[0-9a-f]{6}$/i.test(c)) cust.value = c;
+        }
+
+        function applyLyricsContext(on) {
+            var el = document.getElementById("lyrics-content");
+            if (el) {
+                if (on) el.classList.remove("no-context");
+                else el.classList.add("no-context");
+            }
+            localStorage.setItem("lyrics_context", on ? "1" : "0");
+            var cb = document.getElementById("ls-context");
+            if (cb) cb.checked = !!on;
+        }
+
+        function toggleLyricsSettings(e) {
+            if (e) e.stopPropagation();
+            var pop = document.getElementById("lyrics-settings");
+            var gear = document.getElementById("lyrics-gear");
+            if (!pop) return;
+            var willOpen = !pop.classList.contains("open");
+            if (willOpen) { pop.classList.add("open"); if (gear) gear.classList.add("active"); }
+            else { pop.classList.remove("open"); if (gear) gear.classList.remove("active"); }
+        }
+
+        // Click anywhere else closes the popover. The popover itself and the
+        // gear stop propagation, so their own clicks never reach this handler.
+        document.addEventListener("click", function () {
+            var pop = document.getElementById("lyrics-settings");
+            if (pop && pop.classList.contains("open")) {
+                pop.classList.remove("open");
+                var gear = document.getElementById("lyrics-gear");
+                if (gear) gear.classList.remove("active");
+            }
+        });
+
         function initLyricsPrefs() {
             var savedFont = localStorage.getItem("lyrics_font");
             var savedSize = parseInt(localStorage.getItem("lyrics_size")) || 36;
@@ -6615,6 +6877,11 @@
                 }
             }
             applyLyricsSize(savedSize);
+            applyLyricsWeight(parseInt(localStorage.getItem("lyrics_weight")) || 700);
+            // Only override the theme colour when the user actually picked one.
+            var savedColor = localStorage.getItem("lyrics_color");
+            if (savedColor) applyLyricsColor(savedColor);
+            applyLyricsContext(localStorage.getItem("lyrics_context") !== "0");
         }
         initLyricsPrefs();
 
