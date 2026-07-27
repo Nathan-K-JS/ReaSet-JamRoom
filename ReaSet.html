@@ -4288,7 +4288,8 @@
         wwr_req_recur("REGION", 1000);
         wwr_req_recur("MARKER", 1000);
         // X-Raym exact approach: poll PROJEXTSTATE every 10ms batched
-        wwr_req_recur("GET/PROJEXTSTATE/XR_Lyrics/text;GET/PROJEXTSTATE/XR_Lyrics/prev;GET/PROJEXTSTATE/XR_Lyrics/next", 10);
+        wwr_req_recur("GET/PROJEXTSTATE/XR_Lyrics/text;GET/PROJEXTSTATE/XR_Lyrics/prev;GET/PROJEXTSTATE/XR_Lyrics/next" +
+                      ";GET/PROJEXTSTATE/XR_Lyrics/prevPos;GET/PROJEXTSTATE/XR_Lyrics/nextPos", 10);
         wwr_req_recur("GET/PROJEXTSTATE/XR_Chords/text;GET/PROJEXTSTATE/XR_Chords/prev;GET/PROJEXTSTATE/XR_Chords/next", 200);
         // Auto-detect Reaset.lua + read the lyrics/chords bridge diagnostics.
         // One-shot probe so the empty-state message is accurate immediately,
@@ -4695,6 +4696,14 @@
         var xr_lyrics_last_next = "";
         var xr_lyrics_prev = "";
         var xr_lyrics_last_prev = "";
+        // Start position of the prev/next lyric item, published by Reaset.lua
+        // alongside their text. Used only to detect a neighbour that belongs
+        // to a DIFFERENT song than the one currently playing — see the
+        // clamping block in wwr_onreply. Empty/NaN on older Reaset.lua
+        // versions that don't publish it yet, in which case clamping is
+        // simply skipped (same behaviour as before this feature existed).
+        var xr_lyrics_prev_pos = "";
+        var xr_lyrics_next_pos = "";
 
         // X-Raym encodes newlines as the literal two-character sequence \n.
         // Reaset.lua additionally converts real newlines to <br> before publishing.
@@ -5056,6 +5065,12 @@
                 if (tok.length > 1 && tok[1] === "XR_Lyrics" && tok[2] === "prev") {
                     xr_lyrics_prev = tok.slice(3).join('\t') || "";
                 }
+                if (tok.length > 1 && tok[1] === "XR_Lyrics" && tok[2] === "prevPos") {
+                    xr_lyrics_prev_pos = tok.slice(3).join('\t') || "";
+                }
+                if (tok.length > 1 && tok[1] === "XR_Lyrics" && tok[2] === "nextPos") {
+                    xr_lyrics_next_pos = tok.slice(3).join('\t') || "";
+                }
                 // Chords: collect all three keys; rendering happens once below,
                 // after the whole reply is parsed, so a change to any of them
                 // repaints the row exactly once.
@@ -5200,6 +5215,35 @@
                 if (t === "--XR-NO-TEXT--") t = "";
                 if (n === "--XR-NO-TEXT--") n = "";
                 if (p === "--XR-NO-TEXT--") p = "";
+
+                // Clamp prev/next to the song (region) actually playing, so a
+                // verse from the PREVIOUS or NEXT song never bleeds into this
+                // one's context lines. Only runs once the active song's
+                // boundaries are known, and only when Reaset.lua has
+                // published a position for that neighbour — an older
+                // Reaset.lua without prevPos/nextPos leaves pPos/nPos as NaN,
+                // and clamping is simply skipped (today's behaviour).
+                var _lyActiveIdx = -1;
+                for (var _lai = 0; _lai < displayList.length; _lai++) {
+                    if (currentPos >= displayList[_lai].start && currentPos < displayList[_lai].end) { _lyActiveIdx = _lai; break; }
+                }
+                if (_lyActiveIdx !== -1) {
+                    var _lyActiveSong = displayList[_lyActiveIdx];
+                    var _lyPrevPos = parseFloat(xr_lyrics_prev_pos);
+                    var _lyNextPos = parseFloat(xr_lyrics_next_pos);
+                    if (p !== "" && !isNaN(_lyPrevPos) && _lyPrevPos < _lyActiveSong.start) {
+                        p = "";   // that verse belongs to the previous song — hide it
+                    }
+                    if (n !== "" && !isNaN(_lyNextPos) && _lyNextPos >= _lyActiveSong.end) {
+                        // That verse belongs to the next song — show ITS NAME
+                        // (whatever will actually play next, honouring skip
+                        // state) instead of a lyric line from a song we
+                        // haven't reached yet.
+                        var _lyUpNext = findNextValidSong(_lyActiveIdx);
+                        n = _lyUpNext ? ("Siguiente: " + (_lyUpNext.displayName || _lyUpNext.name)) : "";
+                    }
+                }
+
                 if (t !== xr_lyrics_last || n !== xr_lyrics_last_next || p !== xr_lyrics_last_prev) {
                     // Exact X-Raym method: split on \\n, join with <br>
                     var lines = t.split("\\n");

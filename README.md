@@ -232,6 +232,14 @@ current one, both smaller and dimmed so the active line stays dominant. Missing
 neighbours (start of a song, or a gap between items) keep their space reserved, so the
 current line never jumps around while you are reading it.
 
+Context lines are **clamped to the song currently playing**: a verse from the previous
+or next song never bleeds into this one's context lines. At the start of a song the
+"previous" slot stays blank rather than showing the last line of whatever played before
+it; at the end of a song the "next" slot shows **"Siguiente: <song name>"** instead of
+the next song's first lyric — a heads-up, not a spoiler. This needs `Reaset.lua` to
+publish each neighbour's position (added alongside its text); an older `Reaset.lua`
+simply doesn't clamp, matching the behaviour before this feature existed.
+
 A discreet **⚙ gear** in the panel header opens a small popover to adjust:
 
 | Setting | Options |
@@ -698,6 +706,15 @@ El panel de letras muestra el **verso anterior arriba** y el **verso siguiente a
 actual, ambos más pequeños y atenuados para que la línea activa siga siendo la dominante.
 Cuando falta un vecino (inicio de la canción, o un hueco entre items) su espacio se
 reserva igualmente, así la línea actual **no salta** mientras la estás leyendo.
+
+Las líneas de contexto quedan **limitadas a la canción que suena en ese momento**: un
+verso de la canción anterior o siguiente nunca se cuela en el contexto de la actual. Al
+empezar una canción, el hueco "anterior" queda en blanco en vez de mostrar la última línea
+de lo que sonaba antes; al terminar, el hueco "siguiente" muestra **"Siguiente: <nombre de
+la canción>"** en vez del primer verso de la próxima — un aviso, no un spoiler. Esto
+necesita que `Reaset.lua` publique la posición de cada vecino (se agregó junto a su texto);
+con una versión anterior de `Reaset.lua` simplemente no se limita, igual que antes de
+existir esta función.
 
 Un **⚙ engranaje** discreto en la cabecera del panel abre un popover para ajustar:
 

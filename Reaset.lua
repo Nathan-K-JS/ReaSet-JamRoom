@@ -166,6 +166,8 @@ local function bridge_new(track_name, ext_name, status_key, context)
         text       = nil,
         prev_text  = nil,
         next_text  = nil,
+        prev_pos   = nil,
+        next_pos   = nil,
         status     = nil,
     }
 end
@@ -307,6 +309,18 @@ local function process_notes(ext_name, ext_key, item, cached, verify)
     return out
 end
 
+-- Publishes a neighbouring item's start position (or "" when there is none),
+-- so ReaSet.html can tell a verse that belongs to a DIFFERENT song from one
+-- that's still part of the current one, and clamp/relabel it accordingly.
+-- Only meaningful for context-mode bridges (see bridge_tick).
+local function process_pos(ext_name, ext_key, item, cached)
+    local out = item and tostring(reaper.GetMediaItemInfo_Value(item, "D_POSITION")) or ""
+    if out ~= cached then
+        reaper.SetProjExtState(0, ext_name, ext_key, out)
+    end
+    return out
+end
+
 -- Publishes how many tracks matched the keyword, so the UI can warn about an
 -- ambiguous project instead of silently using one of them.
 local function bridge_publish_matches(b, n)
@@ -358,6 +372,10 @@ local function bridge_tick(b, cur_pos, tick)
         b.text      = process_notes(b.ext_name, "text", cur_it,  b.text,      verify)
         b.prev_text = process_notes(b.ext_name, "prev", prev_it, b.prev_text, verify)
         b.next_text = process_notes(b.ext_name, "next", next_it, b.next_text, verify)
+        -- Positions ride alongside the text so ReaSet.html can tell a verse
+        -- from another song apart from one still inside the current one.
+        b.prev_pos  = process_pos(b.ext_name, "prevPos", prev_it, b.prev_pos)
+        b.next_pos  = process_pos(b.ext_name, "nextPos", next_it, b.next_pos)
     else
         b.text = process_notes(b.ext_name, "text", item_at_pos(b.track, cur_pos), b.text, verify)
     end
@@ -423,9 +441,13 @@ local function on_exit()
     reaper.SetProjExtState(0, "XR_Lyrics", "text", "")
     reaper.SetProjExtState(0, "XR_Lyrics", "prev", "")
     reaper.SetProjExtState(0, "XR_Lyrics", "next", "")
+    reaper.SetProjExtState(0, "XR_Lyrics", "prevPos", "")
+    reaper.SetProjExtState(0, "XR_Lyrics", "nextPos", "")
     reaper.SetProjExtState(0, "XR_Chords", "text", "")
     reaper.SetProjExtState(0, "XR_Chords", "prev", "")
     reaper.SetProjExtState(0, "XR_Chords", "next", "")
+    reaper.SetProjExtState(0, "XR_Chords", "prevPos", "")
+    reaper.SetProjExtState(0, "XR_Chords", "nextPos", "")
     -- Clear bridge diagnostics so the UI reports "script not running".
     reaper.SetExtState(SEC, "lyricsTrack", "", false)
     reaper.SetExtState(SEC, "chordsTrack", "", false)
