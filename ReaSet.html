@@ -2237,13 +2237,63 @@
             padding: 20px 40px;
         }
 
-        .lyrics-no-data {
-            color: var(--text2);
-            font-style: italic;
+        /* Diagnostics live down here, out of the reading area. A gap with no
+           lyrics is a normal, intentional state — it must not shout. */
+        .panel-status {
+            position: absolute;
+            left: 0;
+            right: 0;
+            bottom: 9px;
+            padding: 0 22px;
             text-align: center;
-            margin-top: 40px;
-            font-size: 15px;
-            line-height: 1.6;
+            font-family: var(--font-ui);
+            font-size: 11px;
+            font-weight: 400;
+            letter-spacing: 0.02em;
+            line-height: 1.45;
+            color: var(--text2);
+            pointer-events: none;
+            user-select: none;
+        }
+
+        .panel-status:empty { display: none; }
+
+        /* Healthy but nothing to display: barely there. */
+        .panel-status.idle { opacity: 0.16; }
+
+        /* Something actually needs fixing: readable, still unobtrusive. */
+        .panel-status.alert { opacity: 0.55; }
+
+        /* === PANEL TRANSITIONS ===
+           Lyrics rebuild their markup on every change, so the animation fires
+           on element insertion. Chords reuse their nodes, so JS restarts these
+           by toggling a class (see _restartAnim). The implicit `to` keyframe
+           lands on each element's own resting style, which matters because the
+           context lines rest at reduced opacity. */
+        @keyframes reasetFadeUp {
+            from { opacity: 0; transform: translateY(0.22em); }
+        }
+
+        @keyframes reasetFadeSide {
+            from { opacity: 0; transform: translateX(0.3em); }
+        }
+
+        @keyframes reasetChordIn {
+            from { opacity: 0; transform: scale(0.94); }
+        }
+
+        .lyrics-cur { animation: reasetFadeUp 0.3s ease-out; }
+        .lyrics-ctx { animation: reasetFadeUp 0.3s ease-out; }
+
+        #chord-display.anim { animation: reasetChordIn 0.26s ease-out; }
+        .chord-ctx.anim     { animation: reasetFadeSide 0.26s ease-out; }
+
+        /* Never animate for users who asked the OS to keep motion down. */
+        @media (prefers-reduced-motion: reduce) {
+            .lyrics-cur,
+            .lyrics-ctx,
+            #chord-display.anim,
+            .chord-ctx.anim { animation: none !important; }
         }
 
         /* Current verse: inherits the size/weight/colour set in the gear popover. */
@@ -4005,10 +4055,8 @@
             </div>
         </div>
 
-        <div class="lyrics-content" id="lyrics-content">
-            <div class="lyrics-no-data">Enable the "X-Raym Convert Lyrics" Lua script in REAPER to see live lyrics.
-            </div>
-        </div>
+        <div class="lyrics-content" id="lyrics-content"></div>
+        <div class="panel-status idle" id="lyrics-status"></div>
     </div>
 
     <!-- CHORDS PANEL -->
@@ -4019,7 +4067,8 @@
             <div id="chord-display">&#9834;</div>
             <span class="chord-ctx chord-next empty" id="chord-next"></span>
         </div>
-        <div class="chord-label" id="chord-label">Enable the Lua chords script in REAPER</div>
+        <div class="chord-label" id="chord-label"></div>
+        <div class="panel-status idle" id="chords-status"></div>
     </div>
 
     <!-- LIVE VIEW -->
@@ -4684,51 +4733,71 @@
         var xr_error   = "";           // last error Reaset.lua caught
         var SCRIPT_FROZEN_MS = 8000;   // 4x the 2s poll: no false positives
 
-        // Builds the empty-state message for a panel, naming the ACTUAL cause
-        // instead of always blaming the track name.
-        function _bridgeHint(kind) {
+        // Resolves what the bridge is doing, as { level, msg }.
+        //
+        //   'ok'      — working. An empty panel here is a NORMAL, intentional
+        //               gap (instrumental passage, silence between verses), so
+        //               its message must stay whisper-quiet.
+        //   'warn'    — working, but the project is ambiguous.
+        //   'problem' — actually broken; the user has to do something.
+        //
+        // Messages are single-line and plain text: they render in a faint strip
+        // at the bottom of the panel, never in the middle of the performer's
+        // reading area.
+        function _bridgeStatus(kind) {
             var isLy    = (kind === 'lyrics');
             var st      = isLy ? xr_lyrics_track : xr_chords_track;
             var keyword = isLy ? 'lyrics' : 'chords';
+            var what    = isLy ? 'letra' : 'acordes';
 
             // A frozen script keeps its last published values, so the panel can
             // show a stale-but-plausible value forever. Catch that first.
             if (xr_tick && xr_tick_ts && (Date.now() - xr_tick_ts) > SCRIPT_FROZEN_MS) {
-                return '<b>&#9888; Reaset.lua está CONGELADO</b> — su bucle se detuvo.<br>' +
-                       'Lo que se muestra son valores viejos. Vuelve a ejecutar el script.' +
-                       (xr_error ? '<br><small>Error: ' + xr_error + '</small>' : '');
+                return { level: 'problem',
+                         msg: '⚠ Reaset.lua congelado — datos viejos. Vuelve a ejecutar el script.' +
+                              (xr_error ? ' (' + xr_error + ')' : '') };
             }
             if (xr_error) {
-                return '<b>Reaset.lua reportó un error:</b><br><small>' + xr_error + '</small>';
+                return { level: 'problem', msg: '⚠ Reaset.lua: ' + xr_error };
             }
             if (st === null || st === '') {
-                return 'El script <b>Reaset.lua</b> no está corriendo en REAPER.<br>' +
-                       'Actions &rarr; ReaScript: Load… &rarr; Reaset.lua &rarr; Run.' +
-                       '<br><small>(Si usas los scripts antiguos de <i>Requirements/</i>, ' +
-                       'no publican este estado y no admiten prefijos.)</small>';
+                return { level: 'problem',
+                         msg: 'Reaset.lua no está corriendo — Actions → ReaScript: Load… → Run.' };
             }
             if (st === '!NOSWS') {
-                return 'Falta la extensión <b>SWS</b> (<code>ULT_GetMediaItemNote</code>).<br>' +
-                       'Sin ella no se pueden leer las notas de los items.';
+                return { level: 'problem',
+                         msg: 'Falta la extensión SWS (ULT_GetMediaItemNote): no se pueden leer las notas.' };
             }
             if (st === '!NOTRACK') {
-                return 'No se encontró ningún track llamado <b>' + keyword + '</b>.<br>' +
-                       'Se aceptan prefijos: <b>*' + keyword + '</b>, <b>01 ' + keyword + '</b>, ' +
-                       '<b>[' + keyword + ']</b>.<br>' +
-                       '<small>No sirven nombres con palabras extra (ej. "Backing ' + keyword + '").</small>';
+                return { level: 'problem',
+                         msg: 'Sin track «' + keyword + '» (se aceptan prefijos: *' + keyword + ', 01 ' + keyword + ').' };
             }
             var nMatch = isLy ? xr_lyrics_matches : xr_chords_matches;
-            var warn   = (nMatch > 1)
-                ? '<br><b>&#9888; ' + nMatch + ' tracks coinciden con "' + keyword + '"</b> — ' +
-                  'se está usando <b>' + st + '</b>. Renombra los otros para evitar ambigüedad.'
-                : '';
-            return 'Track <b>' + st + '</b> detectado &#10003;<br>' +
-                   'No hay ningún item con notas bajo el cursor de reproducción.' + warn;
+            if (nMatch > 1) {
+                return { level: 'warn',
+                         msg: '⚠ ' + nMatch + ' tracks coinciden con «' + keyword + '» — usando ' + st + '.' };
+            }
+            return { level: 'ok', msg: st + ' ✓ · sin ' + what + ' en este punto' };
         }
 
-        // Plain-text variant for elements that use innerText.
-        function _bridgeHintText(kind) {
-            return _bridgeHint(kind).replace(/<br\s*\/?>/gi, ' ').replace(/<[^>]+>/g, '');
+        // Paints the faint bottom strip. `idle` marks "healthy but nothing to
+        // show", which is dimmed further still — it is not a fault worth the
+        // performer's attention.
+        var _statusCache = {};
+        function _setPanelStatus(elId, kind, idle) {
+            var el = document.getElementById(elId);
+            if (!el) return;
+            var s   = _bridgeStatus(kind);
+            // Nothing to say while content is actually displaying.
+            var msg = (s.level === 'ok' && !idle) ? '' : s.msg;
+            var cls = 'panel-status' + (s.level === 'ok' ? ' idle' : ' alert');
+            // Called on every reply (the lyrics key is polled at 10ms), so skip
+            // the DOM write unless something actually changed.
+            var key = cls + '|' + msg;
+            if (_statusCache[elId] === key) return;
+            _statusCache[elId] = key;
+            el.textContent = msg;
+            el.className   = cls;
         }
 
         // Show timer state
@@ -4878,7 +4947,7 @@
                         // Lyrics/Chords bridge diagnostics published by Reaset.lua.
                         // "" (or key absent) = script not running; "!NOTRACK" = no
                         // matching track; "!NOSWS" = SWS missing; otherwise the real
-                        // REAPER track name. Consumed by _bridgeHint() below.
+                        // REAPER track name. Consumed by _bridgeStatus() below.
                         if (tok[1] === "ReaSet" && tok[2] === "lyricsTrack") {
                             xr_lyrics_track = tok.slice(3).join('\t');
                         }
@@ -4909,6 +4978,10 @@
                 }
             }
 
+            // Bottom status strips. Cheap: they only touch the DOM on change.
+            _setPanelStatus('lyrics-status', 'lyrics', xr_lyrics_last === '');
+            _setPanelStatus('chords-status', 'chords', _chordToken(xr_chords_text) === '');
+
             // === CHORDS DISPLAY (current + surrounding) ===
             // Repaint once per reply, only when something actually changed.
             if (xr_chords_text !== chordsLastRaw ||
@@ -4932,19 +5005,20 @@
                 if (t !== xr_lyrics_last || n !== xr_lyrics_last_next || p !== xr_lyrics_last_prev) {
                     // Exact X-Raym method: split on \\n, join with <br>
                     var lines = t.split("\\n");
-                    if (t === "") {
-                        lyricsContent.innerHTML = '<div class="lyrics-no-data">Sin datos de letra.<br><small>' + _bridgeHint('lyrics') + '</small></div>';
-                    } else {
-                        // Three stacked lines: previous verse, current, next.
-                        // Missing neighbours keep their box (class "empty" hides
-                        // them via visibility) so the active line never jumps.
-                        lyricsContent.innerHTML =
-                            '<span class="lyrics-ctx lyrics-prev' + (p === "" ? " empty" : "") + '">' +
-                                (p === "" ? "&nbsp;" : _fmtLyric(p)) + '</span>' +
-                            '<span class="lyrics-cur">' + lines.join('<br>') + '</span>' +
-                            '<span class="lyrics-ctx lyrics-next' + (n === "" ? " empty" : "") + '">' +
-                                (n === "" ? "&nbsp;" : _fmtLyric(n)) + '</span>';
-                    }
+                    // Three stacked lines: previous verse, current, next.
+                    // Missing neighbours keep their box (class "empty" hides
+                    // them via visibility) so the active line never jumps.
+                    // Rendered even when the current verse is empty: during an
+                    // instrumental gap, seeing what just passed and what is
+                    // coming is exactly what the performer wants. Diagnostics
+                    // go to the faint bottom strip, never in here.
+                    lyricsContent.innerHTML =
+                        '<span class="lyrics-ctx lyrics-prev' + (p === "" ? " empty" : "") + '">' +
+                            (p === "" ? "&nbsp;" : _fmtLyric(p)) + '</span>' +
+                        '<span class="lyrics-cur">' +
+                            (t === "" ? "&nbsp;" : lines.join('<br>')) + '</span>' +
+                        '<span class="lyrics-ctx lyrics-next' + (n === "" ? " empty" : "") + '">' +
+                            (n === "" ? "&nbsp;" : _fmtLyric(n)) + '</span>';
                     xr_lyrics_last = t;
                     xr_lyrics_last_next = n;
                     xr_lyrics_last_prev = p;
@@ -6769,24 +6843,8 @@
             updateTopTabs();
         }
 
-        function updateLyricsDisplay(raw) {
-            var content = document.getElementById("lyrics-content");
-            if (!content) return;
-            if (!raw || raw === "--XR-NO-TEXT--" || raw === "") {
-                content.innerHTML = '<div class="lyrics-no-data">Sin datos de letra.<br><small>' + _bridgeHint('lyrics') + '</small></div>';
-                return;
-            }
-            // X-Raym stores newlines as literal \n sequences — split on them
-            // The Lua gsub replaces \r?\n with <br>, so raw contains literal "<br>" strings
-            var lines = raw.split("<br>");
-            var htmlLines = lines.map(function (l) {
-                return '<span>' + l.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;') + '</span>';
-            }).join('<br>');
-            content.innerHTML = htmlLines;
-            if (typeof canvasOpen !== "undefined" && canvasOpen && document.getElementById("cw-content-lyrics")) {
-                document.getElementById("cw-content-lyrics").innerHTML = htmlLines;
-            }
-        }
+        // (updateLyricsDisplay removed — dead code. The live renderer is the
+        //  three-line block in wwr_onreply, which is the only path that runs.)
 
         // --- 11. CHORDS PANEL (via XR_Chords extstate) ---
         function toggleChordsPanel() {
@@ -6815,38 +6873,47 @@
         // Paints previous | current | next. A missing neighbour keeps its box
         // (class "empty" hides it via visibility) so the current chord never
         // shifts sideways when one appears or disappears.
+        // Chord nodes are reused rather than rebuilt, so a CSS animation would
+        // not re-fire on its own. Removing the class, forcing a reflow and
+        // re-adding it restarts it.
+        function _restartAnim(el) {
+            el.classList.remove("anim");
+            void el.offsetWidth;
+            el.classList.add("anim");
+        }
+
         function _setChordCtx(id, token) {
             var el = document.getElementById(id);
             if (!el) return;
+            if (el.innerText === token) return;   // unchanged: don't re-animate
             el.innerText = token;
             if (token === "") el.classList.add("empty");
-            else el.classList.remove("empty");
+            else { el.classList.remove("empty"); _restartAnim(el); }
         }
 
         function updateChordsDisplay() {
             var disp = document.getElementById("chord-display");
             if (!disp) return;
 
-            var cur = _chordToken(xr_chords_text);
-            if (cur === "") {
-                disp.innerText = "♪";
-                _setChordCtx("chord-prev", "");
-                _setChordCtx("chord-next", "");
-                document.getElementById("chord-label").innerText = _bridgeHintText('chords');
-                if (typeof canvasOpen !== "undefined" && canvasOpen && document.getElementById("cw-content-chords")) {
-                    document.getElementById("cw-content-chords").innerText = "♪";
-                }
-                return;
+            var cur   = _chordToken(xr_chords_text);
+            var shown = (cur === "") ? "♪" : cur;
+            if (disp.innerText !== shown) {
+                disp.innerText = shown;
+                if (cur !== "") _restartAnim(disp);
             }
 
-            disp.innerText = cur;
             _setChordCtx("chord-prev", _chordToken(xr_chords_prev));
             _setChordCtx("chord-next", _chordToken(xr_chords_next));
 
-            var full = xr_chords_text.replace(/<br>/gi, " ").replace(/\t/g, " ").trim();
-            document.getElementById("chord-label").innerText = "Chords: " + full;
+            // Diagnostics belong in the bottom strip, not next to the chord.
+            var lbl = document.getElementById("chord-label");
+            if (lbl) {
+                lbl.innerText = (cur === "")
+                    ? ""
+                    : xr_chords_text.replace(/<br>/gi, " ").replace(/\t/g, " ").trim();
+            }
             if (typeof canvasOpen !== "undefined" && canvasOpen && document.getElementById("cw-content-chords")) {
-                document.getElementById("cw-content-chords").innerText = cur;
+                document.getElementById("cw-content-chords").innerText = shown;
             }
         }
 

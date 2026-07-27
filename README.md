@@ -241,6 +241,22 @@ optically centred no matter how long the neighbouring chord names are.
 > and the sides stay blank — that is correct, not a fault. Split the chords into one item
 > per change to get the left/right context.
 
+#### Transitions and the status strip
+Lyric and chord changes are **animated** (~0.3 s fade, with a slight vertical shift for
+lyrics and a lateral one for chords) instead of snapping. `prefers-reduced-motion` is
+honoured: if your system asks for less motion, nothing animates.
+
+Diagnostics never occupy the reading area — they live in a very faint strip at the bottom
+of the panel, with two visibility levels:
+
+| Situation | Visibility |
+|---|---|
+| Working, but no lyric/chord at this point | Barely visible (16%) — a **normal** state, not a fault |
+| Something needs fixing (script stopped, frozen, no track, no SWS) | Readable (55%), still unobtrusive |
+
+While content is on screen the strip stays empty. An instrumental gap still shows the
+previous and next verse, which is exactly what is useful at that moment.
+
 ### Lyrics & Chords Track Naming
 ReaSet reads lyrics and chords from **two dedicated REAPER tracks**, identified by their
 name. `Reaset.lua` scans the project and looks for these two keywords:
@@ -641,6 +657,22 @@ y atenuados. Se reserva el mismo espacio a ambos lados, así el acorde actual qu
 > pista `chords`. Si un único item abarca toda la canción, no hay vecinos que mostrar y los
 > laterales quedan en blanco — eso es correcto, no un fallo. Divide los acordes en un item
 > por cambio para tener el contexto izquierda/derecha.
+
+#### Transiciones y franja de estado
+Los cambios de letra y de acorde se **animan** (fundido de ~0.3 s, con un leve
+desplazamiento vertical en letras y lateral en acordes) en vez de cambiar de golpe. Se
+respeta `prefers-reduced-motion`: si tu sistema pide menos movimiento, no se anima.
+
+Los mensajes de diagnóstico **no ocupan el área de lectura**: viven en una franja muy
+tenue al pie del panel, con dos niveles de visibilidad.
+
+| Situación | Visibilidad |
+|---|---|
+| Todo bien, pero no hay letra/acorde en ese punto | Apenas visible (16%) — es un estado **normal**, no un fallo |
+| Algo hay que arreglar (script parado, congelado, sin track, sin SWS) | Legible (55%), sigue siendo discreto |
+
+Cuando sí hay contenido en pantalla, la franja queda vacía. Un hueco instrumental sigue
+mostrando el verso anterior y el siguiente, que es justo lo útil en ese momento.
 
 ### Nombres de las pistas de Letras y Acordes
 ReaSet lee las letras y los acordes desde **dos pistas dedicadas de REAPER**, identificadas
