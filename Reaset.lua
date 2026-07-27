@@ -207,15 +207,28 @@ local function normalize_track_name(name)
     return s
 end
 
--- Returns the first track (top-down) whose normalised name equals the keyword.
+-- Finds the track for this bridge. Returns (track, match_count).
+--
+-- A track that actually HAS items wins over one that does not, even if the
+-- empty one comes first. Without this, a divider/folder track called
+-- "*LYRICS*" or "=== LYRICS ===" sitting above the real lyrics track silently
+-- shadows it: it matches the keyword, has no items, and the panel stays empty
+-- forever. Falls back to the first match when none of them have items.
 local function bridge_find_track(b)
     local n = reaper.CountTracks(0)
+    local first, with_items, count = nil, nil, 0
     for i = 0, n - 1 do
         local tr = reaper.GetTrack(0, i)
         local _, name = reaper.GetTrackName(tr)
-        if normalize_track_name(name) == b.track_name then return tr end
+        if normalize_track_name(name) == b.track_name then
+            count = count + 1
+            if not first then first = tr end
+            if not with_items and reaper.GetTrackNumMediaItems(tr) > 0 then
+                with_items = tr
+            end
+        end
     end
-    return nil
+    return (with_items or first), count
 end
 
 local function item_at_pos(track, pos)
@@ -260,10 +273,37 @@ local function process_notes(ext_name, ext_key, item, cached)
     return cached
 end
 
-local function bridge_tick(b, cur_pos)
-    if not reaper.ValidatePtr(b.track, 'MediaTrack*') then
-        b.track = bridge_find_track(b)   -- (re)acquire; stays nil if track absent
-        if not b.track then
+-- Publishes how many tracks matched the keyword, so the UI can warn about an
+-- ambiguous project instead of silently using one of them.
+local function bridge_publish_matches(b, n)
+    if b.matches ~= n then
+        b.matches = n
+        reaper.SetExtState(SEC, b.status_key .. "Matches", tostring(n), false)
+    end
+end
+
+local RESCAN_TICKS = 120  -- ~2 s at 60 fps
+
+local function bridge_tick(b, cur_pos, tick)
+    -- Re-acquire when the pointer died, and ALSO re-validate periodically.
+    -- A latched pointer stays valid after the user renames the track, so
+    -- without this a rename never takes effect and the script keeps reading
+    -- the wrong (or a now-misnamed) track until REAPER restarts.
+    local needs_scan = not reaper.ValidatePtr(b.track, 'MediaTrack*')
+    if not needs_scan and (tick % RESCAN_TICKS == 0) then
+        local _, cur_name = reaper.GetTrackName(b.track)
+        if normalize_track_name(cur_name) ~= b.track_name then
+            needs_scan = true               -- renamed away from the keyword
+        elseif reaper.GetTrackNumMediaItems(b.track) == 0 then
+            needs_scan = true               -- empty: a better candidate may exist now
+        end
+    end
+
+    if needs_scan then
+        local tr, count = bridge_find_track(b)
+        b.track = tr
+        bridge_publish_matches(b, count)
+        if not tr then
             bridge_publish_status(b, "!NOTRACK")
             return
         end
@@ -304,8 +344,8 @@ local function main()
     -- 2/3) Lyrics + Chords note bridges (share the same cursor position)
     local cur_pos = reaper.GetPlayState() > 0
         and reaper.GetPlayPosition() or reaper.GetCursorPosition()
-    bridge_tick(lyrics, cur_pos)
-    bridge_tick(chords, cur_pos)
+    bridge_tick(lyrics, cur_pos, _hb_tick)
+    bridge_tick(chords, cur_pos, _hb_tick)
 
     reaper.defer(main)
 end
@@ -322,6 +362,8 @@ local function on_exit()
     -- Clear bridge diagnostics so the UI reports "script not running".
     reaper.SetExtState(SEC, "lyricsTrack", "", false)
     reaper.SetExtState(SEC, "chordsTrack", "", false)
+    reaper.SetExtState(SEC, "lyricsTrackMatches", "", false)
+    reaper.SetExtState(SEC, "chordsTrackMatches", "", false)
     if s_active then loop_cleanup() end
     -- Drop the presence flag so ReaSet falls back to JS loop next session.
     reaper.SetExtState(SEC, "nativeLoopReady", "0", false)

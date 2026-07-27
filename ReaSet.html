@@ -4029,8 +4029,11 @@
         // Auto-detect Reaset.lua + read the lyrics/chords bridge diagnostics.
         // One-shot probe so the empty-state message is accurate immediately,
         // then a light refresh (these are tiny replies).
-        wwr_req("GET/EXTSTATE/ReaSet/nativeLoopReady;GET/EXTSTATE/ReaSet/lyricsTrack;GET/EXTSTATE/ReaSet/chordsTrack");
-        wwr_req_recur("GET/EXTSTATE/ReaSet/nativeLoopReady;GET/EXTSTATE/ReaSet/lyricsTrack;GET/EXTSTATE/ReaSet/chordsTrack", 2000);
+        var _diagProbe = "GET/EXTSTATE/ReaSet/nativeLoopReady" +
+                         ";GET/EXTSTATE/ReaSet/lyricsTrack;GET/EXTSTATE/ReaSet/chordsTrack" +
+                         ";GET/EXTSTATE/ReaSet/lyricsTrackMatches;GET/EXTSTATE/ReaSet/chordsTrackMatches";
+        wwr_req(_diagProbe);
+        wwr_req_recur(_diagProbe, 2000);
         wwr_start();
 
         // --- 2. STATE ---
@@ -4437,6 +4440,8 @@
         // specific failure. Anything else = the matched REAPER track name.
         var xr_lyrics_track = null;
         var xr_chords_track = null;
+        var xr_lyrics_matches = NaN;   // how many tracks matched the keyword
+        var xr_chords_matches = NaN;
 
         // Builds the empty-state message for a panel, naming the ACTUAL cause
         // instead of always blaming the track name.
@@ -4461,8 +4466,13 @@
                        '<b>[' + keyword + ']</b>.<br>' +
                        '<small>No sirven nombres con palabras extra (ej. "Backing ' + keyword + '").</small>';
             }
+            var nMatch = isLy ? xr_lyrics_matches : xr_chords_matches;
+            var warn   = (nMatch > 1)
+                ? '<br><b>&#9888; ' + nMatch + ' tracks coinciden con "' + keyword + '"</b> — ' +
+                  'se está usando <b>' + st + '</b>. Renombra los otros para evitar ambigüedad.'
+                : '';
             return 'Track <b>' + st + '</b> detectado &#10003;<br>' +
-                   'No hay ningún item con notas bajo el cursor de reproducción.';
+                   'No hay ningún item con notas bajo el cursor de reproducción.' + warn;
         }
 
         // Plain-text variant for elements that use innerText.
@@ -4616,6 +4626,13 @@
                         }
                         if (tok[1] === "ReaSet" && tok[2] === "chordsTrack") {
                             xr_chords_track = tok.slice(3).join('\t');
+                        }
+                        // How many tracks matched the keyword (>1 = ambiguous project).
+                        if (tok[1] === "ReaSet" && tok[2] === "lyricsTrackMatches") {
+                            xr_lyrics_matches = parseInt(tok[3], 10);
+                        }
+                        if (tok[1] === "ReaSet" && tok[2] === "chordsTrackMatches") {
+                            xr_chords_matches = parseInt(tok[3], 10);
                         }
                         // NOTE: nativeLoop=done is intentionally NOT handled here.
                         // _nativeLoopSubId stays armed until the playhead physically leaves

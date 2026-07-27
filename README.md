@@ -352,6 +352,13 @@ changing anything. `Reaset.lua` reports its status live:
 The last one is the most common false alarm: the track is found, but the playhead
 is not over an item, or the item's **Notes** field is empty.
 
+#### 🔍 Diagnostic script
+If the message is not enough, run **`ReaSet_Diagnose.lua`** (Actions → ReaScript:
+Load… → Run). It is read-only and prints a full report: every track with its
+normalised name and item count, which track each bridge would pick, whether SWS is
+present, the cursor position, and a per-item dump of the Notes field. It pinpoints
+shadowed tracks (two tracks matching the same keyword) and empty Notes immediately.
+
 ### ❌ `ULT_GetMediaItemNote` error
 - Missing compatible scripting/API environment; install dependency or adapt script.
 
@@ -718,6 +725,14 @@ El mensaje del panel vacío te dice la causa **real** — léelo antes de cambia
 
 El último es la falsa alarma más común: la pista se encontró, pero el playhead no
 está sobre ningún item, o el campo **Notes** del item está vacío.
+
+#### 🔍 Script de diagnóstico
+Si el mensaje no basta, ejecuta **`ReaSet_Diagnose.lua`** (Actions → ReaScript:
+Load… → Run). Es de solo lectura e imprime un informe completo: todas las pistas con
+su nombre normalizado y cantidad de items, qué pista elegiría cada puente, si SWS
+está presente, la posición del cursor y un volcado de las notas item por item.
+Detecta al instante pistas que se pisan entre sí (dos coincidiendo con la misma
+palabra clave) y notas vacías.
 
 ### ❌ Error `ULT_GetMediaItemNote`
 - Falta entorno/API compatible; instalar dependencia o adaptar script.
