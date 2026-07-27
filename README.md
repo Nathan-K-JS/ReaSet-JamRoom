@@ -260,7 +260,9 @@ Expressing it as "every line moves one slot" is what makes it read as **a single
 rather than four separate animations. The drum radius is in `em`, so the carousel scales
 with the font size you pick in the gear popover.
 
-Chords keep their per-element lateral transition (not a 3D carousel yet).
+Chords use **the same drum laid on its side**: previous chord to the left, next to the
+right, following the same curve and receding the same way, likewise never tilted. Changing
+chord turns the drum by one position exactly as the lyrics one does.
 
 Only a genuine one-step move earns the slide. A seek, a song change or an edit is not a
 step along the belt, so those **crossfade** instead — sliding would imply a continuity
@@ -698,7 +700,10 @@ Que todo se exprese como "cada línea avanza una posición" es lo que hace que s
 **una sola rotación** y no como cuatro animaciones sueltas. El radio del tambor está en
 `em`, así que el carrusel escala con el tamaño de letra que elijas en el engranaje.
 
-Los acordes conservan su transición lateral por elemento (aún no son un carrusel 3D).
+Los acordes usan **el mismo tambor tumbado de lado**: el acorde anterior a la izquierda y el
+siguiente a la derecha, recorriendo la misma curva y retrocediendo igual, también sin
+inclinarse. Al cambiar de acorde, el tambor gira una posición exactamente igual que el de
+las letras.
 
 Solo un avance real de un paso merece el deslizamiento. Un salto de posición, un cambio de
 canción o una edición no son un paso en la cinta, así que esos hacen **fundido** — deslizar

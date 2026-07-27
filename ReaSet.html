@@ -2265,13 +2265,11 @@
         .panel-status.alert { opacity: 0.55; }
 
         /* === PANEL TRANSITIONS ===
-           Each line animates its OWN role change, they are not one rigid block:
-             · the current line rises into the upper slot, shrinking and dimming
-             · the old upper line keeps rising and fades away entirely (a ghost)
-             · the next line rises into the centre, growing and brightening
-             · a brand-new line fades in from below into the freed lower slot
-           JS drives this per element (see _flipFrom / _enterFrom / _ghostOut);
-           the durations and easing live there so all four stay in step. */
+           Both panels use the same drum: every element is parked on a numbered
+           slot, and advancing moves each one to the slot next door. The slot
+           carries the position, depth, scale and opacity, so a line/chord can
+           smoothly BECOME its neighbour. JS owns the geometry and timing
+           (_lyrSlot / _chdSlot, BELT_MS) so the two stay in step. */
         .lyrics-stack {
             position: relative;
             flex: 1;
@@ -2280,35 +2278,15 @@
             transform-style: preserve-3d;
         }
 
-        /* Non-sequential changes (seek, song change) crossfade: sliding would
-           imply a continuity that did not happen. */
+        /* Non-sequential changes (seek, song change) crossfade: turning the drum
+           would imply a continuity that did not happen. */
         @keyframes reasetStackFade { from { opacity: 0; } }
         .lyrics-stack.fading { animation: reasetStackFade 0.26s ease-out; }
-
-        @keyframes reasetFadeSide {
-            from { opacity: 0; transform: translateX(0.3em); }
-        }
-
-        @keyframes reasetChordIn {
-            from { opacity: 0; transform: scale(0.94); }
-        }
-
-        #chord-display.anim { animation: reasetChordIn 0.26s ease-out; }
-        .chord-ctx.anim     { animation: reasetFadeSide 0.26s ease-out; }
-
-        /* Copy of a line that has left the belt. Positioned fixed over the
-           viewport with its computed typography baked in, so it renders
-           identically without depending on a parent's font-size. */
-        .belt-ghost {
-            pointer-events: none;
-            user-select: none;
-        }
 
         /* Never animate for users who asked the OS to keep motion down. */
         @media (prefers-reduced-motion: reduce) {
             .lyrics-stack.fading,
-            #chord-display.anim,
-            .chord-ctx.anim { animation: none !important; }
+            .chord-row.fading { animation: none !important; }
         }
 
         /* Verses ride a vertical 3D drum (Cover Flow, rotated 90°). Every line is
@@ -2476,52 +2454,41 @@
             color: var(--text2);
         }
 
-        /* Row that holds previous | current | next. The shared font-size lives
-           here so the side chords scale with the centre one automatically. */
+        /* The same drum as the lyrics stack, laid on its side: previous chord to
+           the left, next to the right. Slots are absolutely positioned, so the
+           centre chord never shifts when a neighbour's name is longer. */
         .chord-row {
-            display: flex;
-            align-items: center;
-            justify-content: center;
+            position: relative;
             width: 100%;
-            gap: 0.3em;
+            height: 1.3em;
             font-size: 15vw;
             line-height: 1;
+            perspective: 1100px;
+            transform-style: preserve-3d;
         }
 
-        #chord-display {
-            font-size: 1em;
-            flex: 0 0 auto;
+        /* One shared style for all three: every visual difference comes from the
+           slot transform, which is what lets a chord BECOME its neighbour. Like
+           the lyrics, they follow the curve without ever tilting. */
+        .chord-slot {
+            position: absolute;
+            left: 50%;
+            top: 50%;
             font-weight: 900;
             color: var(--color-brand);
             font-family: var(--font-heading);
             letter-spacing: 4px;
-            text-shadow: 0 0 30px rgba(30, 215, 96, 0.2);
-            transition: all 0.15s;
-        }
-
-        /* Neighbours: `flex: 1 1 0` on BOTH sides reserves equal space, so the
-           current chord stays optically centred no matter how long the
-           neighbouring chord names are. */
-        .chord-ctx {
-            flex: 1 1 0;
-            min-width: 0;
-            font-size: 0.3em;
-            opacity: 0.28;
-            font-weight: 700;
-            font-family: var(--font-heading);
-            color: var(--color-brand);
-            letter-spacing: 2px;
             white-space: nowrap;
-            overflow: hidden;
-            text-overflow: ellipsis;
+            transform-origin: center center;
+            will-change: transform, opacity;
         }
 
-        /* Hug the current chord: previous sits to its left, next to its right. */
-        .chord-prev { text-align: right; }
-        .chord-next { text-align: left; }
+        #chord-display { text-shadow: 0 0 30px rgba(30, 215, 96, 0.2); }
 
-        /* Hidden, not removed — keeps the centre chord from shifting. */
-        .chord-ctx.empty { visibility: hidden; }
+        /* Hidden, not removed — the slot stays occupied. */
+        .chord-slot.empty { visibility: hidden; }
+
+        .chord-row.fading { animation: reasetStackFade 0.26s ease-out; }
 
         #chords-panel.no-context .chord-ctx { display: none; }
 
@@ -4076,9 +4043,9 @@
     <div id="chords-panel">
         <span class="chord-close-btn" onclick="toggleChordsPanel()">✕</span>
         <div class="chord-row">
-            <span class="chord-ctx chord-prev empty" id="chord-prev"></span>
-            <div id="chord-display">&#9834;</div>
-            <span class="chord-ctx chord-next empty" id="chord-next"></span>
+            <span class="chord-slot chord-ctx chord-prev empty" id="chord-prev"></span>
+            <div class="chord-slot" id="chord-display">&#9834;</div>
+            <span class="chord-slot chord-ctx chord-next empty" id="chord-next"></span>
         </div>
         <div class="chord-label" id="chord-label"></div>
         <div class="panel-status idle" id="chords-status"></div>
@@ -4738,86 +4705,6 @@
             return 'transform ' + BELT_MS + 'ms ' + BELT_EASE +
                    ', opacity ' + BELT_MS + 'ms ease-out';
         }
-
-        // Snapshot of how a slot looks right now, used as the FROM state.
-        function _slotState(el) {
-            if (!el) return null;
-            var r = el.getBoundingClientRect();
-            if (!r.width && !r.height) return null;   // hidden panel: nothing to animate
-            var cs = window.getComputedStyle(el);
-            return { rect: r, fs: parseFloat(cs.fontSize), op: parseFloat(cs.opacity) };
-        }
-
-        // Animates `el` from a captured state to its natural resting one.
-        // Size is matched with scale() rather than font-size so the whole
-        // movement stays on the compositor instead of relayouting text.
-        function _flipFrom(el, from) {
-            if (!el || !from) return;
-            var to = el.getBoundingClientRect();
-            if (!to.width && !to.height) return;
-            var fsTo = parseFloat(window.getComputedStyle(el).fontSize) || 1;
-            var dx = (from.rect.left + from.rect.width / 2) - (to.left + to.width / 2);
-            var dy = (from.rect.top + from.rect.height / 2) - (to.top + to.height / 2);
-            el.style.transition = 'none';
-            el.style.transformOrigin = 'center center';
-            el.style.transform = 'translate(' + dx + 'px,' + dy + 'px) scale(' + (from.fs / fsTo) + ')';
-            el.style.opacity = from.op;
-            void el.offsetWidth;                      // commit the FROM state
-            el.style.transition = _beltTransition();
-            el.style.transform = '';                  // back to its resting place
-            el.style.opacity = '';                    // back to the CSS opacity
-        }
-
-        // The slot with no predecessor: arrives out of nothing.
-        function _enterFrom(el, dx, dy) {
-            if (!el) return;
-            el.style.transition = 'none';
-            el.style.transform = 'translate(' + dx + ',' + dy + ')';
-            el.style.opacity = '0';
-            void el.offsetWidth;
-            el.style.transition = _beltTransition();
-            el.style.transform = '';
-            el.style.opacity = '';
-        }
-
-        // Clones a line that is about to leave the belt entirely. Typography is
-        // baked in and the clone is position:fixed, so it survives its original
-        // being destroyed and does not depend on any parent's font-size.
-        function _captureGhost(el) {
-            if (!el) return null;
-            var txt = (el.innerText || '').replace(/\u00a0/g, '').trim();
-            if (txt === '') return null;              // nothing visible to send off
-            var r = el.getBoundingClientRect();
-            if (!r.width && !r.height) return null;
-            var cs = window.getComputedStyle(el);
-            var g = el.cloneNode(true);
-            g.className = 'belt-ghost';
-            g.style.cssText =
-                'position:fixed;z-index:250;margin:0;' +
-                'left:' + r.left + 'px;top:' + r.top + 'px;width:' + r.width + 'px;' +
-                'font-size:' + cs.fontSize + ';font-family:' + cs.fontFamily + ';' +
-                'font-weight:' + cs.fontWeight + ';font-style:' + cs.fontStyle + ';' +
-                'line-height:' + cs.lineHeight + ';letter-spacing:' + cs.letterSpacing + ';' +
-                'color:' + cs.color + ';text-align:' + cs.textAlign + ';' +
-                'white-space:' + cs.whiteSpace + ';opacity:' + cs.opacity + ';';
-            return g;
-        }
-
-        function _ghostOut(g, dx, dy) {
-            if (!g) return;
-            document.body.appendChild(g);
-            void g.offsetWidth;
-            g.style.transition = _beltTransition();
-            g.style.transform = 'translate(' + dx + ',' + dy + ')';
-            g.style.opacity = '0';
-            setTimeout(function () {
-                if (g.parentNode) g.parentNode.removeChild(g);
-            }, BELT_MS + 80);
-        }
-
-        // Remembers the last rendered triplet so the next render can tell an
-        // ordinary one-step advance from an arbitrary jump.
-        var _lyrLast = { p: '', t: '', n: '' };
 
         // ── Vertical Cover Flow drum ────────────────────────────────────────────
         // Slots are positions ON A CYLINDER, numbered from the centre:
@@ -7125,17 +7012,35 @@
             return (parts[0] || s).trim();
         }
 
-        // Paints previous | current | next. A missing neighbour keeps its box
-        // (class "empty" hides it via visibility) so the current chord never
-        // shifts sideways when one appears or disappears.
-        // Chord nodes are reused rather than rebuilt, so a CSS animation would
-        // not re-fire on its own. Removing the class, forcing a reflow and
-        // re-adding it restarts it.
-        function _restartAnim(el) {
+        // ── Horizontal Cover Flow drum (same engine as the lyrics stack) ────────
+        // Slot -1 is left of centre, +1 is right; ±2 are off-stage. Chords follow
+        // the drum's curved path and recede in depth, but are never tilted.
+        var CHD_RADIUS = 2.2;    // em of the chord font-size
+        var CHD_STEP   = 48;     // degrees between neighbouring slots
+        var CHD_SLOT   = {
+            "-2": { sc: 0.24, op: 0    },
+            "-1": { sc: 0.32, op: 0.28 },
+             "0": { sc: 1,    op: 1    },
+             "1": { sc: 0.32, op: 0.28 },
+             "2": { sc: 0.24, op: 0    }
+        };
+
+        function _chdSlotCss(i) {
+            var s   = CHD_SLOT[String(i)];
+            var rad = i * CHD_STEP * Math.PI / 180;
+            var x   = CHD_RADIUS * Math.sin(rad);            // -left / +right
+            var z   = CHD_RADIUS * (Math.cos(rad) - 1);      // <= 0: recedes
+            return "translate(-50%,-50%)" +
+                   " translateX(" + x.toFixed(4) + "em)" +
+                   " translateZ(" + z.toFixed(4) + "em)" +
+                   " scale(" + s.sc + ")";
+        }
+
+        function _chdSlot(el, i, animated) {
             if (!el) return;
-            el.classList.remove("anim");
-            void el.offsetWidth;
-            el.classList.add("anim");
+            el.style.transition = animated ? _beltTransition() : "none";
+            el.style.transform  = _chdSlotCss(i);
+            el.style.opacity    = CHD_SLOT[String(i)].op;
         }
 
         // Writes a side slot without animating. Returns true if it changed.
@@ -7160,11 +7065,8 @@
             var pTok = _chordToken(xr_chords_prev);
             var nTok = _chordToken(xr_chords_next);
 
-            // Same per-line choreography as the lyrics stack, on the X axis:
-            // the current chord slides out to the side slot while shrinking and
-            // dimming, the next one travels into the centre growing and
-            // brightening, a new chord fades in from the far side, and the one
-            // leaving the belt fades away as a ghost.
+            // Advancing a chord turns the drum by one slot, exactly like the
+            // lyrics stack: every element moves to the slot next door.
             var elPrev = document.getElementById("chord-prev");
             var elNext = document.getElementById("chord-next");
             var animate = !_reduceMotion && chordsVisible && !!row;
@@ -7174,43 +7076,53 @@
                 else if (_chordLast.p !== "" && cur === _chordLast.p) dir = -1;
             }
 
-            // FIRST — capture each slot before the text is overwritten.
-            var sPrev = null, sCur = null, sNext = null, ghost = null;
+            // The chord rotating off the drum has no element left to ride on
+            // (the three nodes are reused, only their text changes), so it
+            // leaves on a clone kept inside the row — same perspective, same
+            // em basis as the real slots.
+            var exiting = null;
             if (dir !== 0) {
-                sPrev = _slotState(elPrev);
-                sCur  = _slotState(disp);
-                sNext = _slotState(elNext);
-                ghost = _captureGhost(dir === 1 ? elPrev : elNext);
+                var leaving = (dir === 1) ? elPrev : elNext;
+                if (leaving && (leaving.innerText || "").trim() !== "") {
+                    exiting = leaving.cloneNode(true);
+                }
             }
 
             var shown = (cur === "") ? "♪" : cur;
-            var curChanged = (disp.innerText !== shown);
-            if (curChanged) disp.innerText = shown;
-            var pChanged = _setChordCtxText("chord-prev", pTok);
-            var nChanged = _setChordCtxText("chord-next", nTok);
+            if (disp.innerText !== shown) disp.innerText = shown;
+            _setChordCtxText("chord-prev", pTok);
+            _setChordCtxText("chord-next", nTok);
 
-            if (dir !== 0) {
-                // LAST + INVERT + PLAY, per slot.
-                if (dir === 1) {
-                    var beltDx = (sCur && elPrev)
-                        ? (elPrev.getBoundingClientRect().left - sCur.rect.left) : 0;
-                    _flipFrom(elPrev, sCur);            // current → left slot
-                    _flipFrom(disp,   sNext);           // next    → centre
-                    _enterFrom(elNext, '0.8em', '0');   // new     → in from the right
-                    _ghostOut(ghost, beltDx + 'px', '0');
-                } else {
-                    var beltDxB = (sCur && elNext)
-                        ? (elNext.getBoundingClientRect().left - sCur.rect.left) : 0;
-                    _flipFrom(elNext, sCur);
-                    _flipFrom(disp,   sPrev);
-                    _enterFrom(elPrev, '-0.8em', '0');
-                    _ghostOut(ghost, beltDxB + 'px', '0');
+            if (row) row.classList.remove("fading");
+
+            if (dir === 0) {
+                _chdSlot(elPrev, -1, false);
+                _chdSlot(disp,    0, false);
+                _chdSlot(elNext,  1, false);
+                if (animate) { void row.offsetWidth; row.classList.add("fading"); }
+            } else {
+                var d = dir;
+                if (exiting) row.appendChild(exiting);
+
+                // FROM — each element on the slot it occupied a moment ago.
+                _chdSlot(elPrev, -1 + d, false);
+                _chdSlot(disp,    0 + d, false);
+                _chdSlot(elNext,  1 + d, false);
+                _chdSlot(exiting, -1 * d, false);
+
+                void row.offsetWidth;              // commit the pre-turn state
+
+                // TO — one slot around the drum.
+                _chdSlot(elPrev, -1, true);
+                _chdSlot(disp,    0, true);
+                _chdSlot(elNext,  1, true);
+                _chdSlot(exiting, -2 * d, true);
+
+                if (exiting) {
+                    setTimeout(function () {
+                        if (exiting.parentNode) exiting.parentNode.removeChild(exiting);
+                    }, BELT_MS + 80);
                 }
-            } else if (animate) {
-                // Not a step along the belt — pulse only what actually changed.
-                if (curChanged && cur !== "") _restartAnim(disp);
-                if (pChanged && pTok !== "") _restartAnim(elPrev);
-                if (nChanged && nTok !== "") _restartAnim(elNext);
             }
             _chordLast = { p: pTok, t: cur, n: nTok };
 
@@ -7225,6 +7137,13 @@
                 document.getElementById("cw-content-chords").innerText = shown;
             }
         }
+
+        // Park the chord slots before any data arrives. Without this the three
+        // absolutely-positioned nodes would sit on top of each other until the
+        // first reply. Must run after CHD_SLOT is assigned, hence its position.
+        _chdSlot(document.getElementById("chord-prev"),   -1, false);
+        _chdSlot(document.getElementById("chord-display"), 0, false);
+        _chdSlot(document.getElementById("chord-next"),    1, false);
 
         // --- 12. THEME SELECTOR ---
         function setTheme(theme, silent) {
