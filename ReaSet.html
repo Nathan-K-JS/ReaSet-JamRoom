@@ -3993,9 +3993,19 @@
         <!-- Discreet settings popover: size / weight / colour / context lines -->
         <div class="lyrics-settings" id="lyrics-settings" onclick="event.stopPropagation()">
             <div class="ls-row">
-                <div class="ls-label"><span>Tamaño</span><span id="ls-size-val">42px</span></div>
+                <div class="ls-label"><span>Tamaño global</span><span id="ls-size-val">42px</span></div>
                 <input type="range" id="ls-size" min="16" max="120" step="1"
                        oninput="applyLyricsSize(this.value)">
+            </div>
+            <div class="ls-row">
+                <div class="ls-label"><span>Línea principal</span><span id="ls-size-main-val">100%</span></div>
+                <input type="range" id="ls-size-main" min="50" max="150" step="1" value="100"
+                       oninput="applyLyricsMainScale(this.value)">
+            </div>
+            <div class="ls-row">
+                <div class="ls-label"><span>Letras secundarias</span><span id="ls-size-sec-val">44%</span></div>
+                <input type="range" id="ls-size-sec" min="10" max="100" step="1" value="44"
+                       oninput="applyLyricsSecScale(this.value)">
             </div>
             <div class="ls-row">
                 <div class="ls-label"><span>Grosor</span></div>
@@ -4732,34 +4742,60 @@
         // stays crisp. Perspective then does the rest: as a line swings away it
         // literally moves further from the viewer instead of merely shrinking.
         //
-        // The radius is in `em`, so the whole drum scales with the font size
-        // chosen in the gear popover.
+        // The radius is in `em`, so the whole drum scales with the global font
+        // size chosen in the gear popover.
         var LYR_RADIUS = 2.5;    // em
         var LYR_STEP   = 48;     // degrees between neighbouring slots
-        var LYR_SLOT   = {
-            "-2": { sc: 0.34, op: 0    },
-            "-1": { sc: 0.44, op: 0.34 },
-             "0": { sc: 1,    op: 1    },
-             "1": { sc: 0.44, op: 0.34 },
-             "2": { sc: 0.34, op: 0    }
-        };
+
+        // Per-slot OPACITY is fixed — only size is user-adjustable (see below).
+        var LYR_OPACITY = { "-2": 0, "-1": 0.34, "0": 1, "1": 0.34, "2": 0 };
+
+        // Three user-visible size controls (gear popover), independent of each
+        // other:
+        //   Global    — #lyrics-content font-size in px (unchanged control;
+        //               the `em` basis every slot's radius/scale multiplies).
+        //   Principal — lyrMainScale: slot 0 (current line) as a % of Global.
+        //   Secundario— lyrSecScale:  slot ±1 (prev/next) as a % of Global.
+        // Slot ±2 (past the edge, invisible — where a line enters/exits) rides
+        // along at a fixed fraction of Secundario, preserving the "recedes
+        // further" falloff without needing a 4th control the user didn't ask for.
+        var LYR_FAR_FALLOFF = 0.34 / 0.44;   // slot ±2 vs slot ±1, from the original fixed ratio
+        var lyrMainScale = 1.0;   // 100%
+        var lyrSecScale  = 0.44; //  44%
+
+        function _lyrSlotScale(i) {
+            if (i === 0) return lyrMainScale;
+            if (i === -1 || i === 1) return lyrSecScale;
+            return lyrSecScale * LYR_FAR_FALLOFF;   // -2 / 2
+        }
 
         function _lyrSlotCss(i) {
-            var s   = LYR_SLOT[String(i)];
             var rad = i * LYR_STEP * Math.PI / 180;
             var y   = LYR_RADIUS * Math.sin(rad);
             var z   = LYR_RADIUS * (Math.cos(rad) - 1);
             return "translate(0,-50%)" +
                    " translateY(" + y.toFixed(4) + "em)" +
                    " translateZ(" + z.toFixed(4) + "em)" +
-                   " scale(" + s.sc + ")";
+                   " scale(" + _lyrSlotScale(i).toFixed(4) + ")";
         }
 
         function _lyrSlot(el, i, animated) {
             if (!el) return;
             el.style.transition = animated ? _beltTransition() : "none";
             el.style.transform  = _lyrSlotCss(i);
-            el.style.opacity    = LYR_SLOT[String(i)].op;
+            el.style.opacity    = LYR_OPACITY[String(i)];
+        }
+
+        // Re-parks the three lines at their resting slots (-1/0/1) so a size
+        // change is reflected immediately, without waiting for the next verse
+        // change. Safe to call any time: .lyrics-prev/.lyrics-cur/.lyrics-next
+        // only ever sit anywhere other than -1/0/1 mid-transition, briefly.
+        function _reapplyLyricsGeometry() {
+            var stack = document.querySelector("#lyrics-content .lyrics-stack");
+            if (!stack) return;
+            _lyrSlot(stack.querySelector(".lyrics-prev"), -1, false);
+            _lyrSlot(stack.querySelector(".lyrics-cur"),   0, false);
+            _lyrSlot(stack.querySelector(".lyrics-next"),  1, false);
         }
 
         function _lyricsStackHtml(p, t, n, lines) {
@@ -7197,6 +7233,32 @@
             if (lss) lss.value = val;
         }
 
+        // "Principal" — current-line size, as a % of the global size, applied
+        // live to whatever is on screen right now (see _reapplyLyricsGeometry).
+        function applyLyricsMainScale(val) {
+            val = parseInt(val);
+            lyrMainScale = val / 100;
+            localStorage.setItem("lyrics_size_main", val);
+            var lbl = document.getElementById("ls-size-main-val");
+            if (lbl) lbl.innerText = val + "%";
+            var sld = document.getElementById("ls-size-main");
+            if (sld) sld.value = val;
+            _reapplyLyricsGeometry();
+        }
+
+        // "Secundario" — previous/next line size, as a % of the global size,
+        // independent of the current line.
+        function applyLyricsSecScale(val) {
+            val = parseInt(val);
+            lyrSecScale = val / 100;
+            localStorage.setItem("lyrics_size_secondary", val);
+            var lbl = document.getElementById("ls-size-sec-val");
+            if (lbl) lbl.innerText = val + "%";
+            var sld = document.getElementById("ls-size-sec");
+            if (sld) sld.value = val;
+            _reapplyLyricsGeometry();
+        }
+
         function applyLyricsWeight(w) {
             var el = document.getElementById("lyrics-content");
             if (el) el.style.fontWeight = w;
@@ -7266,6 +7328,8 @@
                 }
             }
             applyLyricsSize(savedSize);
+            applyLyricsMainScale(parseInt(localStorage.getItem("lyrics_size_main")) || 100);
+            applyLyricsSecScale(parseInt(localStorage.getItem("lyrics_size_secondary")) || 44);
             applyLyricsWeight(parseInt(localStorage.getItem("lyrics_weight")) || 700);
             // Only override the theme colour when the user actually picked one.
             var savedColor = localStorage.getItem("lyrics_color");

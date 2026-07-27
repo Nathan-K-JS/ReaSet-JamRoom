@@ -236,12 +236,21 @@ A discreet **⚙ gear** in the panel header opens a small popover to adjust:
 
 | Setting | Options |
 |---|---|
-| **Tamaño** | 16–120 px slider (scales all three lines together) |
+| **Tamaño global** | 16–120 px slider — the base size everything else scales from |
+| **Línea principal** | 50–150% of the global size, current line only |
+| **Letras secundarias** | 10–100% of the global size, previous/next lines only |
 | **Grosor** | Fino · Medio · Negrita · Black |
 | **Color** | 5 presets + a custom colour picker |
 | **Context lines** | Toggle the previous/next verses off entirely |
 
-All four persist in `localStorage`, so your reading setup survives a reload.
+**Tamaño global**, **Línea principal** and **Letras secundarias** are three independent
+sliders: the global size sets the overall scale everything is measured against, while
+principal/secundario each control their own line(s) as a percentage of it — e.g. you can
+shrink the context lines down to 10% for a near-invisible hint, or bring them up to 100%
+to match the current line exactly, without moving the current line's own size at all.
+Defaults (100% / 44%) reproduce the original look.
+
+All six persist in `localStorage`, so your reading setup survives a reload.
 
 #### Chords panel — three-across view
 The chords panel uses the same neighbour logic, laid out **horizontally**: the previous
@@ -694,12 +703,22 @@ Un **⚙ engranaje** discreto en la cabecera del panel abre un popover para ajus
 
 | Ajuste | Opciones |
 |---|---|
-| **Tamaño** | Slider de 16–120 px (escala las tres líneas a la vez) |
+| **Tamaño global** | Slider de 16–120 px — el tamaño base sobre el que escala todo lo demás |
+| **Línea principal** | 50–150% del tamaño global, solo la línea actual |
+| **Letras secundarias** | 10–100% del tamaño global, solo las líneas anterior/siguiente |
 | **Grosor** | Fino · Medio · Negrita · Black |
 | **Color** | 5 presets + selector de color personalizado |
 | **Versos de contexto** | Interruptor para ocultar el anterior/siguiente |
 
-Los cuatro ajustes se guardan en `localStorage`, así que tu configuración de lectura
+**Tamaño global**, **Línea principal** y **Letras secundarias** son tres sliders
+independientes: el tamaño global fija la escala base sobre la que se mide todo, mientras
+que principal/secundario controlan cada uno su(s) propia(s) línea(s) como porcentaje de
+esa base — por ejemplo, puedes achicar las líneas de contexto hasta un 10% para que sean
+apenas una pista, o subirlas a 100% para que igualen a la línea actual, sin mover el
+tamaño de la línea actual en absoluto. Los valores por defecto (100% / 44%) reproducen el
+aspecto original.
+
+Los seis ajustes se guardan en `localStorage`, así que tu configuración de lectura
 sobrevive a una recarga.
 
 #### Panel de acordes — vista de tres en línea
