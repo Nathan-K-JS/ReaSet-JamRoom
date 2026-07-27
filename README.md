@@ -122,6 +122,19 @@ See [Lyrics & Chords Track Naming](#lyrics--chords-track-naming) for the full ru
 Scripts use `reaper.ULT_GetMediaItemNote`.
 - If your REAPER build does not recognize it, install a compatible scripting/API environment (e.g., Ultraschall API) or adapt note reading.
 
+### Optional: authoring tool — Lyrics Tapper
+`Lyrics_Tapper.lua` is a standalone REAPER/ReaImGui tool for **building** the
+`lyrics`/`chords`/`notes` items ReaSet reads — not required to run ReaSet, only
+to author content quickly. Paste a block of text, press **ARM**, then tap
+along (mouse or **Space**) as the song plays: each tap closes the previous
+line's item and opens the next one at the current position, teleprompter-style.
+It auto-detects the target track with the same flexible naming rules as
+`Reaset.lua`, creates the track if missing, and filters out section headers
+("Chorus", "Verse 2", "[Coro]", …) so they don't become lyric items.
+
+- Requires the **ReaImGui** extension (separate from SWS).
+- Load via Actions → ReaScript: Load… → `Lyrics_Tapper.lua` → Run.
+
 ---
 
 ## 5) Installation
@@ -564,6 +577,20 @@ para las reglas completas.
 ### Compatibilidad de scripting
 Los scripts usan `reaper.ULT_GetMediaItemNote`.
 - Si tu REAPER no reconoce esa función, instala entorno/API compatible (ej. Ultraschall API) o adapta el método de lectura de notas.
+
+### Opcional: herramienta de autoría — Lyrics Tapper
+`Lyrics_Tapper.lua` es una herramienta independiente para REAPER/ReaImGui que
+sirve para **construir** los items de `lyrics`/`chords`/`notes` que ReaSet lee
+— no hace falta para que ReaSet funcione, solo para crear el contenido rápido.
+Pega un bloque de texto, presiona **ARM** y luego marca el ritmo (mouse o
+**Space**) mientras suena la canción: cada tap cierra el item de la línea
+anterior y abre el siguiente en la posición actual, al estilo teleprompter.
+Detecta la pista destino con las mismas reglas de nombre flexibles que
+`Reaset.lua`, la crea si no existe, y filtra encabezados de sección ("Coro",
+"Verso 2", "[Chorus]", …) para que no terminen como items de letra.
+
+- Requiere la extensión **ReaImGui** (aparte de SWS).
+- Cárgalo con Actions → ReaScript: Load… → `Lyrics_Tapper.lua` → Run.
 
 ---
 
