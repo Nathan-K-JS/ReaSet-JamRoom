@@ -264,10 +264,15 @@ Chords use **the same drum laid on its side**: previous chord to the left, next 
 right, following the same curve and receding the same way, likewise never tilted. Changing
 chord turns the drum by one position exactly as the lyrics one does.
 
-Only a genuine one-step move earns the slide. A seek, a song change or an edit is not a
-step along the belt, so those **crossfade** instead — sliding would imply a continuity
-that did not happen. `prefers-reduced-motion` is honoured: if your system asks for less
-motion, nothing animates.
+The turn is **deliberately quick — 190 ms**, covering 90% of the distance in the first
+~70 ms and then decelerating hard into place. On stage you should register that the line
+changed without having to watch it move: sustained motion in the reading area is tiring,
+so the animation is there to keep you oriented, not to be looked at.
+
+Only a genuine one-step move earns the turn. A seek, a song change or an edit is not a step
+around the drum, so those **crossfade** instead — turning would imply a continuity that did
+not happen. `prefers-reduced-motion` is honoured: if your system asks for less motion,
+nothing animates at all.
 
 Diagnostics never occupy the reading area — they live in a very faint strip at the bottom
 of the panel, with two visibility levels:
@@ -705,10 +710,15 @@ siguiente a la derecha, recorriendo la misma curva y retrocediendo igual, tambi�
 inclinarse. Al cambiar de acorde, el tambor gira una posición exactamente igual que el de
 las letras.
 
-Solo un avance real de un paso merece el deslizamiento. Un salto de posición, un cambio de
-canción o una edición no son un paso en la cinta, así que esos hacen **fundido** — deslizar
-implicaría una continuidad que no ocurrió. Se respeta `prefers-reduced-motion`: si tu
-sistema pide menos movimiento, no se anima nada.
+El giro es **deliberadamente rápido — 190 ms**, cubriendo el 90% del recorrido en los
+primeros ~70 ms y frenando con fuerza al final. En el escenario debes notar que la línea
+cambió sin tener que verla moverse: el movimiento sostenido en el área de lectura cansa, así
+que la animación está para mantenerte ubicado, no para ser observada.
+
+Solo un avance real de un paso merece el giro. Un salto de posición, un cambio de canción o
+una edición no son un paso en el tambor, así que esos hacen **fundido** — girar implicaría
+una continuidad que no ocurrió. Se respeta `prefers-reduced-motion`: si tu sistema pide
+menos movimiento, no se anima nada en absoluto.
 
 Los mensajes de diagnóstico **no ocupan el área de lectura**: viven en una franja muy
 tenue al pie del panel, con dos niveles de visibilidad.
