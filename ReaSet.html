@@ -2311,10 +2311,12 @@
             .chord-ctx.anim { animation: none !important; }
         }
 
-        /* Verses sit on a vertical 3D drum (Cover Flow, rotated 90°). Every line
-           is styled identically — size, depth, tilt and opacity all come from
+        /* Verses ride a vertical 3D drum (Cover Flow, rotated 90°). Every line is
+           styled identically — position, depth, size and opacity all come from
            its slot transform, which is what lets a line smoothly BECOME the one
-           above or below it instead of snapping between two different styles. */
+           above or below it instead of snapping between two different styles.
+           The lines are never rotated: they follow the drum's curved path while
+           staying square to the viewer, so the text is always readable. */
         .lyrics-line {
             position: absolute;
             left: 0;
@@ -4819,17 +4821,22 @@
 
         // ── Vertical Cover Flow drum ────────────────────────────────────────────
         // Slots are positions ON A CYLINDER, numbered from the centre:
-        //   -2  rotated past the top edge, invisible (where a line exits)
-        //   -1  previous verse, tilted back over the top
-        //    0  current verse, square to the viewer
-        //   +1  next verse, tilted back under the bottom
+        //   -2  past the top edge, invisible (where a line exits)
+        //   -1  previous verse, higher and further away
+        //    0  current verse, at neutral depth
+        //   +1  next verse, lower and further away
         //   +2  below the bottom edge, invisible (where a line enters)
         //
-        // The transform reads: pull back by the radius, rotate around the drum
-        // axis, then push out along the NOW-ROTATED axis. That is what makes a
-        // line orbit rather than merely slide — it recedes as it turns away.
-        // At slot 0 the two translateZ cancel, so the current verse sits at
-        // neutral depth and stays crisp.
+        // Lines follow the drum's circular PATH but are never rotated: text is
+        // always square to the viewer, so it stays legible at a glance. Only the
+        // position curves. Each slot sits at angle i·STEP around the axis:
+        //
+        //   y =  R·sin(i·STEP)        down the screen (+Y is down in CSS)
+        //   z =  R·(cos(i·STEP) − 1)  always ≤ 0, so neighbours recede
+        //
+        // Slot 0 lands at y=0, z=0 — the current verse sits at neutral depth and
+        // stays crisp. Perspective then does the rest: as a line swings away it
+        // literally moves further from the viewer instead of merely shrinking.
         //
         // The radius is in `em`, so the whole drum scales with the font size
         // chosen in the gear popover.
@@ -4844,11 +4851,13 @@
         };
 
         function _lyrSlotCss(i) {
-            var s = LYR_SLOT[String(i)];
+            var s   = LYR_SLOT[String(i)];
+            var rad = i * LYR_STEP * Math.PI / 180;
+            var y   = LYR_RADIUS * Math.sin(rad);
+            var z   = LYR_RADIUS * (Math.cos(rad) - 1);
             return "translate(0,-50%)" +
-                   " translateZ(-" + LYR_RADIUS + "em)" +
-                   " rotateX(" + (-i * LYR_STEP) + "deg)" +
-                   " translateZ(" + LYR_RADIUS + "em)" +
+                   " translateY(" + y.toFixed(4) + "em)" +
+                   " translateZ(" + z.toFixed(4) + "em)" +
                    " scale(" + s.sc + ")";
         }
 
@@ -4875,15 +4884,15 @@
 
         // Renders the three verses as a vertical Cover Flow drum.
         //
-        // Advancing a verse rotates the whole drum by exactly one slot. Every
-        // line simply moves to the slot NEXT DOOR, and because a slot carries
-        // its own tilt, depth, scale and opacity, each line turns and recedes
-        // along the way instead of jumping between two flat styles:
+        // Advancing a verse turns the whole drum by exactly one slot. Every line
+        // simply moves to the slot NEXT DOOR, and because a slot carries its own
+        // position, depth, scale and opacity, each line arcs and recedes along
+        // the way instead of jumping between two flat styles:
         //
-        //   current   slot  0 → -1   turns away over the top, shrinking
-        //   old upper slot -1 → -2   keeps turning past the edge, gone
-        //   next      slot +1 →  0   swings up square to the viewer, growing
-        //   new verse slot +2 → +1   rotates up into view from below
+        //   current   slot  0 → -1   arcs up and back, shrinking
+        //   old upper slot -1 → -2   continues over the top edge, gone
+        //   next      slot +1 →  0   arcs up to neutral depth, growing
+        //   new verse slot +2 → +1   arcs into view from below
         //
         // Expressing it as "everything shifts one slot" is what makes the four
         // movements a single coherent rotation rather than four separate

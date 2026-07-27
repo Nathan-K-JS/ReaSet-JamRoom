@@ -243,17 +243,18 @@ optically centred no matter how long the neighbouring chord names are.
 
 #### Transitions and the status strip
 Verses live on a **vertical 3D carousel**, like iOS Cover Flow turned 90°. The three lines
-are positions on a drum: the current one faces you square-on, while the previous and next
-are tilted and **recede into the distance**.
+are positions on a drum: they follow its **curved path** and **recede into the distance**,
+but are **never tilted** — the text always stays square to the viewer so it reads at a
+glance.
 
-Advancing a verse rotates the drum by **exactly one position**:
+Advancing a verse turns the drum by **exactly one position**:
 
 | Line | Travel |
 |---|---|
-| Current | Slot `0` → `-1`: turns away over the top, shrinking |
-| Previous | `-1` → `-2`: keeps turning past the edge and is gone |
-| Next | `+1` → `0`: swings up square to the viewer, growing |
-| New verse | `+2` → `+1`: rotates up into view from below |
+| Current | Slot `0` → `-1`: arcs up and back, shrinking |
+| Previous | `-1` → `-2`: continues past the top edge and is gone |
+| Next | `+1` → `0`: arcs up to neutral depth, growing |
+| New verse | `+2` → `+1`: arcs into view from below |
 
 Expressing it as "every line moves one slot" is what makes it read as **a single rotation**
 rather than four separate animations. The drum radius is in `em`, so the carousel scales
@@ -680,17 +681,18 @@ y atenuados. Se reserva el mismo espacio a ambos lados, así el acorde actual qu
 
 #### Transiciones y franja de estado
 Los versos viven en un **carrusel 3D vertical**, al estilo del Cover Flow de iOS girado 90°.
-Las tres líneas son posiciones sobre un tambor: la actual mira de frente, la anterior y la
-siguiente están inclinadas y **retroceden en profundidad**.
+Las tres líneas son posiciones sobre un tambor: recorren su **trayectoria curva** y
+**retroceden en profundidad**, pero **nunca se inclinan** — el texto siempre queda de frente
+para que se lea de un vistazo.
 
 Al avanzar un verso, el tambor **gira exactamente una posición**:
 
 | Línea | Recorrido |
 |---|---|
-| Actual | Posición `0` → `-1`: gira alejándose por arriba, encogiendo |
-| Anterior | `-1` → `-2`: sigue girando más allá del borde y desaparece |
-| Siguiente | `+1` → `0`: sube quedando de frente, creciendo |
-| Nuevo verso | `+2` → `+1`: rota hacia la vista desde abajo |
+| Actual | Posición `0` → `-1`: asciende y retrocede, encogiendo |
+| Anterior | `-1` → `-2`: continúa más allá del borde superior y desaparece |
+| Siguiente | `+1` → `0`: asciende a profundidad neutra, creciendo |
+| Nuevo verso | `+2` → `+1`: entra en escena desde abajo |
 
 Que todo se exprese como "cada línea avanza una posición" es lo que hace que se lea como
 **una sola rotación** y no como cuatro animaciones sueltas. El radio del tambor está en
