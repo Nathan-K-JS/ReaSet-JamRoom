@@ -4031,7 +4031,8 @@
         // then a light refresh (these are tiny replies).
         var _diagProbe = "GET/EXTSTATE/ReaSet/nativeLoopReady" +
                          ";GET/EXTSTATE/ReaSet/lyricsTrack;GET/EXTSTATE/ReaSet/chordsTrack" +
-                         ";GET/EXTSTATE/ReaSet/lyricsTrackMatches;GET/EXTSTATE/ReaSet/chordsTrackMatches";
+                         ";GET/EXTSTATE/ReaSet/lyricsTrackMatches;GET/EXTSTATE/ReaSet/chordsTrackMatches" +
+                         ";GET/EXTSTATE/ReaSet/tick;GET/EXTSTATE/ReaSet/error";
         wwr_req(_diagProbe);
         wwr_req_recur(_diagProbe, 2000);
         wwr_start();
@@ -4442,6 +4443,10 @@
         var xr_chords_track = null;
         var xr_lyrics_matches = NaN;   // how many tracks matched the keyword
         var xr_chords_matches = NaN;
+        var xr_tick    = null;         // ReaSet/tick — must keep advancing
+        var xr_tick_ts = 0;            // when it last changed
+        var xr_error   = "";           // last error Reaset.lua caught
+        var SCRIPT_FROZEN_MS = 8000;   // 4x the 2s poll: no false positives
 
         // Builds the empty-state message for a panel, naming the ACTUAL cause
         // instead of always blaming the track name.
@@ -4450,6 +4455,16 @@
             var st      = isLy ? xr_lyrics_track : xr_chords_track;
             var keyword = isLy ? 'lyrics' : 'chords';
 
+            // A frozen script keeps its last published values, so the panel can
+            // show a stale-but-plausible value forever. Catch that first.
+            if (xr_tick && xr_tick_ts && (Date.now() - xr_tick_ts) > SCRIPT_FROZEN_MS) {
+                return '<b>&#9888; Reaset.lua está CONGELADO</b> — su bucle se detuvo.<br>' +
+                       'Lo que se muestra son valores viejos. Vuelve a ejecutar el script.' +
+                       (xr_error ? '<br><small>Error: ' + xr_error + '</small>' : '');
+            }
+            if (xr_error) {
+                return '<b>Reaset.lua reportó un error:</b><br><small>' + xr_error + '</small>';
+            }
             if (st === null || st === '') {
                 return 'El script <b>Reaset.lua</b> no está corriendo en REAPER.<br>' +
                        'Actions &rarr; ReaScript: Load… &rarr; Reaset.lua &rarr; Run.' +
@@ -4633,6 +4648,16 @@
                         }
                         if (tok[1] === "ReaSet" && tok[2] === "chordsTrackMatches") {
                             xr_chords_matches = parseInt(tok[3], 10);
+                        }
+                        // Liveness: this counter must keep ADVANCING. The
+                        // nativeLoopReady flag above never expires, so it cannot
+                        // tell a running script from one whose defer loop died.
+                        if (tok[1] === "ReaSet" && tok[2] === "tick") {
+                            var _tv = tok.slice(3).join('\t');
+                            if (_tv !== xr_tick) { xr_tick = _tv; xr_tick_ts = Date.now(); }
+                        }
+                        if (tok[1] === "ReaSet" && tok[2] === "error") {
+                            xr_error = tok.slice(3).join('\t');
                         }
                         // NOTE: nativeLoop=done is intentionally NOT handled here.
                         // _nativeLoopSubId stays armed until the playhead physically leaves

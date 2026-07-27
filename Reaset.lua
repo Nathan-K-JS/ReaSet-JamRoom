@@ -253,24 +253,38 @@ local function next_item(track, pos)
     return nil
 end
 
--- Reads note, writes ExtState only on change. Returns the new cached text.
-local function process_notes(ext_name, ext_key, item, cached)
+-- Resolves the text for the item under the cursor and publishes it.
+-- Writes only on change (SetProjExtState dirties the project), but when
+-- `verify` is set it also confirms the stored value still matches ours.
+--
+-- That read-back matters: another instance of this script running atexit, or a
+-- project reload, can wipe the key behind our back. Because we only write on
+-- change, the cache would then agree with itself forever and the panel would
+-- stay blank permanently with no way to recover short of restarting REAPER.
+local function process_notes(ext_name, ext_key, item, cached, verify)
+    local out
     if not item then
-        if cached ~= STR_NO_TEXT then
-            reaper.SetProjExtState(0, ext_name, ext_key, STR_NO_TEXT)
-        end
-        return STR_NO_TEXT
+        out = STR_NO_TEXT
+    else
+        if not HAS_ULT then return cached end
+        local ok, note = pcall(reaper.ULT_GetMediaItemNote, item)
+        if not ok or note == nil then return cached end
+        note = note:gsub("\r?\n", "<br>")
+        -- Compare in PUBLISHED form. Comparing the raw note against a cached
+        -- "--XR-NO-TEXT--" made an item with empty notes rewrite the same value
+        -- on every single frame, keeping the project permanently dirty.
+        out = (note == "") and STR_NO_TEXT or note
     end
-    if not HAS_ULT then return cached end
-    local ok, note = pcall(reaper.ULT_GetMediaItemNote, item)
-    if not ok or note == nil then return cached end
-    note = note:gsub("\r?\n", "<br>")
-    if note ~= cached then
-        local out = (note == "") and STR_NO_TEXT or note
+
+    if out ~= cached then
         reaper.SetProjExtState(0, ext_name, ext_key, out)
-        return out
+    elseif verify then
+        local _, actual = reaper.GetProjExtState(0, ext_name, ext_key)
+        if actual ~= out then
+            reaper.SetProjExtState(0, ext_name, ext_key, out)
+        end
     end
-    return cached
+    return out
 end
 
 -- Publishes how many tracks matched the keyword, so the UI can warn about an
@@ -315,10 +329,11 @@ local function bridge_tick(b, cur_pos, tick)
     end
     local _, tname = reaper.GetTrackName(b.track)
     bridge_publish_status(b, tname)
+    local verify = (tick % 60 == 0)   -- ~1 s: cheap self-heal, no project dirtying
     local item = item_at_pos(b.track, cur_pos)
-    b.text = process_notes(b.ext_name, "text", item, b.text)
+    b.text = process_notes(b.ext_name, "text", item, b.text, verify)
     if NEXT_SUPPORT then
-        b.next_text = process_notes(b.ext_name, "next", next_item(b.track, cur_pos), b.next_text)
+        b.next_text = process_notes(b.ext_name, "next", next_item(b.track, cur_pos), b.next_text, verify)
     end
 end
 
@@ -331,11 +346,18 @@ local chords = bridge_new("chords", "XR_Chords", "chordsTrack")
 
 local _hb_tick = 0
 
-local function main()
-    -- Heartbeat so ReaSet.html auto-detects this script is alive (~5 s).
-    _hb_tick = _hb_tick + 1
+local function tick_body()
+    -- Presence flag (never expires — only proves the script ran at least once).
     if _hb_tick % 150 == 0 then
         reaper.SetExtState(SEC, "nativeLoopReady", "1", false)
+    end
+
+    -- REAL heartbeat: a value that CHANGES while we are alive. The flag above
+    -- cannot do this job — it survives in memory until REAPER quits, so a
+    -- crashed script still looks "ready". Watchers compare successive samples;
+    -- if this stops advancing, the defer chain is dead.
+    if _hb_tick % 15 == 0 then
+        reaper.SetExtState(SEC, "tick", tostring(_hb_tick), false)
     end
 
     -- 1) Loop engine
@@ -346,6 +368,21 @@ local function main()
         and reaper.GetPlayPosition() or reaper.GetCursorPosition()
     bridge_tick(lyrics, cur_pos, _hb_tick)
     bridge_tick(chords, cur_pos, _hb_tick)
+end
+
+local function main()
+    _hb_tick = _hb_tick + 1
+
+    -- A raw error inside a deferred script silently ends the defer chain: the
+    -- bridge stops updating while the last published values stay frozen, which
+    -- looks exactly like "chords work, lyrics don't". Catch it, publish it, and
+    -- keep ticking so a transient failure self-heals instead of killing ReaSet.
+    local ok, err = pcall(tick_body)
+    if not ok then
+        reaper.SetExtState(SEC, "error", tostring(err), false)
+    elseif _hb_tick % 150 == 0 then
+        reaper.SetExtState(SEC, "error", "", false)
+    end
 
     reaper.defer(main)
 end
@@ -364,6 +401,8 @@ local function on_exit()
     reaper.SetExtState(SEC, "chordsTrack", "", false)
     reaper.SetExtState(SEC, "lyricsTrackMatches", "", false)
     reaper.SetExtState(SEC, "chordsTrackMatches", "", false)
+    reaper.SetExtState(SEC, "tick", "", false)
+    reaper.SetExtState(SEC, "error", "", false)
     if s_active then loop_cleanup() end
     -- Drop the presence flag so ReaSet falls back to JS loop next session.
     reaper.SetExtState(SEC, "nativeLoopReady", "0", false)

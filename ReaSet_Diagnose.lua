@@ -37,6 +37,13 @@ local function truncate(s, n)
     return s
 end
 
+-- The report body runs after a short delay so the heartbeat can be sampled
+-- twice. A single sample cannot tell a running script from a crashed one.
+local HB_SAMPLE_1 = reaper.GetExtState(SEC, "tick")
+local HB_T0       = reaper.time_precise()
+
+local function report()
+
 reaper.ClearConsole()
 out("")
 out("=== ReaSet DIAGNOSTIC REPORT ===")
@@ -51,9 +58,32 @@ out("Project             : " .. (proj_name ~= "" and proj_name or "(unsaved)"))
 out("Track count         : " .. reaper.CountTracks(0))
 rule()
 
--- 2) Is Reaset.lua running? -------------------------------------------------
-out("Reaset.lua heartbeat (ReaSet/nativeLoopReady) : '" ..
-    reaper.GetExtState(SEC, "nativeLoopReady") .. "'   (expect '1' while running)")
+-- 2) Is Reaset.lua actually RUNNING (not just "was started once")? ----------
+local hb2   = reaper.GetExtState(SEC, "tick")
+local alive = (HB_SAMPLE_1 ~= "" and hb2 ~= "" and hb2 ~= HB_SAMPLE_1)
+
+out("LIVENESS (samples the ReaSet/tick counter twice)")
+out("  tick sample 1 : '" .. HB_SAMPLE_1 .. "'")
+out("  tick sample 2 : '" .. hb2 .. "'")
+if alive then
+    out("  => Reaset.lua is RUNNING (counter advanced).")
+elseif HB_SAMPLE_1 == "" and hb2 == "" then
+    out("  => Reaset.lua is NOT RUNNING, or is an old version without a heartbeat.")
+    out("     Load and Run the current Reaset.lua.")
+else
+    out("  => *** FROZEN *** the counter did NOT advance.")
+    out("     The script was started but its defer loop has stopped, so every")
+    out("     published value below is STALE. Re-run Reaset.lua.")
+end
+local last_err = reaper.GetExtState(SEC, "error")
+if last_err ~= "" then
+    out("  Last error reported by Reaset.lua:")
+    out("    " .. last_err)
+end
+rule()
+out("Presence flag (ReaSet/nativeLoopReady) : '" ..
+    reaper.GetExtState(SEC, "nativeLoopReady") ..
+    "'  (NOTE: never expires - not proof of life)")
 out("Published lyrics status (ReaSet/lyricsTrack)  : '" ..
     reaper.GetExtState(SEC, "lyricsTrack") .. "'")
 out("Published chords status (ReaSet/chordsTrack)  : '" ..
@@ -171,3 +201,17 @@ out("")
 rule()
 out("Copy this whole report when asking for help.")
 out("=== END OF REPORT ===")
+
+end  -- report()
+
+-- Wait ~0.6 s before reporting so the heartbeat has time to advance.
+local function wait_then_report()
+    if reaper.time_precise() - HB_T0 < 0.6 then
+        reaper.defer(wait_then_report)
+    else
+        report()
+    end
+end
+
+reaper.ShowConsoleMsg("")   -- open/focus the console
+wait_then_report()
