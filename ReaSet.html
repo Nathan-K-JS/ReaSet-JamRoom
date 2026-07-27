@@ -4778,12 +4778,53 @@
             return lyrSecScale * LYR_FAR_FALLOFF;   // -2 / 2
         }
 
+        // Every slot's y-offset is computed assuming the current verse is a
+        // SINGLE line. When it wraps onto two (or more), its own box grows
+        // taller while the neighbours' fixed offsets stay put — so a 2-line
+        // verse can crowd or overlap the smaller prev/next lines above and
+        // below it. _lyrExtraPushPx compensates: set once per render from the
+        // freshly-laid-out current line's actual height (see _lyrWrapPush),
+        // then added — with the same sign as the slot's own offset, via
+        // Math.sign(i) — to every NON-ZERO slot for that render, pushing
+        // prev/±2-up further up and next/±2-down further down.
+        //
+        // LYR_LINE_HEIGHT_MULT mirrors .lyrics-content's authored
+        // `line-height: 1.6` below. Font-size always resolves cleanly to an
+        // absolute px value via getComputedStyle in every browser; line-height
+        // does not (a bare number like `1.6` can compute back out unitless
+        // rather than resolved to px), so the multiplier is hardcoded here to
+        // match the CSS rule instead of parsed at runtime — keep both in sync
+        // if that rule ever changes.
+        var LYR_LINE_HEIGHT_MULT = 1.6;
+        var LYR_WRAP_PUSH_FACTOR = 0.5;   // half a line's height per extra wrapped line
+        var _lyrExtraPushPx = 0;
+
+        function _lyrOneLineHeightPx() {
+            var host = document.getElementById("lyrics-content");
+            var fs = host ? parseFloat(window.getComputedStyle(host).fontSize) : NaN;
+            if (isNaN(fs)) fs = 42;
+            return fs * LYR_LINE_HEIGHT_MULT;
+        }
+
+        // How many extra px of clearance the current line's wrapping earns
+        // its neighbours this render. `curEl` just needs to be laid out in the
+        // DOM (innerHTML set) — offsetHeight ignores any transform already on
+        // it, so this works whether or not a slot transform has been applied yet.
+        function _lyrWrapPush(curEl) {
+            if (!curEl) return 0;
+            var oneLine = _lyrOneLineHeightPx();
+            if (!oneLine) return 0;
+            var extraLines = Math.max(0, Math.round(curEl.offsetHeight / oneLine) - 1);
+            return extraLines * oneLine * LYR_WRAP_PUSH_FACTOR;
+        }
+
         function _lyrSlotCss(i) {
             var rad = i * LYR_STEP * Math.PI / 180;
             var y   = LYR_RADIUS * Math.sin(rad);
             var z   = LYR_RADIUS * (Math.cos(rad) - 1);
+            var extraPx = _lyrExtraPushPx * Math.sign(i);   // 0 at slot 0 — sign(0) is 0
             return "translate(0,-50%)" +
-                   " translateY(" + y.toFixed(4) + "em)" +
+                   " translateY(calc(" + y.toFixed(4) + "em + " + extraPx.toFixed(2) + "px))" +
                    " translateZ(" + z.toFixed(4) + "em)" +
                    " scale(" + _lyrSlotScale(i).toFixed(4) + ")";
         }
@@ -4802,8 +4843,10 @@
         function _reapplyLyricsGeometry() {
             var stack = document.querySelector("#lyrics-content .lyrics-stack");
             if (!stack) return;
+            var curEl = stack.querySelector(".lyrics-cur");
+            _lyrExtraPushPx = _lyrWrapPush(curEl);   // re-measure: a size-slider change can itself alter wrapping
             _lyrSlot(stack.querySelector(".lyrics-prev"), -1, false);
-            _lyrSlot(stack.querySelector(".lyrics-cur"),   0, false);
+            _lyrSlot(curEl,                                0, false);
             _lyrSlot(stack.querySelector(".lyrics-next"),  1, false);
         }
 
@@ -4880,6 +4923,15 @@
             var eP = stack.querySelector(".lyrics-prev");
             var eC = stack.querySelector(".lyrics-cur");
             var eN = stack.querySelector(".lyrics-next");
+
+            // Measured from the just-laid-out current line, before any slot
+            // transform is (re-)applied below — offsetHeight reflects natural
+            // layout height regardless, but doing it first keeps the ordering
+            // obviously correct. Read once per render; every _lyrSlot() call
+            // below (FROM, TO, or the static park) shares this one value, so
+            // the extra clearance stays constant for the whole transition
+            // rather than trying to animate it too.
+            _lyrExtraPushPx = _lyrWrapPush(eC);
 
             if (dir === 0) {
                 // Park each line on its slot with no motion, then crossfade.
@@ -7275,6 +7327,12 @@
             if (lsv) lsv.innerText = val + "px";
             var lss = document.getElementById("ls-size");
             if (lss) lss.value = val;
+            // A bigger/smaller global size can itself change how many lines
+            // the current verse wraps onto, so the wrap-clearance push (see
+            // _lyrWrapPush) needs re-measuring here too — unlike the rest of
+            // the carousel's geometry, which is pure `em` and rescales for
+            // free via CSS with no JS involved.
+            _reapplyLyricsGeometry();
         }
 
         // "Principal" — current-line size, as a % of the global size, applied

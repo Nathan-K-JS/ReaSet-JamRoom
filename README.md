@@ -289,6 +289,13 @@ Advancing a verse turns the drum by **exactly one position**:
 | Next | `+1` → `0`: arcs up to neutral depth, growing |
 | New verse | `+2` → `+1`: arcs into view from below |
 
+**Wrap-aware spacing.** Slot positions are computed assuming a single-line current
+verse; a verse that wraps onto two lines would otherwise crowd — or nearly touch —
+the smaller context lines above and below it, since their fixed offset doesn't grow
+with it. ReaSet measures the current line's actual rendered height on every change
+and pushes prev/next further away by half a line's height for each extra wrapped
+line, so the clearance stays constant whether the current verse is one line or several.
+
 Expressing it as "every line moves one slot" is what makes it read as **a single rotation**
 rather than four separate animations. The drum radius is in `em`, so the carousel scales
 with the font size you pick in the gear popover.
@@ -770,6 +777,14 @@ Al avanzar un verso, el tambor **gira exactamente una posición**:
 | Anterior | `-1` → `-2`: continúa más allá del borde superior y desaparece |
 | Siguiente | `+1` → `0`: asciende a profundidad neutra, creciendo |
 | Nuevo verso | `+2` → `+1`: entra en escena desde abajo |
+
+**Espaciado consciente del salto de línea.** La posición de cada slot se calcula
+asumiendo que el verso actual ocupa una sola línea; uno que salta a dos líneas, sin
+más, terminaría apretando —o casi tocando— las líneas de contexto más pequeñas
+arriba y abajo, porque su desplazamiento fijo no crece con él. ReaSet mide la altura
+real renderizada de la línea actual en cada cambio y aleja el anterior/siguiente medio
+alto de línea por cada línea extra que salte, así el espacio se mantiene constante sin
+importar si el verso actual ocupa una línea o varias.
 
 Que todo se exprese como "cada línea avanza una posición" es lo que hace que se lea como
 **una sola rotación** y no como cuatro animaciones sueltas. El radio del tambor está en
