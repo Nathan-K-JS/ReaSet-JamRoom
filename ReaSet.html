@@ -2281,7 +2281,7 @@
         /* Non-sequential changes (seek, song change) crossfade: turning the drum
            would imply a continuity that did not happen. */
         @keyframes reasetStackFade { from { opacity: 0; } }
-        .lyrics-stack.fading { animation: reasetStackFade 0.15s ease-out; }
+        .lyrics-stack.fading { animation: reasetStackFade 0.09s ease-out; }
 
         /* Never animate for users who asked the OS to keep motion down. */
         @media (prefers-reduced-motion: reduce) {
@@ -2488,7 +2488,7 @@
         /* Hidden, not removed — the slot stays occupied. */
         .chord-slot.empty { visibility: hidden; }
 
-        .chord-row.fading { animation: reasetStackFade 0.15s ease-out; }
+        .chord-row.fading { animation: reasetStackFade 0.09s ease-out; }
 
         #chords-panel.no-context .chord-ctx { display: none; }
 
@@ -4705,7 +4705,7 @@
         // induce a swimming sensation. easeOutQuint covers most of the distance
         // almost immediately and then decelerates hard, so the move feels
         // instant yet still lands softly instead of snapping.
-        var BELT_MS   = 190;
+        var BELT_MS   = 100;
         var BELT_EASE = 'cubic-bezier(0.22, 1, 0.36, 1)';   // easeOutQuint
 
         function _beltTransition() {

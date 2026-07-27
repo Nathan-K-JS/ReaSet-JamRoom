@@ -264,8 +264,8 @@ Chords use **the same drum laid on its side**: previous chord to the left, next 
 right, following the same curve and receding the same way, likewise never tilted. Changing
 chord turns the drum by one position exactly as the lyrics one does.
 
-The turn is **deliberately quick — 190 ms**, covering 90% of the distance in the first
-~70 ms and then decelerating hard into place. On stage you should register that the line
+The turn is **deliberately quick — 100 ms**, covering 90% of the distance in the first
+~40 ms and then decelerating hard into place. On stage you should register that the line
 changed without having to watch it move: sustained motion in the reading area is tiring,
 so the animation is there to keep you oriented, not to be looked at.
 
@@ -710,8 +710,8 @@ siguiente a la derecha, recorriendo la misma curva y retrocediendo igual, tambi�
 inclinarse. Al cambiar de acorde, el tambor gira una posición exactamente igual que el de
 las letras.
 
-El giro es **deliberadamente rápido — 190 ms**, cubriendo el 90% del recorrido en los
-primeros ~70 ms y frenando con fuerza al final. En el escenario debes notar que la línea
+El giro es **deliberadamente rápido — 100 ms**, cubriendo el 90% del recorrido en los
+primeros ~40 ms y frenando con fuerza al final. En el escenario debes notar que la línea
 cambió sin tener que verla moverse: el movimiento sostenido en el área de lectura cansa, así
 que la animación está para mantenerte ubicado, no para ser observada.
 
