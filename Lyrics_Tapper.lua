@@ -17,15 +17,22 @@ package.path = reaper.ImGui_GetBuiltinPath() .. '/?.lua'
 local ImGui = require 'imgui' '0.10'
 
 -- ═══════════════════════════════════════════════════════════════════════════
--- COLOR HELPERS  (ReaImGui uses packed ARGB hex: 0xAARRGGBB)
+-- COLOR HELPERS
+-- ReaImGui colors are packed 0xRRGGBBAA integers — red in the HIGHEST byte,
+-- alpha in the LOWEST. (The original version of this helper assumed
+-- 0xAARRGGBB — alpha highest, blue lowest — which silently swaps every
+-- channel: a green button rendered magenta, and a near-opaque dark window
+-- background rendered as an ~8%-alpha red wash, letting REAPER's timeline
+-- show straight through it. That mismatch is what produced the illegible,
+-- pink-tinted UI — not a bad color choice.)
 -- ═══════════════════════════════════════════════════════════════════════════
 
-local function argb(r, g, b, a)
+local function rgba(r, g, b, a)
     a = math.floor((a or 1.0) * 255)
     r = math.floor(r * 255)
     g = math.floor(g * 255)
     b = math.floor(b * 255)
-    return (a << 24) | (r << 16) | (g << 8) | b
+    return (r << 24) | (g << 16) | (b << 8) | a
 end
 
 -- ═══════════════════════════════════════════════════════════════════════════
@@ -34,31 +41,31 @@ end
 -- ═══════════════════════════════════════════════════════════════════════════
 
 local THEME = {
-    bg              = argb(0.075, 0.078, 0.086),
-    bg_panel        = argb(0.110, 0.115, 0.125),
-    bg_input        = argb(0.055, 0.058, 0.065),
-    bg_input_hov    = argb(0.085, 0.090, 0.100),
-    border          = argb(0.220, 0.230, 0.250),
+    bg              = rgba(0.075, 0.078, 0.086),
+    bg_panel        = rgba(0.110, 0.115, 0.125),
+    bg_input        = rgba(0.055, 0.058, 0.065),
+    bg_input_hov    = rgba(0.085, 0.090, 0.100),
+    border          = rgba(0.220, 0.230, 0.250),
 
-    text            = argb(0.930, 0.935, 0.945),
-    text_dim        = argb(0.560, 0.580, 0.610),
-    text_faint      = argb(0.360, 0.375, 0.400),
+    text            = rgba(0.930, 0.935, 0.945),
+    text_dim        = rgba(0.560, 0.580, 0.610),
+    text_faint      = rgba(0.360, 0.375, 0.400),
 
-    accent          = argb(0.250, 0.820, 0.560),   -- mint/teal (ARM/TAP/current line)
-    accent_hover    = argb(0.320, 0.880, 0.630),
-    accent_active   = argb(0.190, 0.700, 0.470),
-    accent_text     = argb(0.040, 0.045, 0.045),   -- dark label on bright accent buttons
+    accent          = rgba(0.250, 0.820, 0.560),   -- mint/teal (ARM/TAP/current line)
+    accent_hover    = rgba(0.320, 0.880, 0.630),
+    accent_active   = rgba(0.190, 0.700, 0.470),
+    accent_text     = rgba(0.040, 0.045, 0.045),   -- dark label on bright accent buttons
 
-    warn            = argb(0.820, 0.660, 0.220),   -- "track will be created"
-    ok              = argb(0.360, 0.780, 0.420),   -- "track found"
+    warn            = rgba(0.820, 0.660, 0.220),   -- "track will be created"
+    ok              = rgba(0.360, 0.780, 0.420),   -- "track found"
 
-    danger          = argb(0.820, 0.320, 0.320),
-    danger_hover    = argb(0.880, 0.400, 0.400),
-    danger_active   = argb(0.680, 0.250, 0.250),
+    danger          = rgba(0.820, 0.320, 0.320),
+    danger_hover    = rgba(0.880, 0.400, 0.400),
+    danger_active   = rgba(0.680, 0.250, 0.250),
 
-    ghost           = argb(1.0, 1.0, 1.0, 0.035),
-    ghost_hover     = argb(1.0, 1.0, 1.0, 0.070),
-    ghost_active    = argb(1.0, 1.0, 1.0, 0.110),
+    ghost           = rgba(1.0, 1.0, 1.0, 0.035),
+    ghost_hover     = rgba(1.0, 1.0, 1.0, 0.070),
+    ghost_active    = rgba(1.0, 1.0, 1.0, 0.110),
 }
 
 -- ═══════════════════════════════════════════════════════════════════════════
