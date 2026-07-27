@@ -4045,6 +4045,74 @@
         var initialized = false;
         var expandedSongs = {}; // { songId: true/false }
 
+        // ── Connection-loss / reconnect safeguard ────────────────────────────────
+        // ReaSet is a *remote*: it issues absolute SET/POS commands to REAPER based
+        // on the position it polls (TRANSPORT ~30fps). If the poll stream is cut
+        // (e.g. the tablet drops Wi-Fi), REAPER keeps playing while ReaSet goes
+        // blind and its local state (currentPos, loop/queue/boundary arm flags)
+        // freezes. When the connection returns, the FIRST fresh TRANSPORT reply is
+        // REAPER's ground truth — but a stale loop/boundary decision computed on
+        // that same tick would seek REAPER *backward* to where the tablet was
+        // frozen, which looks exactly like a phantom user interaction.
+        //
+        // Fix: detect the gap in the reply stream and, for a short guard window,
+        // SUPPRESS ReaSet's own *automatic* transport commands (loop / queue /
+        // auto-advance / skip). We adopt REAPER's real position silently and only
+        // resume automation once the stream is proven live again. Explicit user
+        // taps are never suppressed — so "I didn't press anything" jumps stop,
+        // while real button presses keep working.
+        var _lastReplyTs      = 0;
+        var RESYNC_GAP_MS     = 700;   // reply-stream gap that counts as an interruption
+        var RESYNC_GUARD_MS   = 600;   // suppress automatic transport commands this long after a gap
+        var _resyncGuardUntil = 0;
+
+        // True while automatic (non-user) transport commands must be held back.
+        function _suppressAutoTransport() { return Date.now() < _resyncGuardUntil; }
+
+        // Called when the reply stream resumes after an interruption. Clears the
+        // edge-detector / dedup flags so nothing fires off a pre-outage position,
+        // and adopts REAPER's next reply as the fresh source of truth.
+        function _onConnectionResumed() {
+            window._nlPrevPos             = null; // native-loop crossing edge detector
+            window._lastLoopFireKey       = null;
+            window._lastRegionEndTrigger  = null;
+            window._lastTransitionTriggerPos = null;
+            window._lastPauseTriggerPos   = null;
+            window._lastSpecialTriggerPos = null;
+            _setConnBanner(false);
+        }
+
+        // Minimal "reconnecting" banner, created lazily so no HTML markup changes.
+        function _setConnBanner(show) {
+            var el = document.getElementById('reaset-conn-banner');
+            if (show) {
+                if (!el) {
+                    el = document.createElement('div');
+                    el.id = 'reaset-conn-banner';
+                    el.textContent = '⚠ Reconectando con REAPER — control automático en pausa';
+                    el.style.cssText = 'position:fixed;top:0;left:0;right:0;z-index:99999;' +
+                        'background:#b45309;color:#fff;text-align:center;font-size:13px;' +
+                        'font-weight:600;padding:6px 10px;letter-spacing:.02em;' +
+                        'box-shadow:0 2px 8px rgba(0,0,0,.35);pointer-events:none;';
+                    document.body.appendChild(el);
+                }
+                el.style.display = '';
+            } else if (el) {
+                el.style.display = 'none';
+            }
+        }
+
+        // Browser-level hints: react the instant the OS reports the drop/return.
+        window.addEventListener('offline', function () {
+            _resyncGuardUntil = Date.now() + 3600000; // hold until a real reply proves we're back
+            _setConnBanner(true);
+        });
+        window.addEventListener('online', function () {
+            // Don't clear the guard yet — wait for an actual REAPER reply. Just
+            // arm a bounded guard so automation resumes shortly after data flows.
+            _resyncGuardUntil = Date.now() + RESYNC_GUARD_MS;
+        });
+
         // --- Per-project session detection via region fingerprint ---
         // Project-specific keys are namespaced with a fingerprint derived from region IDs.
         // Global UI prefs (theme, fonts, etc.) are NOT namespaced.
@@ -4389,6 +4457,21 @@
         // --- 3. REAPER REPLY HANDLER ---
         function wwr_onreply(results) {
             if (isDragging) return;
+
+            // Reply-stream freshness gate (see "Connection-loss safeguard" above).
+            // A large gap between replies means the poll stream was interrupted
+            // (Wi-Fi drop, sleep, network stall). Arm the guard so the automatic
+            // transport logic below cannot act on the first, stale-then-jumped
+            // reply and seek REAPER backward to a pre-outage position.
+            var _now = Date.now();
+            if (_lastReplyTs && (_now - _lastReplyTs) > RESYNC_GAP_MS) {
+                _resyncGuardUntil = _now + RESYNC_GUARD_MS;
+                _onConnectionResumed();
+            } else if (_resyncGuardUntil && _now >= _resyncGuardUntil) {
+                _setConnBanner(false);
+            }
+            _lastReplyTs = _now;
+
             var ar = results.split("\n");
             var x;
             for (x = 0; x < ar.length; x++) {
@@ -5645,7 +5728,10 @@
                 // Skip logic
                 if (activeRegion.skipped) {
                     var nxt = findNextValidSong(activeIdx);
-                    if (nxt) { wwr_req("SET/POS/" + nxt.start); return; }
+                    // Reconnect guard: don't auto-seek off a skipped region on a
+                    // stale post-outage tick; adopt REAPER's position for now and
+                    // let it fire on the next proven-fresh tick.
+                    if (nxt) { if (!_suppressAutoTransport()) wwr_req("SET/POS/" + nxt.start); return; }
                 }
                 var row = document.getElementById("row-" + activeRegion.id);
                 if (row) {
@@ -5742,7 +5828,7 @@
 
                 // ── Special marker triggers (SONG END, STOP, +PAUSE) ──────────
                 // Deduplicated with window._lastSpecialTriggerPos so each trigger fires once.
-                if (isPlaying && activeRegion) {
+                if (isPlaying && activeRegion && !_suppressAutoTransport()) {
                     var specials = (window.g_specialMarkersMap || {})[activeRegion.name] || [];
                     for (var sp = 0; sp < specials.length; sp++) {
                         var spm = specials[sp];
@@ -5850,7 +5936,8 @@
                     // which is >> 0.2, so putting this inside subTimeRem<=0.2 means it NEVER fires.
                     // We detect crossings here by watching for a position discontinuity:
                     //   prev tick was near the loop end → now near the loop start = REAPER jumped.
-                    if (window._nativeLoopSubId === activeSub.id &&
+                    if (!_suppressAutoTransport() &&
+                        window._nativeLoopSubId === activeSub.id &&
                         activeSub.loop && activeSub.loopMax && activeSub.loopMax > 1) {
 
                         var _nlPrev = window._nlPrevPos;
@@ -5884,7 +5971,7 @@
                         window._nlPrevPos = currentPos; // always track for next-tick comparison
                     }
 
-                    if (subTimeRem <= 0.2 && subTimeRem > -1) {
+                    if (subTimeRem <= 0.2 && subTimeRem > -1 && !_suppressAutoTransport()) {
 
                         // ── Loop handling (+LOOP, +LOOPFULL, +LOOP:N) ────────────
                         if (activeSub.loop) {
@@ -5979,7 +6066,7 @@
                 }
                 // Clamp lower bound to -0.1 s: if the cursor is more than 100ms past the
                 // region end it has clearly moved on; firing again here would be a false positive.
-                if (timeRem <= 0.2 && timeRem > -0.1 && isPlaying) {
+                if (timeRem <= 0.2 && timeRem > -0.1 && isPlaying && !_suppressAutoTransport()) {
                     // Dedup guard: fire once per region end. Without this, the 0.2s
                     // window fires ~6 times at 33ms poll rate — each tick emitting a
                     // SET/POS or stop command, causing REAPER to seek backward

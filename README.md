@@ -99,9 +99,12 @@ Final functional validation was performed in REAPER with real setlist usage test
 ### Minimum files
 - `ReaSet.html`
 - `Sortable.min.js`
-- Scripts in `Requirements/`:
-  - `X-Raym_Convert Lyrics track items notes for dedicated web browser interface.lua`
-  - `X-Raym_Convert Chords track items notes for dedicated web browser interface.lua`
+- `Reaset.lua` — **single unified companion script** (loop engine + lyrics + chords).
+
+> **Legacy / advanced:** the three original scripts are still bundled under
+> `Requirements/` (`ReaSet_NativeLoop.lua` and the two X-Raym Lyrics/Chords
+> converters). You only need them if you prefer running the subsystems
+> separately. For a normal setup, `Reaset.lua` replaces all three.
 
 ### Required tracks for lyrics/chords
 - Track named exactly: `lyrics`
@@ -137,12 +140,20 @@ Copy to REAPER web folder (where `main.js` is located):
 
 > `main.js` is provided by REAPER Web Interface (not included in this project).
 
-### Step 2 — Install Lua scripts
+### Step 2 — Install the Lua script (one script only)
 1. Open REAPER.
 2. Go to **Actions > Show action list**.
-3. Use **ReaScript: Load...** and load both scripts from `Requirements/`.
-4. (Recommended) Copy scripts into REAPER’s scripts folder.
-5. (Optional) Assign shortcuts or add to toolbar.
+3. Use **ReaScript: Load...** and load **`Reaset.lua`**.
+4. Find **"Reaset"** in the action list and **Run** it once.
+5. (Recommended) Add it to **Options > Preferences > General > Startup actions**
+   (or an SWS *Global startup action*) so it launches with REAPER automatically.
+
+> `Reaset.lua` is a single persistent background script that runs the native
+> loop engine and the lyrics/chords bridges together. There is **no Action ID
+> to paste** into `ReaSet.html` — the web interface auto-detects the script.
+>
+> Lyrics/chords tracks are optional: if a `lyrics` or `chords` track is missing,
+> that panel simply stays idle and transport/loop control keeps working.
 
 #### Default script paths
 - **macOS:** `~/Library/Application Support/REAPER/Scripts/`
@@ -408,9 +419,12 @@ La validación funcional final se hizo en REAPER con pruebas reales de uso en se
 ### Archivos mínimos
 - `ReaSet.html`
 - `Sortable.min.js`
-- Scripts en `Requirements/`:
-  - `X-Raym_Convert Lyrics track items notes for dedicated web browser interface.lua`
-  - `X-Raym_Convert Chords track items notes for dedicated web browser interface.lua`
+- `Reaset.lua` — **script único unificado** (motor de loop + letras + acordes).
+
+> **Legacy / avanzado:** los tres scripts originales siguen incluidos en
+> `Requirements/` (`ReaSet_NativeLoop.lua` y los dos convertidores de X-Raym).
+> Solo los necesitas si prefieres ejecutar los subsistemas por separado. Para
+> una instalación normal, `Reaset.lua` reemplaza a los tres.
 
 ### Pistas requeridas para letras/acordes
 - Pista llamada exactamente: `lyrics`
@@ -446,12 +460,21 @@ Copiar en la carpeta web de REAPER (donde existe `main.js`):
 
 > `main.js` lo provee REAPER Web Interface (no viene en este proyecto).
 
-### Paso 2 — Instalar scripts Lua
+### Paso 2 — Instalar el script Lua (un solo script)
 1. Abrir REAPER.
 2. Ir a **Actions > Show action list**.
-3. Usar **ReaScript: Load...** y cargar ambos scripts desde `Requirements/`.
-4. (Recomendado) Copiar scripts a carpeta oficial de scripts de REAPER.
-5. (Opcional) Asignar atajos o toolbar.
+3. Usar **ReaScript: Load...** y cargar **`Reaset.lua`**.
+4. Buscar **"Reaset"** en la lista de acciones y **ejecutarlo** una vez.
+5. (Recomendado) Añadirlo en **Options > Preferences > General > Startup actions**
+   (o como *Global startup action* de SWS) para que arranque solo con REAPER.
+
+> `Reaset.lua` es un único script de fondo persistente que corre el motor de
+> loop nativo y los puentes de letras/acordes a la vez. **No hay Action ID que
+> pegar** en `ReaSet.html` — la interfaz web lo detecta automáticamente.
+>
+> Las pistas de letras/acordes son opcionales: si falta la pista `lyrics` o
+> `chords`, ese panel queda inactivo y el control de transporte/loop sigue
+> funcionando.
 
 #### Rutas por defecto para scripts
 - **macOS:** `~/Library/Application Support/REAPER/Scripts/`
