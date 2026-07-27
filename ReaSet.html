@@ -4026,9 +4026,11 @@
         // X-Raym exact approach: poll PROJEXTSTATE every 10ms batched
         wwr_req_recur("GET/PROJEXTSTATE/XR_Lyrics/text;GET/PROJEXTSTATE/XR_Lyrics/next", 10);
         wwr_req_recur("GET/PROJEXTSTATE/XR_Chords/text", 200);
-        // Auto-detect ReaSet_NativeLoop.lua: one-shot probe, plus refresh every 10s
-        wwr_req("GET/EXTSTATE/ReaSet/nativeLoopReady");
-        wwr_req_recur("GET/EXTSTATE/ReaSet/nativeLoopReady", 10000);
+        // Auto-detect Reaset.lua + read the lyrics/chords bridge diagnostics.
+        // One-shot probe so the empty-state message is accurate immediately,
+        // then a light refresh (these are tiny replies).
+        wwr_req("GET/EXTSTATE/ReaSet/nativeLoopReady;GET/EXTSTATE/ReaSet/lyricsTrack;GET/EXTSTATE/ReaSet/chordsTrack");
+        wwr_req_recur("GET/EXTSTATE/ReaSet/nativeLoopReady;GET/EXTSTATE/ReaSet/lyricsTrack;GET/EXTSTATE/ReaSet/chordsTrack", 2000);
         wwr_start();
 
         // --- 2. STATE ---
@@ -4430,6 +4432,44 @@
         var chordsVisible = false;
         var chordsLastRaw = "";
 
+        // ── Lyrics/Chords bridge diagnostics (published by Reaset.lua) ───────────
+        // null = no reply yet. "" = script not running. "!NOTRACK" / "!NOSWS" =
+        // specific failure. Anything else = the matched REAPER track name.
+        var xr_lyrics_track = null;
+        var xr_chords_track = null;
+
+        // Builds the empty-state message for a panel, naming the ACTUAL cause
+        // instead of always blaming the track name.
+        function _bridgeHint(kind) {
+            var isLy    = (kind === 'lyrics');
+            var st      = isLy ? xr_lyrics_track : xr_chords_track;
+            var keyword = isLy ? 'lyrics' : 'chords';
+
+            if (st === null || st === '') {
+                return 'El script <b>Reaset.lua</b> no está corriendo en REAPER.<br>' +
+                       'Actions &rarr; ReaScript: Load… &rarr; Reaset.lua &rarr; Run.' +
+                       '<br><small>(Si usas los scripts antiguos de <i>Requirements/</i>, ' +
+                       'no publican este estado y no admiten prefijos.)</small>';
+            }
+            if (st === '!NOSWS') {
+                return 'Falta la extensión <b>SWS</b> (<code>ULT_GetMediaItemNote</code>).<br>' +
+                       'Sin ella no se pueden leer las notas de los items.';
+            }
+            if (st === '!NOTRACK') {
+                return 'No se encontró ningún track llamado <b>' + keyword + '</b>.<br>' +
+                       'Se aceptan prefijos: <b>*' + keyword + '</b>, <b>01 ' + keyword + '</b>, ' +
+                       '<b>[' + keyword + ']</b>.<br>' +
+                       '<small>No sirven nombres con palabras extra (ej. "Backing ' + keyword + '").</small>';
+            }
+            return 'Track <b>' + st + '</b> detectado &#10003;<br>' +
+                   'No hay ningún item con notas bajo el cursor de reproducción.';
+        }
+
+        // Plain-text variant for elements that use innerText.
+        function _bridgeHintText(kind) {
+            return _bridgeHint(kind).replace(/<br\s*\/?>/gi, ' ').replace(/<[^>]+>/g, '');
+        }
+
         // Show timer state
         var showStartTime = null;         // Date.now() when show first started
         var showAccumulatedMs = 0;        // ms accumulated before last pause
@@ -4567,6 +4607,16 @@
                                 if (nlInd) nlInd.style.display = nlReady ? "inline" : "none";
                             }
                         }
+                        // Lyrics/Chords bridge diagnostics published by Reaset.lua.
+                        // "" (or key absent) = script not running; "!NOTRACK" = no
+                        // matching track; "!NOSWS" = SWS missing; otherwise the real
+                        // REAPER track name. Consumed by _bridgeHint() below.
+                        if (tok[1] === "ReaSet" && tok[2] === "lyricsTrack") {
+                            xr_lyrics_track = tok.slice(3).join('\t');
+                        }
+                        if (tok[1] === "ReaSet" && tok[2] === "chordsTrack") {
+                            xr_chords_track = tok.slice(3).join('\t');
+                        }
                         // NOTE: nativeLoop=done is intentionally NOT handled here.
                         // _nativeLoopSubId stays armed until the playhead physically leaves
                         // the sub-region — prevents JS from re-jumping after Lua finishes.
@@ -4583,7 +4633,7 @@
                 if (n === "--XR-NO-TEXT--") n = "";
                 if (t !== xr_lyrics_last || n !== xr_lyrics_last_next) {
                     if (t === "") {
-                        lyricsContent.innerHTML = '<div class="lyrics-no-data">Sin datos de letra.<br><small>Ejecuta el script Lua <b>Reaset.lua</b> en REAPER<br>y usa un track llamado <b>lyrics</b> (se aceptan prefijos: <b>*Lyrics</b>, <b>01 Lyrics</b>)<br>con las letras en las notas de los items.</small></div>';
+                        lyricsContent.innerHTML = '<div class="lyrics-no-data">Sin datos de letra.<br><small>' + _bridgeHint('lyrics') + '</small></div>';
                     } else {
                         // Exact X-Raym method: split on \\n, join with <br>
                         var lines = t.split("\\n");
@@ -6418,7 +6468,7 @@
             var content = document.getElementById("lyrics-content");
             if (!content) return;
             if (!raw || raw === "--XR-NO-TEXT--" || raw === "") {
-                content.innerHTML = '<div class="lyrics-no-data">Sin datos de letra.<br><small>Asegurate de tener <b>Reaset.lua</b> corriendo en REAPER<br>y un track llamado <b>lyrics</b> (se aceptan prefijos: <b>*Lyrics</b>, <b>01 Lyrics</b>)<br>con las letras en las notas de los items.</small></div>';
+                content.innerHTML = '<div class="lyrics-no-data">Sin datos de letra.<br><small>' + _bridgeHint('lyrics') + '</small></div>';
                 return;
             }
             // X-Raym stores newlines as literal \n sequences — split on them
@@ -6451,7 +6501,7 @@
             if (!disp) return;
             if (!raw || raw === "--XR-NO-TEXT--" || raw === "") {
                 disp.innerText = "♪";
-                document.getElementById("chord-label").innerText = 'Run Reaset.lua + add a "chords" track (prefixes OK: *Chords)';
+                document.getElementById("chord-label").innerText = _bridgeHintText('chords');
                 if (typeof canvasOpen !== "undefined" && canvasOpen && document.getElementById("cw-content-chords")) {
                     document.getElementById("cw-content-chords").innerText = "♪";
                 }

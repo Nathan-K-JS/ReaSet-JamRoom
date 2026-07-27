@@ -338,15 +338,19 @@ ReaSet inherently supports the following global keyboard bindings to streamline 
 ---
 
 ## 9) Quick troubleshooting
-### ❌ Lyrics not showing
-- Check exact track name `lyrics`.
-- Check item notes.
-- Check if Lyrics script is running.
+### ❌ Lyrics or chords not showing
+The panel's empty-state message tells you the **actual** cause — read it before
+changing anything. `Reaset.lua` reports its status live:
 
-### ❌ Chords not showing
-- Check `chords` track.
-- Check item notes.
-- Check if Chords script is running.
+| Message | Meaning | Fix |
+|---|---|---|
+| *"Reaset.lua is not running"* | The script isn't loaded, or you're on the legacy `Requirements/` scripts | Actions → ReaScript: Load… → `Reaset.lua` → Run |
+| *"No track named lyrics/chords found"* | Script alive, but no track matched | Check the name against [the naming rules](#lyrics--chords-track-naming) |
+| *"SWS extension missing"* | `ULT_GetMediaItemNote` unavailable | Install [SWS](https://www.sws-extension.org/) |
+| *"Track X detected — no item under the cursor"* | Everything works | Move the playhead over an item that has **Item Notes** |
+
+The last one is the most common false alarm: the track is found, but the playhead
+is not over an item, or the item's **Notes** field is empty.
 
 ### ❌ `ULT_GetMediaItemNote` error
 - Missing compatible scripting/API environment; install dependency or adapt script.
@@ -701,15 +705,19 @@ ReaSet soporta los siguientes comandos de teclado globales para mejorar el contr
 ---
 
 ## 9) Solución rápida de problemas
-### ❌ No aparecen letras
-- Revisar nombre exacto de pista `lyrics`.
-- Revisar notas en items.
-- Revisar que el script de Lyrics esté activo.
+### ❌ No aparecen letras o acordes
+El mensaje del panel vacío te dice la causa **real** — léelo antes de cambiar nada.
+`Reaset.lua` publica su estado en vivo:
 
-### ❌ No aparecen acordes
-- Revisar pista `chords`.
-- Revisar notas en items.
-- Revisar script de Chords activo.
+| Mensaje | Significado | Solución |
+|---|---|---|
+| *"Reaset.lua no está corriendo"* | El script no está cargado, o estás usando los scripts legacy de `Requirements/` | Actions → ReaScript: Load… → `Reaset.lua` → Run |
+| *"No se encontró ningún track llamado lyrics/chords"* | El script vive, pero ninguna pista coincidió | Revisa el nombre según [las reglas](#nombres-de-las-pistas-de-letras-y-acordes) |
+| *"Falta la extensión SWS"* | `ULT_GetMediaItemNote` no está disponible | Instala [SWS](https://www.sws-extension.org/) |
+| *"Track X detectado — no hay item bajo el cursor"* | Todo funciona | Mueve el playhead sobre un item que tenga **notas** |
+
+El último es la falsa alarma más común: la pista se encontró, pero el playhead no
+está sobre ningún item, o el campo **Notes** del item está vacío.
 
 ### ❌ Error `ULT_GetMediaItemNote`
 - Falta entorno/API compatible; instalar dependencia o adaptar script.

@@ -158,14 +158,31 @@ end
 
 local NEXT_SUPPORT = false  -- keep parity with shipped scripts (next item preview off)
 
-local function bridge_new(track_name, ext_name)
+local function bridge_new(track_name, ext_name, status_key)
     return {
         track_name = track_name,
         ext_name   = ext_name,
+        status_key = status_key,  -- ExtState key ReaSet.html polls for diagnostics
         track      = nil,
         text       = nil,
         next_text  = nil,
+        status     = nil,
     }
+end
+
+-- Publishes what this bridge is actually doing, so the web UI can tell apart
+-- the failure modes that otherwise all look like "no lyrics showing":
+--   ""          → key absent/cleared: this script is not running at all
+--   "!NOTRACK"  → script alive, but no track matched the keyword
+--   "!NOSWS"    → track found, but SWS/ULT_GetMediaItemNote is unavailable
+--   "<name>"    → track found and readable (shows the real REAPER track name)
+-- Written as non-persistent global ExtState so it dies with REAPER and is
+-- never baked into the project file (which would strand a stale status).
+local function bridge_publish_status(b, value)
+    if b.status ~= value then
+        b.status = value
+        reaper.SetExtState(SEC, b.status_key, value, false)
+    end
 end
 
 -- Normalises a track name for matching. The track must still BE the keyword —
@@ -246,8 +263,18 @@ end
 local function bridge_tick(b, cur_pos)
     if not reaper.ValidatePtr(b.track, 'MediaTrack*') then
         b.track = bridge_find_track(b)   -- (re)acquire; stays nil if track absent
+        if not b.track then
+            bridge_publish_status(b, "!NOTRACK")
+            return
+        end
+    end
+    if not HAS_ULT then
+        -- Track exists but item notes cannot be read without SWS.
+        bridge_publish_status(b, "!NOSWS")
         return
     end
+    local _, tname = reaper.GetTrackName(b.track)
+    bridge_publish_status(b, tname)
     local item = item_at_pos(b.track, cur_pos)
     b.text = process_notes(b.ext_name, "text", item, b.text)
     if NEXT_SUPPORT then
@@ -255,8 +282,8 @@ local function bridge_tick(b, cur_pos)
     end
 end
 
-local lyrics = bridge_new("lyrics", "XR_Lyrics")
-local chords = bridge_new("chords", "XR_Chords")
+local lyrics = bridge_new("lyrics", "XR_Lyrics", "lyricsTrack")
+local chords = bridge_new("chords", "XR_Chords", "chordsTrack")
 
 ----------------------------------------------------------------------------
 -- MAIN DEFER LOOP  — drives all three subsystems from one tick
@@ -292,6 +319,9 @@ local function on_exit()
     reaper.SetProjExtState(0, "XR_Lyrics", "next", "")
     reaper.SetProjExtState(0, "XR_Chords", "text", "")
     reaper.SetProjExtState(0, "XR_Chords", "next", "")
+    -- Clear bridge diagnostics so the UI reports "script not running".
+    reaper.SetExtState(SEC, "lyricsTrack", "", false)
+    reaper.SetExtState(SEC, "chordsTrack", "", false)
     if s_active then loop_cleanup() end
     -- Drop the presence flag so ReaSet falls back to JS loop next session.
     reaper.SetExtState(SEC, "nativeLoopReady", "0", false)
