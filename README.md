@@ -128,6 +128,9 @@ Scripts use `reaper.ULT_GetMediaItemNote`.
 to author content quickly. Paste a block of text, press **ARM**, then tap
 along (mouse or **Space**) as the song plays: each tap closes the previous
 line's item and opens the next one at the current position, teleprompter-style.
+For N lines, that's N taps to place all of them, plus **one more tap** to close
+the last item and finish the take right there — no separate Stop needed for a
+clean finish, though Stop is still available any time to end early.
 It auto-detects the target track with the same flexible naming rules as
 `Reaset.lua`, creates the track if missing, and filters out section headers
 ("Chorus", "Verse 2", "[Coro]", …) so they don't become lyric items.
@@ -602,6 +605,10 @@ sirve para **construir** los items de `lyrics`/`chords`/`notes` que ReaSet lee
 Pega un bloque de texto, presiona **ARM** y luego marca el ritmo (mouse o
 **Space**) mientras suena la canción: cada tap cierra el item de la línea
 anterior y abre el siguiente en la posición actual, al estilo teleprompter.
+Con N líneas, son N taps para colocarlas todas, más **un tap más** para cerrar
+el último item y terminar ahí mismo — no hace falta un Stop aparte para
+terminar limpio, aunque Stop sigue disponible en cualquier momento para acabar
+antes de tiempo.
 Detecta la pista destino con las mismas reglas de nombre flexibles que
 `Reaset.lua`, la crea si no existe, y filtra encabezados de sección ("Coro",
 "Verso 2", "[Chorus]", …) para que no terminen como items de letra.

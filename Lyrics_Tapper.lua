@@ -74,7 +74,7 @@ local THEME = {
 
 local TRACK_TYPES = { [0] = "Lyrics", [1] = "Chords", [2] = "Notes" }
 
-local state          = "idle"    -- "idle" | "tapping" | "done"
+local state          = "idle"    -- "idle" | "tapping"
 local track_type_idx = 0        -- index into TRACK_TYPES (0-based: 0=Lyrics)
 local lines          = {}        -- parsed lines from pasted text
 local current_idx    = 0         -- 0 = none yet, 1..n = next to insert
@@ -228,15 +228,23 @@ local function parse_lines(text)
 end
 
 -- ═══════════════════════════════════════════════════════════════════════════
--- FLOW:
---   ARM → armed, nothing created. "Tap to start first verse..."
---   TAP 1 → creates item #1 at current pos (placeholder). "✓ 1/N"
---   TAP 2 → closes item #1 + creates item #2. "✓ 2/N"
---   TAP 3 → closes item #2 + creates item #3. "✓ 3/N"
---   STOP → closes last item
+-- FLOW  (N = #lines):
+--   ARM      → armed, nothing created. "Tap to start first verse..."
+--   TAP 1    → creates item #1 at current pos (placeholder). "✓ 1/N"
+--   TAP 2    → closes item #1 + creates item #2. "✓ 2/N"
+--   ...
+--   TAP N    → closes item #(N-1) + creates item #N (the last one). "N/N — tap
+--              once more to close it and finish."
+--   TAP N+1  → closes item #N and finishes the take right there — same effect
+--              as pressing Stop, just one tap instead of reaching for a button.
+--   STOP     → always available: closes whatever's currently open (with a more
+--              generous minimum length, since it's an unplanned/manual finish)
+--              and ends the take early, from any point in the sequence.
 --
--- Each tap (except the first) does: close prev + open next = 1 tap per transition.
--- The FIRST tap is the cue: "vocals start HERE."
+-- Every tap except the very first closes the item that's currently open; the
+-- FIRST tap is the cue "vocals start HERE," nothing to close yet. So each tap
+-- from #2 onward is a close, and taps #2..N ALSO open the next item — except
+-- the final, (N+1)th tap, which only closes: there's nothing left to open.
 
 local function create_item_at(track, pos, text)
     local item = reaper.AddMediaItemToTrack(track)
@@ -246,25 +254,36 @@ local function create_item_at(track, pos, text)
     return item
 end
 
+-- Forward-declared: do_tap()'s final closing tap calls do_stop() to finish
+-- the take. Both are top-level locals, so this is safe as long as neither is
+-- CALLED before the whole file finishes loading — true here, since both only
+-- ever run later, from a button click or the Space shortcut.
+local do_stop
+
 local function do_tap()
     local track = ensure_target_track()
     if not track then return end
 
-    if current_idx >= #lines then
-        ui_msg = "✓ All lines placed! Tap STOP to close."
-        state = "done"
-        return
-    end
-
     local now_pos = get_current_pos()
 
-    -- Close previous item (if any — first tap has none)
+    -- Close the item currently open, if any. The very first tap has none —
+    -- it's the cue "vocals start HERE," nothing to close yet.
     if last_item and reaper.ValidatePtr(last_item, 'MediaItem*') then
         local item_start = reaper.GetMediaItemInfo_Value(last_item, "D_POSITION")
         local duration = now_pos - item_start
         if duration < 0.05 then duration = 0.05 end
         reaper.SetMediaItemInfo_Value(last_item, "D_LENGTH", duration)
         tap_count = tap_count + 1
+        last_item = nil
+    end
+
+    if current_idx >= #lines then
+        -- Every line was already placed, and the tap above just closed the
+        -- last one at the exact moment the performer marked its end. Nothing
+        -- left to open, so finish right here — do_stop() sees last_item==nil
+        -- and skips its own closing step, just doing the undo/finish bookkeeping.
+        do_stop()
+        return
     end
 
     -- Create next item at current position
@@ -276,8 +295,8 @@ local function do_tap()
         ui_msg = string.format("✓ %d/%d  |  Next: \"%s\"",
             current_idx, #lines, lines[current_idx] or "")
     else
-        ui_msg = "✓ Last line! Tap STOP to close."
-        state = "done"
+        ui_msg = string.format("✓ %d/%d — last line placed. Tap once more (or Space) to close it and finish.",
+            current_idx, #lines)
     end
 
     reaper.UpdateArrange()
@@ -305,7 +324,12 @@ local function do_arm()
         arm_pos, canonical, lines[1] or "")
 end
 
-local function do_stop()
+-- No `local` here on purpose — do_stop was already forward-declared above
+-- (`local do_stop`) so do_tap()'s closure could call it. Writing
+-- `local function do_stop()` here would silently create a SECOND, unrelated
+-- local that shadows the forward-declared one, leaving do_tap() forever
+-- calling nil. This assigns into the existing upvalue instead.
+function do_stop()
     if last_item and reaper.ValidatePtr(last_item, 'MediaItem*') then
         local item_start = reaper.GetMediaItemInfo_Value(last_item, "D_POSITION")
         local now_pos = get_current_pos()
@@ -541,31 +565,21 @@ local function main_loop()
             ImGui.PopStyleColor(ctx, 1)
 
             local _, avail_h = ImGui.GetContentRegionAvail(ctx)
-            local reserved = (state == "tapping") and 128 or 40  -- TAP btn + progress, or just trailing space
-            local view_h = math.max(140, avail_h - reserved)
+            local view_h = math.max(140, avail_h - 128)  -- reserve room for the TAP button + progress bar
 
             if ImGui.BeginChild(ctx, "##lyrics_view", -1, view_h, ImGui.ChildFlags_Borders) then
                 -- Role per line: "past" (already placed), "current" (the one
-                -- being tapped in / just placed), "next" (about to be tapped —
-                -- shown a touch brighter, like Ableset's upcoming-line cue),
-                -- or plain "future". While tapping and BEFORE the first tap
-                -- (current_idx == 0), line 1 is naturally "next" and nothing
-                -- is "current" yet — same as the original had no highlighted
-                -- line before the first tap. In "done", the last placed line
-                -- stays shown as "current" instead of going fully dim, so the
-                -- performer keeps seeing what's currently on screen until
-                -- they press Stop & Save.
+                -- being tapped in — including after the LAST line, where it
+                -- stays "current" rather than going dim, until the closing
+                -- tap finishes the take), "next" (about to be tapped — shown
+                -- a touch brighter, like Ableset's upcoming-line cue), or
+                -- plain "future". Before the first tap (current_idx == 0),
+                -- line 1 is naturally "next" and nothing is "current" yet.
                 for i = 1, #lines do
                     local role = "future"
-                    if state == "tapping" then
-                        if i < current_idx then role = "past"
-                        elseif i == current_idx then role = "current"
-                        elseif i == current_idx + 1 then role = "next"
-                        end
-                    else -- done
-                        if i < current_idx then role = "past"
-                        elseif i == current_idx then role = "current"
-                        end
+                    if i < current_idx then role = "past"
+                    elseif i == current_idx then role = "current"
+                    elseif i == current_idx + 1 then role = "next"
                     end
 
                     if role == "current" then
@@ -595,24 +609,26 @@ local function main_loop()
             -- EndChild SIEMPRE necesario, incluso si BeginChild devolvió false
             ImGui.EndChild(ctx)
 
-            if state == "tapping" then
-                ImGui.Spacing(ctx)
-                ImGui.PushStyleColor(ctx, ImGui.Col_Button,        THEME.accent)
-                ImGui.PushStyleColor(ctx, ImGui.Col_ButtonHovered, THEME.accent_hover)
-                ImGui.PushStyleColor(ctx, ImGui.Col_ButtonActive,  THEME.accent_active)
-                ImGui.PushStyleColor(ctx, ImGui.Col_Text,          THEME.accent_text)
-                push_font(FONT.tap)
-                if ImGui.Button(ctx, "TAP · SPACE", -1, 58) then
-                    do_tap()
-                end
-                pop_font(FONT.tap)
-                ImGui.PopStyleColor(ctx, 4)
+            ImGui.Spacing(ctx)
+            ImGui.PushStyleColor(ctx, ImGui.Col_Button,        THEME.accent)
+            ImGui.PushStyleColor(ctx, ImGui.Col_ButtonHovered, THEME.accent_hover)
+            ImGui.PushStyleColor(ctx, ImGui.Col_ButtonActive,  THEME.accent_active)
+            ImGui.PushStyleColor(ctx, ImGui.Col_Text,          THEME.accent_text)
+            push_font(FONT.tap)
+            -- The very last tap only CLOSES (there's nothing left to open and
+            -- finish the take), so the label says so instead of implying
+            -- another line is about to start.
+            local tap_label = (current_idx >= #lines) and "TAP TO FINISH · SPACE" or "TAP · SPACE"
+            if ImGui.Button(ctx, tap_label, -1, 58) then
+                do_tap()
+            end
+            pop_font(FONT.tap)
+            ImGui.PopStyleColor(ctx, 4)
 
-                if #lines > 0 then
-                    local frac = current_idx / #lines
-                    ImGui.ProgressBar(ctx, frac, -1, 10,
-                        string.format("%d / %d", current_idx, #lines))
-                end
+            if #lines > 0 then
+                local frac = current_idx / #lines
+                ImGui.ProgressBar(ctx, frac, -1, 10,
+                    string.format("%d / %d", current_idx, #lines))
             end
         end
 
@@ -644,19 +660,6 @@ local function main_loop()
                 do_stop()
             end
             ImGui.PopStyleColor(ctx, 3)
-            ImGui.SameLine(ctx)
-            if ImGui.Button(ctx, "Reset", 110, 32) then
-                do_reset()
-            end
-        elseif state == "done" then
-            ImGui.PushStyleColor(ctx, ImGui.Col_Button,        THEME.accent)
-            ImGui.PushStyleColor(ctx, ImGui.Col_ButtonHovered, THEME.accent_hover)
-            ImGui.PushStyleColor(ctx, ImGui.Col_ButtonActive,  THEME.accent_active)
-            ImGui.PushStyleColor(ctx, ImGui.Col_Text,          THEME.accent_text)
-            if ImGui.Button(ctx, "Stop & Save", 130, 32) then
-                do_stop()
-            end
-            ImGui.PopStyleColor(ctx, 4)
             ImGui.SameLine(ctx)
             if ImGui.Button(ctx, "Reset", 110, 32) then
                 do_reset()
