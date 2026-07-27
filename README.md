@@ -242,11 +242,20 @@ optically centred no matter how long the neighbouring chord names are.
 > per change to get the left/right context.
 
 #### Transitions and the status strip
-Verse and chord changes **scroll like a conveyor belt** rather than all refreshing at
-once: the whole stack moves as one block, so the current line travels up into the
-"previous" slot while the next line rises into the centre. Chords do the same thing
-horizontally, sliding left. The motion is measured from where the incoming line already
-sits on screen (a FLIP transition), so it lands exactly in place.
+Verse and chord changes animate **per line**, each with its own path — they are not one
+block moving rigidly. On a forward step four things happen at once, but differently:
+
+| Line | What it does |
+|---|---|
+| Current | Rises into the upper slot, **shrinking and dimming** |
+| Old upper | Keeps rising and **fades out completely** |
+| Next | Rises into the centre, **growing and brightening** |
+| New next | **Fades in from below** into the slot just vacated |
+
+Each movement is measured from the slot the line previously occupied (a FLIP transition),
+so every line starts exactly where the eye last saw it. Chords do the same thing on the
+horizontal axis: the next chord travels in from the right while the current one slides
+out to the left.
 
 Only a genuine one-step move earns the slide. A seek, a song change or an edit is not a
 step along the belt, so those **crossfade** instead — sliding would imply a continuity
@@ -666,11 +675,21 @@ y atenuados. Se reserva el mismo espacio a ambos lados, así el acorde actual qu
 > por cambio para tener el contexto izquierda/derecha.
 
 #### Transiciones y franja de estado
-Los cambios de verso y de acorde **se desplazan como una cinta transportadora** en vez de
-refrescarse los tres a la vez: el bloque entero se mueve como una unidad, así la línea
-actual sube al hueco de "anterior" mientras la siguiente asciende al centro. Los acordes
-hacen lo mismo en horizontal, deslizándose hacia la izquierda. El movimiento se mide desde
-donde la línea entrante ya está en pantalla (transición FLIP), así que encaja exacto.
+Los cambios de verso y de acorde se animan **línea por línea**, cada una con su propia
+trayectoria — no es un bloque moviéndose rígidamente. En un avance pasan cuatro cosas a la
+vez, pero distintas:
+
+| Línea | Qué hace |
+|---|---|
+| Actual | Sube al hueco superior, **encogiendo y atenuándose** |
+| Superior anterior | Sigue subiendo y **se desvanece por completo** |
+| Siguiente | Sube al centro, **creciendo y ganando opacidad** |
+| Nueva siguiente | **Entra con fundido desde abajo** al hueco recién liberado |
+
+Cada movimiento se mide desde el hueco que la línea ocupaba antes (transición FLIP), así
+que cada una arranca exactamente donde el ojo la vio por última vez. Los acordes hacen lo
+mismo en horizontal: el siguiente entra desde la derecha mientras el actual sale hacia la
+izquierda.
 
 Solo un avance real de un paso merece el deslizamiento. Un salto de posición, un cambio de
 canción o una edición no son un paso en la cinta, así que esos hacen **fundido** — deslizar
