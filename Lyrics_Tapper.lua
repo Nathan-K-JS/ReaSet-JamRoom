@@ -349,10 +349,18 @@ local first_frame = true
 -- cross-platform alias for the system default font; ReaImGui reads style
 -- hints appended directly to the family string ('b' = bold, 'i' = italic —
 -- e.g. 'sans-serifb'), NOT a separate flags argument: reaper.ImGui_CreateFont
--- takes exactly 2 arguments (family, size) on this install. Creation is
--- wrapped in pcall regardless: if it fails for any reason, FONT.x stays nil
--- and every push site below just skips it (see push_font/pop_font), falling
--- back to the default font instead of erroring the whole script out.
+-- takes exactly 2 arguments (family, size) on this install.
+--
+-- This ReaImGui build also requires the render size to be passed again on
+-- EVERY PushFont call (reaper.ImGui_PushFont(ctx, font, size) — 3 args
+-- minimum, the "scalable fonts" API), rather than only at creation time. So
+-- each FONT.x entry carries its own {font, size} pair, and push_font()
+-- destructures it instead of taking a bare font handle.
+--
+-- Creation is wrapped in pcall regardless: if it fails for any reason,
+-- FONT.x stays nil and every push site below just skips it (see
+-- push_font/pop_font), falling back to the default font instead of erroring
+-- the whole script out.
 local FONT = {}
 local function safe_create_font(size, bold)
     local ok, font = pcall(function()
@@ -361,14 +369,14 @@ local function safe_create_font(size, bold)
         reaper.ImGui_Attach(ctx, f)
         return f
     end)
-    if ok then return font end
+    if ok then return { font = font, size = size } end
     return nil
 end
 FONT.current = safe_create_font(28, true)
 FONT.tap     = safe_create_font(19, true)
 
-local function push_font(f) if f then reaper.ImGui_PushFont(ctx, f) end end
-local function pop_font(f)  if f then reaper.ImGui_PopFont(ctx)     end end
+local function push_font(f) if f then reaper.ImGui_PushFont(ctx, f.font, f.size) end end
+local function pop_font(f)  if f then reaper.ImGui_PopFont(ctx)                  end end
 
 local function main_loop()
     -- Global keyboard shortcut: Space to tap
