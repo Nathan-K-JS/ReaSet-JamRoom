@@ -2273,10 +2273,11 @@
            JS drives this per element (see _flipFrom / _enterFrom / _ghostOut);
            the durations and easing live there so all four stay in step. */
         .lyrics-stack {
-            display: flex;
-            flex-direction: column;
-            align-items: center;
+            position: relative;
+            flex: 1;
             width: 100%;
+            perspective: 1100px;
+            transform-style: preserve-3d;
         }
 
         /* Non-sequential changes (seek, song change) crossfade: sliding would
@@ -2310,29 +2311,25 @@
             .chord-ctx.anim { animation: none !important; }
         }
 
-        /* Current verse: inherits the size/weight/colour set in the gear popover. */
-        .lyrics-cur {
+        /* Verses sit on a vertical 3D drum (Cover Flow, rotated 90°). Every line
+           is styled identically — size, depth, tilt and opacity all come from
+           its slot transform, which is what lets a line smoothly BECOME the one
+           above or below it instead of snapping between two different styles. */
+        .lyrics-line {
+            position: absolute;
+            left: 0;
+            right: 0;
+            top: 50%;
             display: block;
+            text-align: center;
+            line-height: 1.3;
+            transform-origin: center center;
+            will-change: transform, opacity;
         }
 
-        /* Surrounding verses: sized in `em` so one font-size slider scales all
-           three lines together, and dimmed so the active line stays dominant. */
-        .lyrics-ctx {
-            display: block;
-            font-size: 0.42em;
-            opacity: 0.34;
-            font-weight: 500;
-            line-height: 1.45;
-            font-style: italic;
-            max-width: 90%;
-        }
-
-        .lyrics-prev { margin-bottom: 0.5em; }
-        .lyrics-next { margin-top: 0.5em; }
-
-        /* Hidden rather than removed: keeps the current line vertically centred
-           instead of letting it jump when a neighbour is missing. */
-        .lyrics-ctx.empty { visibility: hidden; }
+        /* Hidden rather than removed: the slot stays occupied, so the drum keeps
+           its spacing when a neighbouring verse is missing. */
+        .lyrics-line.empty { visibility: hidden; }
 
         .lyrics-content.no-context .lyrics-ctx { display: none; }
 
@@ -4820,39 +4817,82 @@
         // ordinary one-step advance from an arbitrary jump.
         var _lyrLast = { p: '', t: '', n: '' };
 
+        // ── Vertical Cover Flow drum ────────────────────────────────────────────
+        // Slots are positions ON A CYLINDER, numbered from the centre:
+        //   -2  rotated past the top edge, invisible (where a line exits)
+        //   -1  previous verse, tilted back over the top
+        //    0  current verse, square to the viewer
+        //   +1  next verse, tilted back under the bottom
+        //   +2  below the bottom edge, invisible (where a line enters)
+        //
+        // The transform reads: pull back by the radius, rotate around the drum
+        // axis, then push out along the NOW-ROTATED axis. That is what makes a
+        // line orbit rather than merely slide — it recedes as it turns away.
+        // At slot 0 the two translateZ cancel, so the current verse sits at
+        // neutral depth and stays crisp.
+        //
+        // The radius is in `em`, so the whole drum scales with the font size
+        // chosen in the gear popover.
+        var LYR_RADIUS = 2.5;    // em
+        var LYR_STEP   = 48;     // degrees between neighbouring slots
+        var LYR_SLOT   = {
+            "-2": { sc: 0.34, op: 0    },
+            "-1": { sc: 0.44, op: 0.34 },
+             "0": { sc: 1,    op: 1    },
+             "1": { sc: 0.44, op: 0.34 },
+             "2": { sc: 0.34, op: 0    }
+        };
+
+        function _lyrSlotCss(i) {
+            var s = LYR_SLOT[String(i)];
+            return "translate(0,-50%)" +
+                   " translateZ(-" + LYR_RADIUS + "em)" +
+                   " rotateX(" + (-i * LYR_STEP) + "deg)" +
+                   " translateZ(" + LYR_RADIUS + "em)" +
+                   " scale(" + s.sc + ")";
+        }
+
+        function _lyrSlot(el, i, animated) {
+            if (!el) return;
+            el.style.transition = animated ? _beltTransition() : "none";
+            el.style.transform  = _lyrSlotCss(i);
+            el.style.opacity    = LYR_SLOT[String(i)].op;
+        }
+
         function _lyricsStackHtml(p, t, n, lines) {
             // Missing neighbours keep their box (class "empty" hides them via
             // visibility) so the active line never jumps. Rendered even when the
             // current verse is empty: during an instrumental gap, seeing what
             // just passed and what is coming is exactly what the performer
             // wants. Diagnostics go to the faint bottom strip, never in here.
-            return '<span class="lyrics-ctx lyrics-prev' + (p === "" ? " empty" : "") + '">' +
+            return '<span class="lyrics-line lyrics-ctx lyrics-prev' + (p === "" ? " empty" : "") + '">' +
                        (p === "" ? "&nbsp;" : _fmtLyric(p)) + '</span>' +
-                   '<span class="lyrics-cur">' +
+                   '<span class="lyrics-line lyrics-cur">' +
                        (t === "" ? "&nbsp;" : lines.join('<br>')) + '</span>' +
-                   '<span class="lyrics-ctx lyrics-next' + (n === "" ? " empty" : "") + '">' +
+                   '<span class="lyrics-line lyrics-ctx lyrics-next' + (n === "" ? " empty" : "") + '">' +
                        (n === "" ? "&nbsp;" : _fmtLyric(n)) + '</span>';
         }
 
-        // Renders the three-line stack, handing each line its OWN role change.
+        // Renders the three verses as a vertical Cover Flow drum.
         //
-        // Moving the three as one rigid block was wrong: it kept every line at a
-        // fixed size and opacity and just shifted the group, so nothing ever
-        // *became* anything else. A line changing role has to travel AND morph.
-        // On a forward step, four things happen at once but differently:
+        // Advancing a verse rotates the whole drum by exactly one slot. Every
+        // line simply moves to the slot NEXT DOOR, and because a slot carries
+        // its own tilt, depth, scale and opacity, each line turns and recedes
+        // along the way instead of jumping between two flat styles:
         //
-        //   current  → rises into the upper slot, shrinking and dimming
-        //   old upper→ keeps rising and fades out completely (a detached ghost,
-        //              since it has no counterpart left in the new DOM)
-        //   next     → rises into the centre, growing and brightening
-        //   new next → fades in from below into the slot just vacated
+        //   current   slot  0 → -1   turns away over the top, shrinking
+        //   old upper slot -1 → -2   keeps turning past the edge, gone
+        //   next      slot +1 →  0   swings up square to the viewer, growing
+        //   new verse slot +2 → +1   rotates up into view from below
         //
-        // Each is a FLIP from the slot it previously occupied, so it starts
-        // exactly where the eye last saw it. A rewind mirrors the whole thing.
+        // Expressing it as "everything shifts one slot" is what makes the four
+        // movements a single coherent rotation rather than four separate
+        // animations that happen to run together. A rewind is the same thing
+        // with the slot indices negated.
         //
-        // Only a genuine one-step move earns this. A seek, a song change or an
-        // edit is not a step along the belt, so those crossfade instead —
-        // animating them would imply a continuity that isn't real.
+        // Only a genuine one-step move earns the rotation. A seek, a song change
+        // or an edit is not a step around the drum, so those crossfade — rotating
+        // them would imply a continuity that isn't real.
         function _renderLyrics(p, t, n, lines) {
             var host = document.getElementById("lyrics-content");
             if (!host) return;
@@ -4864,12 +4904,10 @@
             }
 
             // The verse that just arrived in the middle is the one that was
-            // sitting in a neighbouring slot: that is a step along the belt.
+            // sitting in a neighbouring slot: that is a step around the drum.
             // Deliberately NOT requiring the other slots to line up too — coming
             // out of an instrumental gap the middle was empty, yet the incoming
-            // verse still physically travels up from the bottom slot.
-            // Animating a hidden panel would measure zero-size rects and fling
-            // ghosts into the corner of the screen, so gate on visibility too.
+            // verse still rotates up from the slot below.
             var animate = !_reduceMotion && lyricsVisible;
             var dir = 0;
             if (animate && t !== "") {
@@ -4877,47 +4915,55 @@
                 else if (_lyrLast.p !== "" && t === _lyrLast.p) dir = -1;  // moved back
             }
 
-            // FIRST — capture every slot before the DOM is replaced.
-            var oPrev = stack.querySelector(".lyrics-prev");
-            var oCur  = stack.querySelector(".lyrics-cur");
-            var oNext = stack.querySelector(".lyrics-next");
-            var sPrev = null, sCur = null, sNext = null, ghost = null;
+            // The line rotating off the drum has no counterpart in the new DOM,
+            // so it rides out on a clone. Kept INSIDE the stack so it shares the
+            // same perspective and em basis as the real lines.
+            var exiting = null;
             if (dir !== 0) {
-                sPrev = _slotState(oPrev);
-                sCur  = _slotState(oCur);
-                sNext = _slotState(oNext);
-                // The line leaving the belt has no counterpart in the new DOM,
-                // so it needs a clone to fade out on.
-                ghost = _captureGhost(dir === 1 ? oPrev : oNext);
+                var leaving = stack.querySelector(dir === 1 ? ".lyrics-prev" : ".lyrics-next");
+                if (leaving && (leaving.innerText || "").replace(/\u00a0/g, "").trim() !== "") {
+                    exiting = leaving.cloneNode(true);
+                }
             }
 
             stack.classList.remove("fading");
             stack.innerHTML = _lyricsStackHtml(p, t, n, lines);
 
+            var eP = stack.querySelector(".lyrics-prev");
+            var eC = stack.querySelector(".lyrics-cur");
+            var eN = stack.querySelector(".lyrics-next");
+
             if (dir === 0) {
+                // Park each line on its slot with no motion, then crossfade.
+                _lyrSlot(eP, -1, false);
+                _lyrSlot(eC,  0, false);
+                _lyrSlot(eN,  1, false);
                 if (animate) { void stack.offsetWidth; stack.classList.add("fading"); }
                 _lyrLast = { p: p, t: t, n: n };
                 return;
             }
 
-            var eP = stack.querySelector(".lyrics-prev");
-            var eC = stack.querySelector(".lyrics-cur");
-            var eN = stack.querySelector(".lyrics-next");
+            var d = dir;                 // +1 forward, -1 backward
+            if (exiting) stack.appendChild(exiting);
 
-            // LAST + INVERT + PLAY, per line — four distinct movements that
-            // happen together but are NOT the same movement.
-            if (dir === 1) {
-                var beltDy = (sCur && eP) ? (eP.getBoundingClientRect().top - sCur.rect.top) : 0;
-                _flipFrom(eP, sCur);              // current  → upper slot (shrink + dim)
-                _flipFrom(eC, sNext);             // next     → centre     (grow + brighten)
-                _enterFrom(eN, '0', '0.9em');     // new line → arrives from below
-                _ghostOut(ghost, '0', beltDy + 'px');   // old upper keeps rising, fades out
-            } else {
-                var beltDyB = (sCur && eN) ? (eN.getBoundingClientRect().top - sCur.rect.top) : 0;
-                _flipFrom(eN, sCur);              // current  → lower slot
-                _flipFrom(eC, sPrev);             // previous → centre
-                _enterFrom(eP, '0', '-0.9em');    // new line → arrives from above
-                _ghostOut(ghost, '0', beltDyB + 'px');
+            // FROM — every line placed on the slot it occupied a moment ago.
+            _lyrSlot(eP, -1 + d, false);
+            _lyrSlot(eC,  0 + d, false);
+            _lyrSlot(eN,  1 + d, false);
+            _lyrSlot(exiting, -1 * d, false);
+
+            void stack.offsetWidth;      // commit the pre-rotation state
+
+            // TO — one slot around the drum.
+            _lyrSlot(eP, -1, true);
+            _lyrSlot(eC,  0, true);
+            _lyrSlot(eN,  1, true);
+            _lyrSlot(exiting, -2 * d, true);
+
+            if (exiting) {
+                setTimeout(function () {
+                    if (exiting.parentNode) exiting.parentNode.removeChild(exiting);
+                }, BELT_MS + 80);
             }
 
             _lyrLast = { p: p, t: t, n: n };
