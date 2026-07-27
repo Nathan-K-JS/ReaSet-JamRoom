@@ -2413,8 +2413,21 @@
             color: var(--text2);
         }
 
-        #chord-display {
+        /* Row that holds previous | current | next. The shared font-size lives
+           here so the side chords scale with the centre one automatically. */
+        .chord-row {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            width: 100%;
+            gap: 0.3em;
             font-size: 15vw;
+            line-height: 1;
+        }
+
+        #chord-display {
+            font-size: 1em;
+            flex: 0 0 auto;
             font-weight: 900;
             color: var(--color-brand);
             font-family: var(--font-heading);
@@ -2422,6 +2435,32 @@
             text-shadow: 0 0 30px rgba(30, 215, 96, 0.2);
             transition: all 0.15s;
         }
+
+        /* Neighbours: `flex: 1 1 0` on BOTH sides reserves equal space, so the
+           current chord stays optically centred no matter how long the
+           neighbouring chord names are. */
+        .chord-ctx {
+            flex: 1 1 0;
+            min-width: 0;
+            font-size: 0.3em;
+            opacity: 0.28;
+            font-weight: 700;
+            font-family: var(--font-heading);
+            color: var(--color-brand);
+            letter-spacing: 2px;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+
+        /* Hug the current chord: previous sits to its left, next to its right. */
+        .chord-prev { text-align: right; }
+        .chord-next { text-align: left; }
+
+        /* Hidden, not removed — keeps the centre chord from shifting. */
+        .chord-ctx.empty { visibility: hidden; }
+
+        #chords-panel.no-context .chord-ctx { display: none; }
 
         .chord-label {
             font-size: 11px;
@@ -3975,7 +4014,11 @@
     <!-- CHORDS PANEL -->
     <div id="chords-panel">
         <span class="chord-close-btn" onclick="toggleChordsPanel()">✕</span>
-        <div id="chord-display">&#9834;</div>
+        <div class="chord-row">
+            <span class="chord-ctx chord-prev empty" id="chord-prev"></span>
+            <div id="chord-display">&#9834;</div>
+            <span class="chord-ctx chord-next empty" id="chord-next"></span>
+        </div>
         <div class="chord-label" id="chord-label">Enable the Lua chords script in REAPER</div>
     </div>
 
@@ -4207,7 +4250,7 @@
         wwr_req_recur("MARKER", 1000);
         // X-Raym exact approach: poll PROJEXTSTATE every 10ms batched
         wwr_req_recur("GET/PROJEXTSTATE/XR_Lyrics/text;GET/PROJEXTSTATE/XR_Lyrics/prev;GET/PROJEXTSTATE/XR_Lyrics/next", 10);
-        wwr_req_recur("GET/PROJEXTSTATE/XR_Chords/text", 200);
+        wwr_req_recur("GET/PROJEXTSTATE/XR_Chords/text;GET/PROJEXTSTATE/XR_Chords/prev;GET/PROJEXTSTATE/XR_Chords/next", 200);
         // Auto-detect Reaset.lua + read the lyrics/chords bridge diagnostics.
         // One-shot probe so the empty-state message is accurate immediately,
         // then a light refresh (these are tiny replies).
@@ -4623,6 +4666,11 @@
         var chordsText = "";
         var chordsVisible = false;
         var chordsLastRaw = "";
+        var xr_chords_text = "";
+        var xr_chords_prev = "";
+        var xr_chords_next = "";
+        var chordsLastPrev = "";
+        var chordsLastNext = "";
 
         // ── Lyrics/Chords bridge diagnostics (published by Reaset.lua) ───────────
         // null = no reply yet. "" = script not running. "!NOTRACK" / "!NOSWS" =
@@ -4741,9 +4789,13 @@
                 if (tok.length > 1 && tok[1] === "XR_Lyrics" && tok[2] === "prev") {
                     xr_lyrics_prev = tok.slice(3).join('\t') || "";
                 }
-                if (tok.length > 1 && tok[1] === "XR_Chords" && tok[2] === "text") {
-                    var newChord = tok.slice(3).join('\t') || "";
-                    if (newChord !== chordsLastRaw) { chordsLastRaw = newChord; updateChordsDisplay(newChord); }
+                // Chords: collect all three keys; rendering happens once below,
+                // after the whole reply is parsed, so a change to any of them
+                // repaints the row exactly once.
+                if (tok.length > 1 && tok[1] === "XR_Chords") {
+                    if (tok[2] === "text") xr_chords_text = tok.slice(3).join('\t') || "";
+                    if (tok[2] === "prev") xr_chords_prev = tok.slice(3).join('\t') || "";
+                    if (tok[2] === "next") xr_chords_next = tok.slice(3).join('\t') || "";
                 }
 
                 // === TRANSPORT & REGION handling ===
@@ -4855,6 +4907,17 @@
                         // the sub-region — prevents JS from re-jumping after Lua finishes.
                         break;
                 }
+            }
+
+            // === CHORDS DISPLAY (current + surrounding) ===
+            // Repaint once per reply, only when something actually changed.
+            if (xr_chords_text !== chordsLastRaw ||
+                xr_chords_prev !== chordsLastPrev ||
+                xr_chords_next !== chordsLastNext) {
+                chordsLastRaw  = xr_chords_text;
+                chordsLastPrev = xr_chords_prev;
+                chordsLastNext = xr_chords_next;
+                updateChordsDisplay();
             }
 
             // === X-RAYM LYRICS DISPLAY (exact logic from X-Raym_Lyrics.html) ===
@@ -6738,28 +6801,52 @@
             updateTopTabs();
         }
 
-        function updateChordsDisplay(raw) {
+        // Normalises one published chord note down to its leading token, the
+        // same way the single-chord display always has.
+        function _chordToken(raw) {
+            if (!raw || raw === "--XR-NO-TEXT--") return "";
+            // Lua returns \r?\n as <br>; REAPER separates fields with \t.
+            var s = raw.replace(/<br>/gi, " ").replace(/\t/g, " ").trim();
+            if (s === "") return "";
+            var parts = s.split(/[|, -]+/);
+            return (parts[0] || s).trim();
+        }
+
+        // Paints previous | current | next. A missing neighbour keeps its box
+        // (class "empty" hides it via visibility) so the current chord never
+        // shifts sideways when one appears or disappears.
+        function _setChordCtx(id, token) {
+            var el = document.getElementById(id);
+            if (!el) return;
+            el.innerText = token;
+            if (token === "") el.classList.add("empty");
+            else el.classList.remove("empty");
+        }
+
+        function updateChordsDisplay() {
             var disp = document.getElementById("chord-display");
             if (!disp) return;
-            if (!raw || raw === "--XR-NO-TEXT--" || raw === "") {
+
+            var cur = _chordToken(xr_chords_text);
+            if (cur === "") {
                 disp.innerText = "♪";
+                _setChordCtx("chord-prev", "");
+                _setChordCtx("chord-next", "");
                 document.getElementById("chord-label").innerText = _bridgeHintText('chords');
                 if (typeof canvasOpen !== "undefined" && canvasOpen && document.getElementById("cw-content-chords")) {
                     document.getElementById("cw-content-chords").innerText = "♪";
                 }
                 return;
             }
-            // Lua returns \r?\n as <br>
-            // JS split them with \t because REAPER separates by \t in wwr_req text. 
-            // Normalize them to spaces.
-            var chords = raw.replace(/<br>/gi, " ").replace(/\t/g, " ").trim();
-            // Show just the first chord for now as the "current" one
-            var parts = chords.split(/[|, -]+/);
-            var first = (parts[0] || chords).trim();
-            disp.innerText = first || "♪";
-            document.getElementById("chord-label").innerText = "Chords: " + chords;
+
+            disp.innerText = cur;
+            _setChordCtx("chord-prev", _chordToken(xr_chords_prev));
+            _setChordCtx("chord-next", _chordToken(xr_chords_next));
+
+            var full = xr_chords_text.replace(/<br>/gi, " ").replace(/\t/g, " ").trim();
+            document.getElementById("chord-label").innerText = "Chords: " + full;
             if (typeof canvasOpen !== "undefined" && canvasOpen && document.getElementById("cw-content-chords")) {
-                document.getElementById("cw-content-chords").innerText = first || "♪";
+                document.getElementById("cw-content-chords").innerText = cur;
             }
         }
 

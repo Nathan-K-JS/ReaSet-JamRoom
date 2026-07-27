@@ -230,6 +230,17 @@ A discreet **⚙ gear** in the panel header opens a small popover to adjust:
 
 All four persist in `localStorage`, so your reading setup survives a reload.
 
+#### Chords panel — three-across view
+The chords panel uses the same neighbour logic, laid out **horizontally**: the previous
+chord sits to the **left** and the next chord to the **right** of the current one, both
+smaller and dimmed. Equal space is reserved on both sides, so the current chord stays
+optically centred no matter how long the neighbouring chord names are.
+
+> **One item = no neighbours.** The sides read the *previous* and *next* **items** on the
+> `chords` track. If a single item spans the whole song, there are no neighbours to show
+> and the sides stay blank — that is correct, not a fault. Split the chords into one item
+> per change to get the left/right context.
+
 ### Lyrics & Chords Track Naming
 ReaSet reads lyrics and chords from **two dedicated REAPER tracks**, identified by their
 name. `Reaset.lua` scans the project and looks for these two keywords:
@@ -619,6 +630,17 @@ Un **⚙ engranaje** discreto en la cabecera del panel abre un popover para ajus
 
 Los cuatro ajustes se guardan en `localStorage`, así que tu configuración de lectura
 sobrevive a una recarga.
+
+#### Panel de acordes — vista de tres en línea
+El panel de acordes usa la misma lógica de vecinos, pero en **horizontal**: el acorde
+anterior a la **izquierda** y el siguiente a la **derecha** del actual, ambos más pequeños
+y atenuados. Se reserva el mismo espacio a ambos lados, así el acorde actual queda
+ópticamente centrado por largos que sean los nombres de los acordes vecinos.
+
+> **Un solo item = sin vecinos.** Los laterales leen el item *anterior* y *siguiente* de la
+> pista `chords`. Si un único item abarca toda la canción, no hay vecinos que mostrar y los
+> laterales quedan en blanco — eso es correcto, no un fallo. Divide los acordes en un item
+> por cambio para tener el contexto izquierda/derecha.
 
 ### Nombres de las pistas de Letras y Acordes
 ReaSet lee las letras y los acordes desde **dos pistas dedicadas de REAPER**, identificadas

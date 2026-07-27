@@ -363,10 +363,10 @@ local function bridge_tick(b, cur_pos, tick)
     end
 end
 
--- Lyrics publishes prev/next as well (the panel shows surrounding verses).
--- Chords does not: it would only add project writes nothing consumes.
+-- Both panels show their neighbours: lyrics stacks them vertically, chords
+-- places them left/right of the current one.
 local lyrics = bridge_new("lyrics", "XR_Lyrics", "lyricsTrack", true)
-local chords = bridge_new("chords", "XR_Chords", "chordsTrack", false)
+local chords = bridge_new("chords", "XR_Chords", "chordsTrack", true)
 
 ----------------------------------------------------------------------------
 -- MAIN DEFER LOOP  — drives all three subsystems from one tick
@@ -424,6 +424,7 @@ local function on_exit()
     reaper.SetProjExtState(0, "XR_Lyrics", "prev", "")
     reaper.SetProjExtState(0, "XR_Lyrics", "next", "")
     reaper.SetProjExtState(0, "XR_Chords", "text", "")
+    reaper.SetProjExtState(0, "XR_Chords", "prev", "")
     reaper.SetProjExtState(0, "XR_Chords", "next", "")
     -- Clear bridge diagnostics so the UI reports "script not running".
     reaper.SetExtState(SEC, "lyricsTrack", "", false)
