@@ -4583,7 +4583,7 @@
                 if (n === "--XR-NO-TEXT--") n = "";
                 if (t !== xr_lyrics_last || n !== xr_lyrics_last_next) {
                     if (t === "") {
-                        lyricsContent.innerHTML = '<div class="lyrics-no-data">Sin datos de letra.<br><small>Activa el script Lua <b>X-Raym Convert Lyrics</b> en REAPER<br>con un track llamado <b>"lyrics"</b> con notas en los items.</small></div>';
+                        lyricsContent.innerHTML = '<div class="lyrics-no-data">Sin datos de letra.<br><small>Ejecuta el script Lua <b>Reaset.lua</b> en REAPER<br>y usa un track llamado <b>lyrics</b> (se aceptan prefijos: <b>*Lyrics</b>, <b>01 Lyrics</b>)<br>con las letras en las notas de los items.</small></div>';
                     } else {
                         // Exact X-Raym method: split on \\n, join with <br>
                         var lines = t.split("\\n");
@@ -6418,7 +6418,7 @@
             var content = document.getElementById("lyrics-content");
             if (!content) return;
             if (!raw || raw === "--XR-NO-TEXT--" || raw === "") {
-                content.innerHTML = '<div class="lyrics-no-data">Sin datos de letra.<br><small>Asegurate de tener el script Lua corriendo en REAPER<br>con un track llamado <b>"lyrics"</b> y notas en los items.</small></div>';
+                content.innerHTML = '<div class="lyrics-no-data">Sin datos de letra.<br><small>Asegurate de tener <b>Reaset.lua</b> corriendo en REAPER<br>y un track llamado <b>lyrics</b> (se aceptan prefijos: <b>*Lyrics</b>, <b>01 Lyrics</b>)<br>con las letras en las notas de los items.</small></div>';
                 return;
             }
             // X-Raym stores newlines as literal \n sequences — split on them
@@ -6451,7 +6451,7 @@
             if (!disp) return;
             if (!raw || raw === "--XR-NO-TEXT--" || raw === "") {
                 disp.innerText = "♪";
-                document.getElementById("chord-label").innerText = "Enable the Lua chords script in REAPER";
+                document.getElementById("chord-label").innerText = 'Run Reaset.lua + add a "chords" track (prefixes OK: *Chords)';
                 if (typeof canvasOpen !== "undefined" && canvasOpen && document.getElementById("cw-content-chords")) {
                     document.getElementById("cw-content-chords").innerText = "♪";
                 }

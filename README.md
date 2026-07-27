@@ -9,6 +9,7 @@
 - [5) Installation](#5-installation)
 - [6) Usage setup](#6-usage-setup)
 - [7) Usage Manual](#7-interactive-usage-manual)
+  - [Lyrics & Chords Track Naming](#lyrics--chords-track-naming)
   - [Display Filters](#display-filters)
   - [Region Name Command Reference](#region-name-command-reference)
 - [8) Keyboard Shortcuts](#8-keyboard-shortcuts)
@@ -105,11 +106,17 @@ Final functional validation was performed in REAPER with real setlist usage test
 > `Requirements/` (`ReaSet_NativeLoop.lua` and the two X-Raym Lyrics/Chords
 > converters). You only need them if you prefer running the subsystems
 > separately. For a normal setup, `Reaset.lua` replaces all three.
+> Note that the legacy scripts require the **exact** track names `lyrics` / `chords` —
+> prefix support (`*Lyrics`) exists only in `Reaset.lua`.
 
 ### Required tracks for lyrics/chords
-- Track named exactly: `lyrics`
-- Track named exactly: `chords`
+- A track whose name is `lyrics` — feeds the 🎤 Lyrics panel.
+- A track whose name is `chords` — feeds the 🎸 Chords panel.
 - Each item must contain text in **Item Notes**.
+
+Name matching is **case-insensitive** and tolerates prefixes/suffixes such as
+`*Lyrics`, `#Chords` or `01 Lyrics`. Both tracks are **optional**.
+See [Lyrics & Chords Track Naming](#lyrics--chords-track-naming) for the full rules.
 
 ### Script compatibility
 Scripts use `reaper.ULT_GetMediaItemNote`.
@@ -205,6 +212,38 @@ Copy to REAPER web folder (where `main.js` is located):
 ### Display Modes & Canvas
 - **Live View**: Triggers a performance-focused layout showing a gigantic track name, progress bar, time remaining, the next queued song, and localized transport controls.
 - **Lyrics & Chords (Floating Widgets)**: You can overlay floating widgets dynamically synced to the `Lyrics` and `Chords` text tracks on REAPER. They contain a contextual toolbar to adjust font sizes, typeface, and colors mapping locally on your screen.
+
+### Lyrics & Chords Track Naming
+ReaSet reads lyrics and chords from **two dedicated REAPER tracks**, identified by their
+name. `Reaset.lua` scans the project and looks for these two keywords:
+
+| Panel | Track keyword |
+|---|---|
+| 🎤 Lyrics | `lyrics` |
+| 🎸 Chords | `chords` |
+
+**The rule:** matching is case-insensitive, and any *symbol* decoration or *numbering*
+around the keyword is ignored. Strip the leading symbols/numbers and the trailing
+symbols — whatever remains must be **exactly** the word `lyrics` or `chords`.
+
+| Track name | Detected | Why |
+|---|---|---|
+| `lyrics` · `Lyrics` · `LYRICS` | ✅ | case is ignored |
+| `*Lyrics` · `**Chords**` | ✅ | asterisk decoration stripped |
+| `#Chords` · `-- Lyrics` · `[Chords]` · `>Lyrics` | ✅ | any leading/trailing symbols stripped |
+| `01 Lyrics` · `3 - Chords` | ✅ | leading numbering stripped |
+| `* 01 - Lyrics` | ✅ | mixed prefixes unwind in any order |
+| `Backing Lyrics` · `Lyrics Bus` · `Chords Gtr` | ❌ | an extra **word** remains |
+
+Extra words never match — that is deliberate, so ordinary audio tracks that happen to
+contain the word "lyrics"/"chords" are left alone. If two tracks match the same keyword,
+the **topmost** one in the track list wins.
+
+The text itself lives in **Item Notes** (double-click an item → *Notes*), one item per
+lyric/chord block; the item's position on the timeline is what syncs it to playback.
+
+Both tracks are **optional**: if `lyrics` or `chords` is missing, that panel simply stays
+idle and everything else (transport, loops, setlist) keeps working.
 
 ### Track List Interaction
 - Tracks containing sub-sections will display a dropdown button (Chevron). Expanding it allows individual targeting of nested sub-regions (e.g. Intro, Chorus, Outro).
@@ -329,6 +368,7 @@ ReaSet inherently supports the following global keyboard bindings to streamline 
 - [5) Instalación](#5-instalación)
 - [6) Configuración de uso](#6-configuración-de-uso)
 - [7) Manual de uso](#7-manual-de-uso-interactivo)
+  - [Nombres de las pistas de Letras y Acordes](#nombres-de-las-pistas-de-letras-y-acordes)
   - [Filtros de pantalla](#filtros-de-pantalla)
   - [Referencia de comandos en nombres de región](#referencia-de-comandos-en-nombres-de-región)
 - [8) Atajos de teclado](#8-atajos-de-teclado)
@@ -425,11 +465,18 @@ La validación funcional final se hizo en REAPER con pruebas reales de uso en se
 > `Requirements/` (`ReaSet_NativeLoop.lua` y los dos convertidores de X-Raym).
 > Solo los necesitas si prefieres ejecutar los subsistemas por separado. Para
 > una instalación normal, `Reaset.lua` reemplaza a los tres.
+> Ten en cuenta que los scripts legacy exigen los nombres **exactos** `lyrics` / `chords`:
+> el soporte de prefijos (`*Lyrics`) existe únicamente en `Reaset.lua`.
 
 ### Pistas requeridas para letras/acordes
-- Pista llamada exactamente: `lyrics`
-- Pista llamada exactamente: `chords`
+- Una pista cuyo nombre sea `lyrics` — alimenta el panel 🎤 Letras.
+- Una pista cuyo nombre sea `chords` — alimenta el panel 🎸 Acordes.
 - Cada item debe tener texto en **Item Notes**.
+
+El nombre se compara **sin distinguir mayúsculas** y admite prefijos/sufijos como
+`*Lyrics`, `#Chords` o `01 Lyrics`. Ambas pistas son **opcionales**.
+Ver [Nombres de las pistas de Letras y Acordes](#nombres-de-las-pistas-de-letras-y-acordes)
+para las reglas completas.
 
 ### Compatibilidad de scripting
 Los scripts usan `reaper.ULT_GetMediaItemNote`.
@@ -526,6 +573,40 @@ Copiar en la carpeta web de REAPER (donde existe `main.js`):
 ### Modos y herramientas (Canvas)
 - **Live View (Modo Directo)**: Activa una interfaz enfocada para performance con nombre gigante de la canción actual, progreso, siguiente canción y botones de transporte.
 - **Letras y Acordes (Widgets fltantes)**: Puedes activar la visión superpuesta de pistas de Letras (`Lyrics`) y Acordes (`Chords`). En la esquina superior derecha del widget dispones de un selector de fuentes, tamaño, y personalización de color para adaptarlo a tu pantalla. 
+
+### Nombres de las pistas de Letras y Acordes
+ReaSet lee las letras y los acordes desde **dos pistas dedicadas de REAPER**, identificadas
+por su nombre. `Reaset.lua` recorre el proyecto buscando estas dos palabras clave:
+
+| Panel | Palabra clave |
+|---|---|
+| 🎤 Letras | `lyrics` |
+| 🎸 Acordes | `chords` |
+
+**La regla:** no distingue mayúsculas de minúsculas, e ignora cualquier decoración de
+*símbolos* o *numeración* alrededor de la palabra clave. Se quitan los símbolos/números
+del inicio y los símbolos del final — lo que quede debe ser **exactamente** la palabra
+`lyrics` o `chords`.
+
+| Nombre de pista | ¿Detectada? | Por qué |
+|---|---|---|
+| `lyrics` · `Lyrics` · `LYRICS` | ✅ | las mayúsculas se ignoran |
+| `*Lyrics` · `**Chords**` | ✅ | se quitan los asteriscos |
+| `#Chords` · `-- Lyrics` · `[Chords]` · `>Lyrics` | ✅ | se quita cualquier símbolo inicial/final |
+| `01 Lyrics` · `3 - Chords` | ✅ | se quita la numeración inicial |
+| `* 01 - Lyrics` | ✅ | los prefijos mixtos se resuelven en cualquier orden |
+| `Backing Lyrics` · `Lyrics Bus` · `Chords Gtr` | ❌ | queda una **palabra** extra |
+
+Las palabras extra nunca coinciden: es intencional, para que las pistas de audio normales
+que contienen la palabra "lyrics"/"chords" no sean capturadas por error. Si dos pistas
+coinciden con la misma palabra clave, gana la que esté **más arriba** en la lista de pistas.
+
+El texto va en las **notas del item** (doble clic en el item → *Notes*), un item por bloque
+de letra/acorde; la posición del item en la línea de tiempo es lo que lo sincroniza con la
+reproducción.
+
+Ambas pistas son **opcionales**: si falta `lyrics` o `chords`, ese panel simplemente queda
+inactivo y todo lo demás (transporte, loops, setlist) sigue funcionando.
 
 ### Interacción de Canciones (Filas)
 - Canciones con sub-secciones mostrarán un botón desplegable (Chevrón). Expándelo para ver/operar sobre las sub-regiones individualmente (Intro, Coro, etc.).

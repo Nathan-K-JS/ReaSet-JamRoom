@@ -168,12 +168,35 @@ local function bridge_new(track_name, ext_name)
     }
 end
 
+-- Normalises a track name for matching. The track must still BE the keyword —
+-- we only strip decoration around it, so detection stays predictable:
+--   • case is ignored            → "LYRICS", "Lyrics", "lyrics"
+--   • leading symbols are ignored → "*Lyrics", "##Chords", "-- lyrics", "[Chords]"
+--   • leading numbering ignored   → "01 Lyrics", "3 - Chords"
+--   • trailing symbols ignored    → "Lyrics*", "Chords --", "[Lyrics]"
+-- Anything that leaves extra WORDS behind does NOT match, on purpose:
+-- "Backing Lyrics" or "Lyrics Bus" stay ordinary audio tracks.
+local function normalize_track_name(name)
+    local s = name:lower()
+    -- Strip leading decoration repeatedly so mixed prefixes like "* 01 - " unwind
+    -- in any order. Each pass can only shorten s, so this always terminates.
+    local prev
+    repeat
+        prev = s
+        s = s:gsub("^[^%w]+", "")   -- symbols / spaces: * # - _ > / [ .
+        s = s:gsub("^%d+", "")      -- numbering: 01, 3, 12
+    until s == prev
+    s = s:gsub("[^%w]+$", "")       -- trailing symbols / spaces
+    return s
+end
+
+-- Returns the first track (top-down) whose normalised name equals the keyword.
 local function bridge_find_track(b)
     local n = reaper.CountTracks(0)
     for i = 0, n - 1 do
         local tr = reaper.GetTrack(0, i)
         local _, name = reaper.GetTrackName(tr)
-        if name:lower() == b.track_name then return tr end
+        if normalize_track_name(name) == b.track_name then return tr end
     end
     return nil
 end
