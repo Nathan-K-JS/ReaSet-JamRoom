@@ -469,6 +469,34 @@ courtesy layer — the network-level block is what actually holds.
 > the same network who knows the endpoint can already control it directly, with or without
 > ReaSet. Player mode stops *ReaSet* from being a way in; it does not lock the network down.
 
+#### Director PIN (optional)
+By default, choosing **Director** in the picker (or switching a badge from Músico to
+Director) needs nothing but a tap — fine for a solo user, less fine once a band shares one
+REAPER session and you don't want a curious tap on someone's phone to hand them the
+transport. A Director can set a PIN from the sidebar (**Setlist Sync → Set/Change Director
+PIN**); once set, *any* device actively choosing Director — not one recalling its already-
+stored choice on a refresh — is asked for it first.
+
+- The PIN itself is never sent anywhere as plain text: only a small hash is stored, in
+  REAPER's own persisted ExtState (survives a REAPER restart, same mechanism the native-loop
+  feature already relies on), so every device checks against the same value with no server.
+- Leave the prompt empty when setting it to remove the PIN entirely.
+- Like Player mode's own write-block, **this is a deterrent, not real security** — the hash
+  algorithm is intentionally simple, and REAPER's Web Interface still has no authentication
+  underneath any of this (see the box above). It stops an idle tap, not a determined person
+  with network access.
+
+#### Two Directors at once
+ReaSet now watches for this instead of staying silent about it: each Director quietly
+re-announces "I'm active" every few seconds while it holds the mode. If a second device
+actively *chooses* Director while another one is already announcing itself, it's warned
+before the switch completes and can back out. If a second Director appears later — mid-show,
+on an already-stored device that skipped that prompt on boot — a red banner says so for as
+long as the conflict lasts, then clears itself the moment the other Director closes its tab
+or its own heartbeat goes stale. Nothing is blocked either way; REAPER is still yours to
+choose to share on purpose (a fill-in Director covering a song, for instance) — you just
+can't end up in that state *by accident* without knowing it.
+
 #### Shared setlist sync (Director → Players)
 Order, and each song's skip/loop/chain flags, live in the browser's own `localStorage` —
 normally private to that one device. So that Players see the *Director's actual* setlist
@@ -486,10 +514,11 @@ writes to a file (`reaset_setlist_sync.json`) next to `ReaSet.html`; Players rea
 - **Known limits, by design, for this first pass:** only the active setlist's order and
   flags sync — not the full named-setlist library, and not the live queue/cue target
   (that's transient UI state; the actually-playing song already reaches Players for free
-  via REAPER's own transport). Two Directors pushing at nearly the same moment: last push
-  wins, with no conflict warning yet. A dropped chunk (rare, needs a mid-push network
-  hiccup) self-heals within about a second as the next tick retries — worst case, that one
-  push is silently skipped and the next edit's push supersedes it.
+  via REAPER's own transport). Two Directors pushing at nearly the same moment still means
+  last push wins — the conflict banner above warns you it's happening, but doesn't merge
+  the two pushes. A dropped chunk (rare, needs a mid-push network hiccup) self-heals within
+  about a second as the next tick retries — worst case, that one push is silently skipped
+  and the next edit's push supersedes it.
 
 ---
 
@@ -1029,6 +1058,36 @@ capa de cortesía — el bloqueo a nivel de red es lo que realmente sostiene la 
 > — cualquiera en la misma red que conozca el endpoint ya puede controlarlo directamente, con
 > o sin ReaSet. El modo Player evita que *ReaSet* sea una puerta de entrada; no cierra la red.
 
+#### PIN de Director (opcional)
+Por defecto, elegir **Director** en el selector (o pasar el badge de Músico a Director) no
+pide nada más que un tap — está bien para un solo usuario, menos bien cuando una banda
+comparte una sesión de REAPER y no querés que un tap curioso en el teléfono de alguien le
+entregue el transporte. Un Director puede poner un PIN desde el sidebar (**Setlist Sync →
+Set/Change Director PIN**); una vez configurado, cualquier dispositivo que elija Director
+activamente — no uno que recuerda su elección ya guardada en un refresco — lo pide primero.
+
+- El PIN en sí nunca viaja en texto plano: solo se guarda un hash pequeño, en el ExtState
+  persistido del propio REAPER (sobrevive un reinicio de REAPER, el mismo mecanismo que ya
+  usa la función de loop nativo), así que cada dispositivo verifica contra el mismo valor sin
+  necesidad de servidor.
+- Dejá el prompt vacío al configurarlo para quitar el PIN por completo.
+- Igual que el bloqueo de escritura del modo Player, **esto es un disuasivo, no seguridad
+  real** — el algoritmo de hash es deliberadamente simple, y el Web Interface de REAPER
+  sigue sin tener autenticación debajo de todo esto (ver el recuadro de arriba). Frena un tap
+  distraído, no a alguien decidido con acceso a la red.
+
+#### Dos Directores a la vez
+ReaSet ahora vigila esto en vez de quedarse callado al respecto: cada Director se
+reanuncia "estoy activo" cada pocos segundos mientras sostiene el modo. Si un segundo
+dispositivo *elige* Director mientras otro ya se está anunciando, se le avisa antes de
+completar el cambio y puede dar marcha atrás. Si un segundo Director aparece más tarde —
+en medio de un show, en un dispositivo que ya tenía el modo guardado y se saltó ese aviso al
+arrancar — un banner rojo lo indica mientras dure el conflicto, y se limpia solo en el
+momento en que el otro Director cierra su pestaña o su propio heartbeat queda obsoleto.
+Nada se bloquea en ningún caso — REAPER sigue siendo tuyo para compartir a propósito si
+querés (un Director de reemplazo cubriendo una canción, por ejemplo) — solo que ya no podés
+terminar en ese estado *por accidente* sin saberlo.
+
 #### Sincronización de setlist compartido (Director → Players)
 El orden y las banderas de skip/loop/chain de cada canción viven en el `localStorage` del
 propio navegador — normalmente privado a ese dispositivo. Para que los Players vean el
@@ -1049,10 +1108,11 @@ de `ReaSet.html`; los Players lo leen.
   las banderas del setlist activo — no toda la biblioteca de setlists nombrados, ni el
   objetivo de cola en vivo (es estado de UI transitorio; la canción realmente sonando ya le
   llega gratis a los Players vía el transporte de REAPER). Dos Directores empujando casi al
-  mismo tiempo: gana el último push, sin aviso de conflicto todavía. Un chunk perdido (raro,
-  necesita un corte de red justo en medio de un push) se autorepara en aproximadamente un
-  segundo cuando el siguiente tick reintenta — en el peor caso, ese push se salta en
-  silencio y el push de la siguiente edición lo reemplaza.
+  mismo tiempo sigue significando que gana el último push — el banner de conflicto de arriba
+  te avisa que está pasando, pero no combina los dos pushes. Un chunk perdido (raro, necesita
+  un corte de red justo en medio de un push) se autorepara en aproximadamente un segundo
+  cuando el siguiente tick reintenta — en el peor caso, ese push se salta en silencio y el
+  push de la siguiente edición lo reemplaza.
 
 ---
 

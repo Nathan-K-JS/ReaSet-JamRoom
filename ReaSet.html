@@ -3279,6 +3279,7 @@
            already a no-op via wwr_req's gate) — hidden rather than left to
            silently do nothing when clicked. */
         body.reaset-player #syncPushBtn { display: none; }
+        body.reaset-player #directorPinBtn { display: none; }
         .midi-modal {
             background: #1c1c1e;
             border: 1px solid rgba(255,255,255,0.14);
@@ -3997,6 +3998,10 @@
             <button class="sidebar-action-btn sab-slate" onclick="_syncPullNow(true);closeSidebar()">
                 <span class="sab-icon">⇩</span> Pull setlist from shared
             </button>
+            <!-- Meaningless on a Player for the same reason as Push above. -->
+            <button class="sidebar-action-btn sab-slate" id="directorPinBtn" onclick="setDirectorPin();closeSidebar()">
+                <span class="sab-icon">🔒</span> Set/Change Director PIN
+            </button>
         </div>
     </div>
 
@@ -4494,7 +4499,9 @@
         var _diagProbe = "GET/EXTSTATE/ReaSet/nativeLoopReady" +
                          ";GET/EXTSTATE/ReaSet/lyricsTrack;GET/EXTSTATE/ReaSet/chordsTrack" +
                          ";GET/EXTSTATE/ReaSet/lyricsTrackMatches;GET/EXTSTATE/ReaSet/chordsTrackMatches" +
-                         ";GET/EXTSTATE/ReaSet/tick;GET/EXTSTATE/ReaSet/error";
+                         ";GET/EXTSTATE/ReaSet/tick;GET/EXTSTATE/ReaSet/error" +
+                         ";GET/EXTSTATE/ReaSet/directorPinHash" +
+                         ";GET/EXTSTATE/ReaSet/directorHeartbeatId;GET/EXTSTATE/ReaSet/directorHeartbeatTs";
         wwr_req(_diagProbe);
         wwr_req_recur(_diagProbe, 2000);
         wwr_start();
@@ -4797,6 +4804,97 @@
             if (_syncPlayerPollTimer) return;
             _syncPullNow(false);
             _syncPlayerPollTimer = setInterval(function () { _syncPullNow(false); }, 4000);
+        }
+
+        // ── Director PIN (optional deterrent, not a security boundary) ──────────
+        // Same "no server" constraint as setlist sync: the only place all devices
+        // can agree on a shared value is REAPER's own ExtState. The hash is
+        // written with EXTSTATEPERSIST so it survives a REAPER restart, and read
+        // back with a plain GET/EXTSTATE — REAPER's web interface doesn't track
+        // "persisted" as part of retrieval, only as part of whether it's saved to
+        // reaper.ini, so the two commands talk to the exact same value.
+        // A tiny djb2 hash is enough here: this only needs to stop a musician
+        // from tapping "Director" by mistake or on a whim, not resist an
+        // attacker — REAPER's Web Interface has no auth at all (see README), so
+        // a determined attacker can already drive REAPER directly, PIN or not.
+        var _directorPinHash = null;   // null = not loaded yet, '' = no PIN configured
+
+        function _pinHash(pin) {
+            var h = 5381, s = String(pin);
+            for (var i = 0; i < s.length; i++) h = ((h << 5) + h + s.charCodeAt(i)) | 0;
+            return 'h' + Math.abs(h).toString(36);
+        }
+
+        // Director-only by construction (see _syncPushNow comment above) — the
+        // write is a silent no-op from a Player, this check just avoids a
+        // confusing "nothing happened" for someone who taps it anyway.
+        function setDirectorPin() {
+            if (REASET_MODE !== 'director') { window.alert('Solo un Director puede configurar el PIN.'); return; }
+            var next = window.prompt('Nuevo PIN de Director (dejar vacío para quitar la protección):');
+            if (next === null) return; // cancelled
+            next = next.trim();
+            var hash = next ? _pinHash(next) : '';
+            wwr_req('SET/EXTSTATEPERSIST/ReaSet/directorPinHash/' + hash);
+            _directorPinHash = hash; // optimistic — next probe reply confirms it
+            window.alert(next ? 'PIN de Director configurado.' : 'PIN de Director eliminado — cualquiera puede entrar como Director.');
+        }
+
+        // ── Director conflict detection (heartbeat) ──────────────────────────────
+        // Two Directors open at once can genuinely fight over REAPER (see README).
+        // Each Director rewrites a shared "I'm alive" timestamp every 4s while it
+        // holds the mode; anyone can tell another Director is CURRENTLY active
+        // (not just some stale leftover from hours ago) by watching that value
+        // keep changing, which is why _dcLastChangeAt above is tracked relative
+        // to our own clock only, never by comparing timestamps across devices.
+        var _directorHeartbeatId = '';
+        var _dcLastSeenTs = '';
+        var _dcLastChangeAt = 0;
+        var _dcHeartbeatTimer = null;
+
+        function _dcForeignActive() {
+            return !!_directorHeartbeatId && _directorHeartbeatId !== _syncInstanceId() &&
+                   (Date.now() - _dcLastChangeAt) < 9000; // ~2 missed 4s beats = gone
+        }
+
+        function _dcStartHeartbeat() {
+            if (_dcHeartbeatTimer) return;
+            var beat = function () {
+                wwr_req('SET/EXTSTATE/ReaSet/directorHeartbeatId/' + _syncInstanceId() +
+                         ';SET/EXTSTATE/ReaSet/directorHeartbeatTs/' + Date.now());
+            };
+            beat();
+            _dcHeartbeatTimer = setInterval(beat, 4000);
+        }
+        function _dcStopHeartbeat() {
+            if (_dcHeartbeatTimer) { clearInterval(_dcHeartbeatTimer); _dcHeartbeatTimer = null; }
+        }
+
+        // Small red banner, same lazy-create pattern as the reconnect banner.
+        // Auto shows/hides — no dismiss button, since it should stay visible for
+        // exactly as long as the actual conflict does and never longer.
+        function _setConflictBanner(show) {
+            var el = document.getElementById('reaset-director-conflict-banner');
+            if (show) {
+                if (!el) {
+                    el = document.createElement('div');
+                    el.id = 'reaset-director-conflict-banner';
+                    el.textContent = '⚠ Otro dispositivo también está en modo Director — ambos pueden controlar REAPER a la vez';
+                    el.style.cssText = 'position:fixed;top:0;left:0;right:0;z-index:99998;' +
+                        'background:#7f1d1d;color:#fff;text-align:center;font-size:13px;' +
+                        'font-weight:600;padding:6px 10px;letter-spacing:.02em;' +
+                        'box-shadow:0 2px 8px rgba(0,0,0,.35);pointer-events:none;';
+                    document.body.appendChild(el);
+                }
+                el.style.display = '';
+            } else if (el) {
+                el.style.display = 'none';
+            }
+        }
+        // Polled independently of mode so a stored Director that skipped
+        // chooseMode() on boot (see "Recalling a stored mode..." below) still
+        // gets warned if a second Director shows up mid-show.
+        function _dcWatchConflict() {
+            setInterval(function () { _setConflictBanner(REASET_MODE === 'director' && _dcForeignActive()); }, 2000);
         }
 
         function _initProjectStorage(newKey) {
@@ -5494,7 +5592,23 @@
             if (ov.classList.contains('forced')) return; // forced first choice: no dismissing without picking
             ov.classList.remove('open');
         }
+        // Both checks below fire only on an ACTIVE choice of Director — clicking
+        // the option in the selector, or switching via the badge — never on a
+        // plain reload of an already-stored Director (see the boot comment
+        // further down). Recalling a stored mode grants no new privilege, so
+        // it must not re-demand a PIN or re-litigate a conflict warning either.
         function chooseMode(mode) {
+            if (mode === 'director') {
+                if (_directorPinHash) {
+                    var entered = window.prompt('Ingresa el PIN de Director:');
+                    if (entered === null) return; // cancelled — stay on the selector
+                    if (_pinHash(entered.trim()) !== _directorPinHash) { window.alert('PIN incorrecto.'); return; }
+                }
+                if (_dcForeignActive()) {
+                    if (!window.confirm('⚠ Otro dispositivo ya está activo como Director.\n' +
+                        'Si continúas, ambos podrán controlar REAPER al mismo tiempo.\n¿Continuar de todas formas?')) return;
+                }
+            }
             REASET_MODE = mode;
             try { localStorage.setItem('reaset_mode', mode); } catch (e) { /* private mode etc — mode still applies for this session */ }
             document.getElementById('mode-select-overlay').classList.remove('open', 'forced');
@@ -5507,7 +5621,8 @@
             badge.classList.toggle('is-director', REASET_MODE === 'director');
             badge.classList.toggle('is-player',   REASET_MODE === 'player');
             document.getElementById('mode-badge-label').textContent = (REASET_MODE === 'director') ? 'DIRECTOR' : 'MÚSICO';
-            if (REASET_MODE === 'player') _syncStartPlayerPolling();
+            if (REASET_MODE === 'player') { _syncStartPlayerPolling(); _dcStopHeartbeat(); }
+            else { _dcStartHeartbeat(); }
         }
 
         // Boot: force the picker only on a genuinely fresh device (no stored
@@ -5516,6 +5631,7 @@
         // avoids re-forcing the choice on every accidental refresh or restart,
         // which would otherwise strand a Director mid-show behind a modal.
         if (REASET_MODE_STORED) { applyModeUI(); } else { openModeSelector(true); }
+        _dcWatchConflict();
 
         // --- 3. REAPER REPLY HANDLER ---
         function wwr_onreply(results) {
@@ -5669,6 +5785,24 @@
                         }
                         if (tok[1] === "ReaSet" && tok[2] === "error") {
                             xr_error = tok.slice(3).join('\t');
+                        }
+                        // Director PIN hash (shared, persisted) and heartbeat, both
+                        // read here so every instance — Director or Player — has a
+                        // fresh copy every ~2s. See "Director PIN" / "Director
+                        // conflict detection" below for how these are used.
+                        if (tok[1] === "ReaSet" && tok[2] === "directorPinHash") {
+                            _directorPinHash = tok.slice(3).join('\t');
+                        }
+                        if (tok[1] === "ReaSet" && tok[2] === "directorHeartbeatId") {
+                            _directorHeartbeatId = tok.slice(3).join('\t');
+                        }
+                        if (tok[1] === "ReaSet" && tok[2] === "directorHeartbeatTs") {
+                            // Liveness is judged by this VALUE changing across polls,
+                            // never by comparing it to our own Date.now() — two
+                            // devices' clocks can differ, but "did it change since
+                            // last time we looked" needs no clock agreement at all.
+                            var _dhbTs = tok.slice(3).join('\t');
+                            if (_dhbTs !== _dcLastSeenTs) { _dcLastSeenTs = _dhbTs; _dcLastChangeAt = Date.now(); }
                         }
                         // NOTE: nativeLoop=done is intentionally NOT handled here.
                         // _nativeLoopSubId stays armed until the playhead physically leaves
