@@ -377,6 +377,11 @@ Located under **Settings — Appearance** in the sidebar. Three independent real
 
 Values persist across sessions. A "Reset" button restores all three to default.
 
+### Smooth Seek
+**Smooth Seek** is enabled by default under **Show Options** and is saved separately for each REAPER project. When playback is already running, selecting a song or section manually — including MIDI **Next/Previous Section** and **Restart Song** — sends only the new position to REAPER. This lets REAPER honour its own *Do not change playback position immediately when seeking (smooth seek)* preference.
+
+Turn Smooth Seek off when a controller needs an immediate, hard jump instead. Selecting a song while stopped still starts playback either way. Queue Mode, Cue, loops, and automatic transitions retain their existing behaviour.
+
 ### Region Name Command Reference
 ReaSet parses special inline commands written directly in REAPER region and marker names. Multiple commands can be combined freely. The remaining text after parsing is the display name.
 
@@ -928,6 +933,11 @@ Disponibles en **Settings — Appearance** dentro de la sidebar. Tres sliders in
 - **Saturación** — 0% a 200% (por defecto 100%)
 
 Los valores persisten entre sesiones. El botón "Restablecer valores" devuelve todo al 100%.
+
+### Smooth Seek
+**Smooth Seek** está activado por defecto en **Show Options** y se guarda de forma independiente para cada proyecto de REAPER. Cuando la reproducción ya está en curso, al seleccionar manualmente una canción o sección —incluidos los controles MIDI **Siguiente/Anterior sección** y **Reiniciar canción**— ReaSet envía a REAPER solo la nueva posición. Así REAPER puede respetar su propia preferencia *No cambiar inmediatamente la posición de reproducción al buscar (smooth seek)*.
+
+Desactiva Smooth Seek cuando un controlador necesite un salto inmediato. Al seleccionar una canción mientras REAPER está detenido, la reproducción sigue iniciándose en ambos casos. Queue Mode, Cue, los loops y las transiciones automáticas conservan su comportamiento actual.
 
 ### Referencia de comandos en nombres de región
 ReaSet interpreta comandos especiales escritos directamente en los nombres de región y marcadores de REAPER. Se pueden combinar libremente. El texto que queda tras parsear todos los comandos es el nombre que se muestra en la app.

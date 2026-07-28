@@ -3787,6 +3787,16 @@
             </div>
 
             <div class="toggle-row">
+                <label class="n-switch"><input type="checkbox" id="smoothSeekToggle" checked onchange="setSmoothSeek(this.checked)">
+                    <div class="n-track">
+                        <div class="n-thumb"></div>
+                    </div>
+                </label>
+                Smooth Seek
+                <button class="help-btn" style="margin-left:auto" onclick="showHelp('smoothseek')">?</button>
+            </div>
+
+            <div class="toggle-row">
                 <label class="n-switch"><input type="checkbox" id="autoStopToggle" checked>
                     <div class="n-track">
                         <div class="n-thumb"></div>
@@ -4588,6 +4598,26 @@
 
         function _pkSuffix() { return g_projectKey ? '_' + g_projectKey : ''; }
         function _overridesKey() { return 'reaset_song_overrides' + _pkSuffix(); }
+        function _smoothSeekKey() { return 'reaset_smooth_seek' + _pkSuffix(); }
+
+        // This preference controls whether ReaSet lets REAPER honour its own
+        // smooth-seek setting while playback is already running. It is scoped
+        // to the project, just like setlists and per-song overrides.
+        var smoothSeekEnabled = true;
+
+        function _loadSmoothSeekPreference() {
+            var saved = localStorage.getItem(_smoothSeekKey());
+            smoothSeekEnabled = (saved === null) ? true : (saved !== '0');
+            var toggle = document.getElementById('smoothSeekToggle');
+            if (toggle) toggle.checked = smoothSeekEnabled;
+        }
+
+        function setSmoothSeek(enabled) {
+            smoothSeekEnabled = !!enabled;
+            localStorage.setItem(_smoothSeekKey(), smoothSeekEnabled ? '1' : '0');
+            var toggle = document.getElementById('smoothSeekToggle');
+            if (toggle) toggle.checked = smoothSeekEnabled;
+        }
 
         // ── Shared setlist sync (Director → file → Players) ─────────────────────
         // ReaSet has no server: the Director writes a snapshot of its setlist into
@@ -4782,6 +4812,7 @@
             if (!setlists["Default"]) setlists["Default"] = [];
             currentSetlistName = localStorage.getItem(CURRENT_KEY) || "Default";
             if (!setlists[currentSetlistName]) currentSetlistName = "Default";
+            _loadSmoothSeekPreference();
             displayList = []; initialized = false;
             updateSetlistDropdown();
         }
@@ -7417,25 +7448,49 @@
             saveCanvasPrefs(); // Persist widget positions
         }
 
+        // User-directed seek used by song/section controls and MIDI navigation.
+        // SET/POS is enough while REAPER is playing: its own Seeking preference
+        // then decides whether the jump is smooth. Sending 1007 in that state
+        // restarts transport at the target and deliberately creates a hard jump.
+        // `startWhenStopped` keeps Play Song behaviour intact without making
+        // MIDI navigation start playback when REAPER was already stopped.
+        function seekManualTransport(start, startWhenStopped) {
+            var wasPlaying = isPlaying;
+            if (!wasPlaying && startWhenStopped) {
+                // Compound requests execute in order in REAPER's web interface.
+                wwr_req("SET/POS/" + start + ";1007");
+                return true;
+            }
+
+            wwr_req("SET/POS/" + start);
+            if (wasPlaying && !smoothSeekEnabled) {
+                wwr_req(1007);
+                return true;
+            }
+            return false;
+        }
+
         function playRegion(start, id) {
             var queueMode = document.getElementById('queueModeToggle').checked;
             if (!isPlaying || !queueMode) {
                 // Guard against stale transport responses: when the user clicks a song, the
-                // XHR with SET/POS+PLAY dispatches immediately. A pending transport response
+                // position request (and Play when needed) dispatches immediately. A pending transport response
                 // (still showing the OLD position near the previous song's end) may arrive
                 // milliseconds later, trigger autoStop, and dispatch a STOP that arrives at
-                // REAPER AFTER the PLAY — killing the user-initiated playback.
+                // REAPER after the user's command — disrupting the new selection.
                 // Setting this flag for 500ms tells the autoStop block to skip its STOP if
-                // the user just explicitly started a new song.
+                // the user just explicitly selected a song.
                 window._playRegionLocked   = Date.now() + 500;
                 // Separate flag consumed ONLY by triggerMidi()'s internal STOP guard.
                 // We cannot reuse _playRegionLocked here because cueRegion() also sets
                 // it — cue must let its own triggerMidi() STOP fire (it stops REAPER
                 // intentionally after the brief MIDI-arm play). This flag is set only
-                // by playRegion() so triggerMidi()'s cleanup STOP won't race with a
-                // user's explicit PLAY when autoStop pre-positioned to the next song.
-                window._playbackInitiated  = Date.now() + 500;
-                wwr_req("SET/POS/" + start); wwr_req(1007); queuedRegion = null;
+                // when this path will actually issue PLAY, so triggerMidi()'s cleanup
+                // STOP cannot race with a user-initiated hard jump or fresh playback.
+                if (!isPlaying || !smoothSeekEnabled) {
+                    window._playbackInitiated = Date.now() + 500;
+                }
+                seekManualTransport(start, true); queuedRegion = null;
                 var all = document.querySelectorAll('.queued');
                 for (var i = 0; i < all.length; i++) all[i].classList.remove('queued');
             } else {
@@ -8594,8 +8649,7 @@
             for (var s2 = subIdx + 1; s2 < subs.length; s2++) {
                 var ss = window.subStates && window.subStates[subs[s2].id];
                 if (!ss || !ss.skipped) {
-                    wwr_req('SET/POS/' + subs[s2].start);
-                    if (isPlaying) wwr_req(1007);
+                    seekManualTransport(subs[s2].start, false);
                     return;
                 }
             }
@@ -8613,8 +8667,7 @@
             for (var s2 = subIdx - 1; s2 >= 0; s2--) {
                 var ss = window.subStates && window.subStates[subs[s2].id];
                 if (!ss || !ss.skipped) {
-                    wwr_req('SET/POS/' + subs[s2].start);
-                    if (isPlaying) wwr_req(1007);
+                    seekManualTransport(subs[s2].start, false);
                     return;
                 }
             }
@@ -8623,8 +8676,7 @@
         function midiRestartSong() {
             var idx = midiGetActiveIdx();
             if (idx === -1) return;
-            wwr_req('SET/POS/' + displayList[idx].start);
-            if (isPlaying) wwr_req(1007);
+            seekManualTransport(displayList[idx].start, false);
         }
 
         function midiToggleSkipActive() {
@@ -9173,6 +9225,7 @@
             var msgs = {
                 scroll: "Auto-Scroll keeps the active song visible.",
                 queue: "Queue ON = seamless transition.\nQueue OFF = immediate jump.",
+                smoothseek: "Smooth Seek ON lets REAPER apply its own smooth-seek preference while playing.\nOFF forces immediate jumps for manual song/section and MIDI navigation.\nSaved per project.",
                 stop: "Auto-Stop ON = stops at the end of the region.\n(Use Chain to override per song).",
                 hide: "Hide Skips = removes inactive songs from the view.",
                 initsongmidi: "Briefly fires play/stop at the start of each region to initialize MIDI.\nOnly works with Auto-Stop enabled."
