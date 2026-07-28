@@ -3184,6 +3184,101 @@
             display: none; align-items: center; justify-content: center;
         }
         #midi-modal-overlay.open { display: flex; }
+
+        /* ══ DIRECTOR / PLAYER MODE ═══════════════════════════════════ */
+        /* Forced on first load (no stored choice) and reachable any time via
+           the badge below. z-index above everything, including the MIDI/
+           appearance modals, since it can interrupt any of them. */
+        #mode-select-overlay {
+            position: fixed; inset: 0; z-index: 9600;
+            background: rgba(0,0,0,0.78); backdrop-filter: blur(10px);
+            display: none; align-items: center; justify-content: center;
+            padding: 20px;
+        }
+        #mode-select-overlay.open { display: flex; }
+        .mode-select-card {
+            background: #1c1c1e;
+            border: 1px solid rgba(255,255,255,0.14);
+            border-radius: 22px;
+            padding: 30px 26px 24px;
+            width: 440px;
+            max-width: 100%;
+            box-shadow: 0 28px 72px rgba(0,0,0,0.85);
+            animation: ctxFadeIn 0.18s ease;
+        }
+        .mode-select-title {
+            font-size: 19px; font-weight: 800; margin: 0 0 6px;
+            color: var(--text-primary); text-align: center;
+        }
+        .mode-select-sub {
+            font-size: 12.5px; color: var(--text2); margin: 0 0 22px;
+            line-height: 1.5; text-align: center;
+        }
+        .mode-select-options { display: flex; flex-direction: column; gap: 12px; }
+        .mode-opt-btn {
+            display: flex; align-items: flex-start; gap: 14px; text-align: left;
+            padding: 16px 18px; border-radius: 14px; cursor: pointer;
+            border: 1px solid rgba(255,255,255,0.12); background: rgba(255,255,255,0.04);
+            transition: background .15s, border-color .15s;
+        }
+        .mode-opt-btn:hover { background: rgba(255,255,255,0.09); }
+        .mode-opt-btn.mode-director:hover { border-color: var(--color-brand); }
+        .mode-opt-btn.mode-player:hover   { border-color: #64D2FF; }
+        .mode-opt-icon { font-size: 24px; flex: 0 0 auto; line-height: 1.3; }
+        .mode-opt-label { font-size: 14.5px; font-weight: 700; color: var(--text-primary); margin-bottom: 3px; }
+        .mode-opt-desc  { font-size: 11.5px; color: var(--text2); line-height: 1.45; }
+
+        /* Persistent badge — always visible once a mode is set, so the answer
+           to "what mode am I in" is never more than a glance away. Click to
+           reopen the same selector and switch. */
+        #mode-badge {
+            position: fixed; top: 10px; right: 14px; z-index: 4200;
+            display: none; align-items: center; gap: 6px;
+            padding: 5px 11px; border-radius: 999px; cursor: pointer;
+            font-family: var(--font-ui);
+            font-size: 10.5px; font-weight: 800; letter-spacing: .04em; text-transform: uppercase;
+            border: 1px solid rgba(255,255,255,0.18);
+            background: rgba(18,18,20,0.86); backdrop-filter: blur(6px);
+            color: var(--text2); user-select: none;
+        }
+        #mode-badge.show { display: inline-flex; }
+        #mode-badge.is-director { color: var(--color-brand); border-color: rgba(30,215,96,0.42); }
+        #mode-badge.is-player   { color: #64D2FF;           border-color: rgba(100,210,255,0.42); }
+        #mode-badge .mb-dot { width: 6px; height: 6px; border-radius: 50%; background: currentColor; flex: 0 0 auto; }
+        #mode-badge .mb-sync {
+            margin-left: 4px; opacity: 0.55; font-size: 9px;
+        }
+
+        /* Player-mode read-only enforcement, visual layer. The wwr_req gate
+           above is what actually stops REAPER commands; this is the "don't
+           make it LOOK like the button worked" layer, so a tap doesn't read
+           as a silent failure. Targets every surface that issues a REAPER
+           command: the transport footer, song/section rows (whole row is
+           click-to-play, plus their skip/loop/chain icons and drag handles),
+           and the Live View / Canvas transport widgets. The expand/collapse
+           chevron is exempted — it's local, no-REAPER-involved UI state, and
+           Players are meant to be able to browse into sub-sections. */
+        body.reaset-player .app-transport,
+        body.reaset-player .song-row,
+        body.reaset-player .grid-card,
+        body.reaset-player .section-row,
+        body.reaset-player #live-transport-bar,
+        body.reaset-player #cw-transport {
+            pointer-events: none;
+            opacity: 0.62;
+            filter: grayscale(0.35);
+        }
+        /* opacity/filter on the ancestor row can't be un-done per-descendant
+           (unlike pointer-events, which genuinely can) — the chevron stays
+           visually dimmed along with the rest of the row, which is fine; it
+           only needs to stay CLICKABLE. */
+        body.reaset-player .song-row .song-chevron {
+            pointer-events: auto;
+        }
+        /* Pushing the shared setlist is meaningless on a Player (the write is
+           already a no-op via wwr_req's gate) — hidden rather than left to
+           silently do nothing when clicked. */
+        body.reaset-player #syncPushBtn { display: none; }
         .midi-modal {
             background: #1c1c1e;
             border: 1px solid rgba(255,255,255,0.14);
@@ -3881,6 +3976,18 @@
                 <span class="sab-icon">↻</span> Sync
             </button>
         </div>
+
+        <div class="sidebar-section">
+            <div class="sidebar-section-title">Setlist Sync (Director/Player)</div>
+            <!-- Push is meaningless on a Player — its wwr_req writes are already
+                 no-ops — so it's hidden there rather than left to fail silently. -->
+            <button class="sidebar-action-btn sab-slate" id="syncPushBtn" onclick="_syncPushNow();closeSidebar()">
+                <span class="sab-icon">⇪</span> Push setlist to shared
+            </button>
+            <button class="sidebar-action-btn sab-slate" onclick="_syncPullNow(true);closeSidebar()">
+                <span class="sab-icon">⇩</span> Pull setlist from shared
+            </button>
+        </div>
     </div>
 
     <!-- APPEARANCE MODAL -->
@@ -3928,6 +4035,43 @@
             <hr class="appearance-divider">
             <button class="appearance-reset-btn" onclick="resetAppearance()">Restablecer valores</button>
         </div>
+    </div>
+
+    <!-- DIRECTOR / PLAYER MODE SELECTOR -->
+    <!-- Forced on first load (no stored mode): the backdrop click-to-close and
+         the "keep current mode" cancel button are both suppressed in that case
+         via the "forced" class — see openModeSelector()/closeModeSelector(). -->
+    <div id="mode-select-overlay" onclick="if(event.target===this)closeModeSelector()">
+        <div class="mode-select-card">
+            <div class="mode-select-title">¿Cómo vas a usar ReaSet en este dispositivo?</div>
+            <div class="mode-select-sub">Director controla la reproducción. Músico solo la muestra en vivo —
+                no puede mover REAPER ni por accidente.</div>
+            <div class="mode-select-options">
+                <div class="mode-opt-btn mode-director" onclick="chooseMode('director')">
+                    <span class="mode-opt-icon">🎬</span>
+                    <span>
+                        <div class="mode-opt-label">Director</div>
+                        <div class="mode-opt-desc">Control total: transporte, cola, loops, secciones, MIDI.
+                            Este dispositivo maneja el show.</div>
+                    </span>
+                </div>
+                <div class="mode-opt-btn mode-player" onclick="chooseMode('player')">
+                    <span class="mode-opt-icon">🎧</span>
+                    <span>
+                        <div class="mode-opt-label">Músico</div>
+                        <div class="mode-opt-desc">Solo lectura: canción, progreso, letras y acordes en vivo.
+                            Podés ajustar tu canvas, colores y fuentes — nada de esto controla REAPER.</div>
+                    </span>
+                </div>
+            </div>
+            <button id="mode-select-cancel" class="m-btn m-btn-cancel" style="margin-top:16px;width:100%;display:none"
+                onclick="closeModeSelector()">Cancelar</button>
+        </div>
+    </div>
+
+    <!-- Persistent mode badge — click to switch -->
+    <div id="mode-badge" onclick="openModeSelector(false)" title="Click para cambiar de modo">
+        <span class="mb-dot"></span><span id="mode-badge-label">MODE</span><span class="mb-sync" id="mode-badge-sync"></span>
     </div>
 
     <!-- MIDI LEARN MODAL -->
@@ -4283,6 +4427,49 @@
         if (typeof wwr_req_recur === 'undefined') { window.wwr_req_recur = function() {}; }
         if (typeof wwr_start     === 'undefined') { window.wwr_start     = function() {}; }
 
+        // ── Director / Player mode ──────────────────────────────────────────────
+        // Two instance types sharing one REAPER Web Interface, since ReaSet has no
+        // server of its own: every device talks to REAPER directly through the
+        // exact same wwr_req() channel, reads and writes alike — there is no
+        // separate "control API" to simply not load for a read-only instance, the
+        // way a client/server app could. So the read-only guarantee is enforced
+        // here instead, at the one real chokepoint: every write REAPER could ever
+        // receive from this page passes through wwr_req(). Player mode wraps it and
+        // drops anything that isn't a GET.
+        //
+        // Defaults to 'player' (the SAFE state) until a stored choice says
+        // otherwise, so any race before the mode is known fails closed, never open.
+        var REASET_MODE = 'player';
+        var REASET_MODE_STORED = false;   // true = a real prior choice, not just the safe default
+        try {
+            var _storedMode = localStorage.getItem('reaset_mode');
+            if (_storedMode === 'director' || _storedMode === 'player') { REASET_MODE = _storedMode; REASET_MODE_STORED = true; }
+        } catch (e) { /* localStorage unavailable (private mode, etc.) — stay 'player' */ }
+
+        // A command is a WRITE unless it is one or more ';'-joined segments that
+        // ALL start with "GET/" (wwr_req_recur's polling strings, and the one
+        // wwr_req("GET/EXTSTATE/XR_Lyrics/text") lyrics-panel refresh, both take
+        // this shape). Bare numeric action IDs (1007, 1016, 1008, ...) and any
+        // "SET/..." string are writes. Anything of an unrecognised shape is
+        // treated as a write too — fail closed, not open.
+        function _isWriteCommand(cmd) {
+            if (typeof cmd !== 'string') return true;
+            var segs = cmd.split(';');
+            for (var i = 0; i < segs.length; i++) {
+                if (segs[i].indexOf('GET/') !== 0) return true;
+            }
+            return false;
+        }
+
+        // wwr_req_recur is never gated: every call site in this file polls
+        // (TRANSPORT/REGION/MARKER/GET/...) — confirmed read-only by construction,
+        // and Player mode needs that live status feed just as much as Director does.
+        var _wwrReqReal = window.wwr_req;
+        window.wwr_req = function (cmd) {
+            if (REASET_MODE === 'player' && _isWriteCommand(cmd)) return;
+            return _wwrReqReal.apply(this, arguments);
+        };
+
         // Batched recur like X-Raym: lyrics+chords+regions each on their own poll
         wwr_req_recur("TRANSPORT", 33);  // ~30fps — tighter timing for loop count accuracy
         wwr_req_recur("REGION", 1000);
@@ -4401,6 +4588,186 @@
 
         function _pkSuffix() { return g_projectKey ? '_' + g_projectKey : ''; }
         function _overridesKey() { return 'reaset_song_overrides' + _pkSuffix(); }
+
+        // ── Shared setlist sync (Director → file → Players) ─────────────────────
+        // ReaSet has no server: the Director writes a snapshot of its setlist into
+        // Reaset.lua's ExtState (base64url text, chunked — a REAPER Web Interface
+        // GET request has a real URL-length ceiling, and JSON with brackets/quotes
+        // triples in size once percent-encoded, so raw JSON in one shot risks
+        // silent truncation past a few dozen songs). Reaset.lua just concatenates
+        // and writes it to a file next to ReaSet.html, opaque to Lua the whole way
+        // — it never parses the payload, only moves bytes. Players fetch() that
+        // file and decode it client-side.
+        var SYNC_FILE = 'reaset_setlist_sync.json';
+        var SYNC_CHUNK_LEN = 700; // conservative; keeps each SET/EXTSTATE call short
+
+        // One id per browser tab/session, persisted so re-pushes after a refresh
+        // are still recognisably "the same Director" rather than a new stranger.
+        function _syncInstanceId() {
+            try {
+                var id = localStorage.getItem('reaset_instance_id');
+                if (!id) {
+                    id = 'i' + Date.now().toString(36) + Math.random().toString(36).slice(2, 8);
+                    localStorage.setItem('reaset_instance_id', id);
+                }
+                return id;
+            } catch (e) { return 'i0'; }
+        }
+
+        // UTF-8-safe base64url. btoa()/atob() only handle Latin1 byte strings, so
+        // encode goes through encodeURIComponent/unescape and back — the standard
+        // browser idiom for round-tripping arbitrary Unicode (accented Spanish
+        // song names, etc.) through base64 without corruption.
+        function _b64uEncode(str) {
+            var b64 = btoa(unescape(encodeURIComponent(str)));
+            return b64.replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+        }
+        function _b64uDecode(b64u) {
+            var b64 = b64u.replace(/-/g, '+').replace(/_/g, '/');
+            while (b64.length % 4) b64 += '=';
+            return decodeURIComponent(escape(atob(b64)));
+        }
+
+        var _syncLastAppliedRev = 0;   // highest shared revision this instance has applied (Player)
+        var _syncLocalRev       = 0;   // this Director's own push counter
+        var _syncPushTimer      = null;
+
+        function _syncBuildPayload() {
+            return {
+                v: 1,
+                fp: g_projectKey,
+                rev: ++_syncLocalRev,
+                ts: Date.now(),
+                instanceId: _syncInstanceId(),
+                currentSetlistName: currentSetlistName,
+                // Only what a Player needs to DISPLAY correctly: order + the
+                // three flags that drive the Director's own auto-advance
+                // decisions. Not the whole `setlists` library (that's authoring
+                // data), not `queuedRegion` (ephemeral, local-only "PLAY NEXT"
+                // staging that isn't what actually plays next — REAPER's own
+                // transport position, which Players already get for free via
+                // TRANSPORT polling, is the real source of truth for that).
+                setlist: displayList.map(function (r) {
+                    return { id: r.id, chain: !!r.chain, skipped: !!r.skipped, loop: !!r.loop };
+                })
+            };
+        }
+
+        // Small ● / ⚠ mark next to the mode badge. Meaningful mainly for
+        // Players, the only instances polling continuously — a Director only
+        // pulls manually and already gets an alert() on failure.
+        function _syncSetBadgeStatus(ok) {
+            var el = document.getElementById('mode-badge-sync');
+            if (!el) return;
+            el.textContent = ok ? '●' : '⚠';
+            el.style.color = ok ? '' : '#ff453a';
+        }
+
+        // Sends the current setlist to Reaset.lua for writing into the shared
+        // file. Director-only by construction: wwr_req's own Player-mode gate
+        // makes every SET/EXTSTATE call inside a silent no-op if this somehow
+        // ran on a Player, so the explicit mode check here is belt-and-braces,
+        // not the actual enforcement.
+        function _syncPushNow() {
+            if (REASET_MODE !== 'director' || !g_projectKey) return;
+            var b64 = _b64uEncode(JSON.stringify(_syncBuildPayload()));
+            var chunks = [];
+            for (var i = 0; i < b64.length; i += SYNC_CHUNK_LEN) chunks.push(b64.slice(i, i + SYNC_CHUNK_LEN));
+            // Chunk bodies first, count LAST: Reaset.lua treats the count key
+            // changing as "the chunks are ready, go reassemble" — so it must
+            // never observe a fresh count before the chunks it names exist.
+            for (var c = 0; c < chunks.length; c++) {
+                wwr_req('SET/EXTSTATE/ReaSet/setlistChunk' + c + '/' + chunks[c]);
+            }
+            wwr_req('SET/EXTSTATE/ReaSet/setlistChunkCount/' + chunks.length);
+            _syncSetBadgeStatus(true);
+        }
+
+        // Debounced entry point — every setlist edit (skip/loop/chain, reorder,
+        // import, applying a pull) calls saveCurrentState(), which calls this.
+        // Coalesces a burst of edits (drag reorder, rapid clicks) into one push
+        // ~1s after the last change instead of one push per keystroke.
+        function _syncPushSoon() {
+            if (REASET_MODE !== 'director') return;
+            if (_syncPushTimer) clearTimeout(_syncPushTimer);
+            _syncPushTimer = setTimeout(_syncPushNow, 1000);
+        }
+
+        // Fetches the shared file and applies it if it's newer and from the same
+        // REAPER project. `manual` marks an explicit Pull click (Director-only —
+        // confirms before overwriting local edits) as opposed to a Player's
+        // silent background poll (nothing local to protect: Players never edit).
+        function _syncPullNow(manual) {
+            fetch(SYNC_FILE + '?t=' + Date.now(), { cache: 'no-store' })
+                .then(function (res) { if (!res.ok) throw new Error('sin setlist compartido aún'); return res.json(); })
+                .then(function (envelope) {
+                    if (!envelope || typeof envelope.b64 !== 'string') throw new Error('archivo de sincronización inválido');
+                    _syncApplyPayload(JSON.parse(_b64uDecode(envelope.b64)), manual);
+                    _syncSetBadgeStatus(true);
+                })
+                .catch(function (err) {
+                    _syncSetBadgeStatus(false);
+                    if (manual) showAppAlert('No se pudo leer el setlist compartido: ' + err.message, 'Pull');
+                });
+        }
+
+        function _syncApplyPayload(payload, manual) {
+            if (!payload || payload.v !== 1 || !payload.setlist) return;
+            if (g_projectKey && payload.fp && payload.fp !== g_projectKey) {
+                if (manual) showAppAlert('El setlist compartido pertenece a otro proyecto de REAPER — no se aplicó.', 'Pull');
+                return;
+            }
+            if (!manual && payload.rev <= _syncLastAppliedRev) return; // nothing new since last poll
+
+            var doApply = function () {
+                _syncLastAppliedRev = payload.rev;
+                var reordered = [];
+                for (var j = 0; j < payload.setlist.length; j++) {
+                    var found = null;
+                    for (var k = 0; k < displayList.length; k++) {
+                        if (displayList[k].id === payload.setlist[j].id) { found = displayList[k]; break; }
+                    }
+                    if (found) {
+                        found.chain   = !!payload.setlist[j].chain;
+                        found.skipped = !!payload.setlist[j].skipped;
+                        found.loop    = !!payload.setlist[j].loop;
+                        reordered.push(found);
+                    }
+                }
+                // Anything local the shared payload doesn't mention (e.g. a
+                // region that only exists on THIS device's view) is kept,
+                // appended at the end, instead of silently vanishing.
+                for (var m = 0; m < displayList.length; m++) {
+                    if (reordered.indexOf(displayList[m]) === -1) reordered.push(displayList[m]);
+                }
+                displayList = reordered;
+                if (payload.currentSetlistName) currentSetlistName = payload.currentSetlistName;
+                saveCurrentState();
+                lastRenderChecksum = ''; renderSetlist(); updatePlaybackUI();
+            };
+
+            if (manual && REASET_MODE === 'director') {
+                // window.confirm() on purpose, not showAppConfirm(): the app's
+                // own #appConfirmOverlay has no CSS rule that actually shows it
+                // on .open (verified — every OTHER app-modal-overlay id in this
+                // file has one, this one doesn't), so it would silently never
+                // appear. A destructive "overwrite your local setlist" action
+                // needs a confirmation that is guaranteed to be visible.
+                if (window.confirm('¿Reemplazar tu setlist local por el compartido? Esto sobreescribe tus cambios no sincronizados.')) doApply();
+            } else {
+                doApply();
+            }
+        }
+
+        // Players have nothing local worth protecting — they never edit — so
+        // they poll silently in the background instead of needing a button.
+        // Directors pull only via the explicit manual button (see the sidebar).
+        var _syncPlayerPollTimer = null;
+        function _syncStartPlayerPolling() {
+            if (_syncPlayerPollTimer) return;
+            _syncPullNow(false);
+            _syncPlayerPollTimer = setInterval(function () { _syncPullNow(false); }, 4000);
+        }
 
         function _initProjectStorage(newKey) {
             // Called on first load and whenever the REAPER project changes.
@@ -5082,6 +5449,42 @@
         document.getElementById("hideSkippedToggle").checked = hideSkippedMode;
         updateSetlistDropdown();
         (function () { var t = localStorage.getItem("reasetlist_theme") || "dark"; setTheme(t, true); })();
+
+        // ── Mode selector UI ─────────────────────────────────────────────────
+        function openModeSelector(forced) {
+            var ov = document.getElementById('mode-select-overlay');
+            var cancelBtn = document.getElementById('mode-select-cancel');
+            if (forced) { ov.classList.add('forced'); if (cancelBtn) cancelBtn.style.display = 'none'; }
+            else        { ov.classList.remove('forced'); if (cancelBtn) cancelBtn.style.display = ''; }
+            ov.classList.add('open');
+        }
+        function closeModeSelector() {
+            var ov = document.getElementById('mode-select-overlay');
+            if (ov.classList.contains('forced')) return; // forced first choice: no dismissing without picking
+            ov.classList.remove('open');
+        }
+        function chooseMode(mode) {
+            REASET_MODE = mode;
+            try { localStorage.setItem('reaset_mode', mode); } catch (e) { /* private mode etc — mode still applies for this session */ }
+            document.getElementById('mode-select-overlay').classList.remove('open', 'forced');
+            applyModeUI();
+        }
+        function applyModeUI() {
+            var badge = document.getElementById('mode-badge');
+            document.body.classList.toggle('reaset-player', REASET_MODE === 'player');
+            badge.classList.add('show');
+            badge.classList.toggle('is-director', REASET_MODE === 'director');
+            badge.classList.toggle('is-player',   REASET_MODE === 'player');
+            document.getElementById('mode-badge-label').textContent = (REASET_MODE === 'director') ? 'DIRECTOR' : 'MÚSICO';
+            if (REASET_MODE === 'player') _syncStartPlayerPolling();
+        }
+
+        // Boot: force the picker only on a genuinely fresh device (no stored
+        // choice). Recalling a stored mode grants no NEW privilege — this
+        // device already chose Director deliberately at some point — it just
+        // avoids re-forcing the choice on every accidental refresh or restart,
+        // which would otherwise strand a Director mid-show behind a modal.
+        if (REASET_MODE_STORED) { applyModeUI(); } else { openModeSelector(true); }
 
         // --- 3. REAPER REPLY HANDLER ---
         function wwr_onreply(results) {
@@ -5844,6 +6247,12 @@
             setlists[currentSetlistName] = fmt;
             localStorage.setItem(STORAGE_KEY, JSON.stringify(setlists));
             localStorage.setItem(CURRENT_KEY, currentSetlistName);
+            // Every edit that reaches this single choke point (skip/loop/chain
+            // toggles, reordering, import, pull) re-broadcasts to Players —
+            // debounced so a drag reorder or a burst of clicks coalesces into one
+            // push instead of one per keystroke. No-ops entirely outside Director
+            // mode (checked inside _syncPushSoon).
+            _syncPushSoon();
         }
 
         // --- 5. MARKER PARSER ---
@@ -8046,7 +8455,21 @@
         });
 
         // --- 17. KEYBOARD ---
+        // Keys that issue a REAPER command. Blocked outright in Player mode —
+        // the network gate on wwr_req() already makes them no-ops, but bailing
+        // here too avoids preventDefault()-ing a key that then visibly does
+        // nothing, which reads as a bug rather than "this device can't do that".
+        // View/display toggles (KeyL/KeyC/KeyG/KeyV/KeyN, Escape-to-close) are
+        // deliberately NOT in this list — Players are meant to use those.
+        var REASET_PLAYER_BLOCKED_KEYS = {
+            Space: 1, Enter: 1, KeyO: 1,
+            ArrowLeft: 1, ArrowRight: 1, ArrowUp: 1, ArrowDown: 1
+        };
         document.addEventListener('keydown', function (event) {
+            // The mode selector, while open, owns all keyboard input.
+            var _mso = document.getElementById('mode-select-overlay');
+            if (_mso && _mso.classList.contains('open')) return;
+            if (REASET_MODE === 'player' && REASET_PLAYER_BLOCKED_KEYS[event.code]) { event.preventDefault(); return; }
             // Don't intercept shortcuts when typing in form fields
             var _tag = document.activeElement ? document.activeElement.tagName : '';
             if (_tag === 'INPUT' || _tag === 'SELECT') return;

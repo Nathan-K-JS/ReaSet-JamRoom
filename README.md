@@ -56,6 +56,8 @@ Main goals:
 - 🔢 Fractional loop counter badge (e.g. `2/4`) shown live on the active section.
 - 🖥️ Live View with sub-region progress bar, next section indicator and loop counter.
 - 🌗 Real-time display filters: brightness, contrast and saturation via sidebar sliders.
+- 🎬🎧 Director/Player mode — read-only instances for musicians that can never send REAPER
+  a command, with a shared setlist synced from the Director.
 
 Main file:
 - `ReaSet.html`
@@ -429,6 +431,63 @@ Available classes: `.bold` · `.dim` · `.italic` · `.loud`
 
 ---
 
+### Director / Player Mode
+Every ReaSet instance talks to REAPER directly through the same Web Interface — there is
+no server of ReaSet's own, so control and display share one channel. That means two
+devices open at once can genuinely fight over REAPER (both auto-advancing at a song's end,
+for instance). Director/Player mode exists to make that impossible for a device that
+isn't supposed to be controlling the show in the first place — a musician's tablet, say.
+
+**On first load (or after clearing `localStorage`), ReaSet forces a choice:**
+
+| Mode | What it can do |
+|---|---|
+| 🎬 **Director** | Everything ReaSet already does: transport, cue/queue, loops, skip/chain, MIDI, reordering. |
+| 🎧 **Player (Músico)** | Read-only: live song/section/progress, lyrics, chords. Local display prefs (canvas, colours, fonts, filters) are still yours to change — none of that reaches REAPER. |
+
+The choice is **remembered** (`localStorage`, not per-session) — a refresh, an app restart or
+a device reboot does not re-ask. This is deliberate: recalling a stored mode grants no new
+privilege (the device already chose Director once, on purpose), and re-forcing the picker on
+every accidental refresh would just strand a Director mid-show behind a modal at the worst
+possible moment. A small badge in the top-right corner always shows the current mode; click
+it any time to switch (no confirmation needed going Director → Player, since that only
+narrows what the device can do).
+
+**How it's enforced:** every command this page could ever send to REAPER passes through one
+function (`wwr_req`). In Player mode that function drops anything that isn't a plain read —
+so even a stray click, a leftover keyboard shortcut, or a reconnect racing the mode check
+cannot move REAPER's transport. Buttons and shortcuts are *additionally* dimmed/disabled in
+Player mode for honesty (so a tap doesn't look like it silently failed), but that's a
+courtesy layer — the network-level block is what actually holds.
+
+> **Not a security boundary.** REAPER's own Web Interface has no authentication — anyone on
+> the same network who knows the endpoint can already control it directly, with or without
+> ReaSet. Player mode stops *ReaSet* from being a way in; it does not lock the network down.
+
+#### Shared setlist sync (Director → Players)
+Order, and each song's skip/loop/chain flags, live in the browser's own `localStorage` —
+normally private to that one device. So that Players see the *Director's actual* setlist
+instead of their own stale/default one, a Director can push a snapshot that Reaset.lua
+writes to a file (`reaset_setlist_sync.json`) next to `ReaSet.html`; Players read it.
+
+- **Push is automatic**, debounced ~1s after any edit (reorder, skip/loop/chain toggle,
+  import). You don't need to remember to sync before a show.
+- **Pull is manual** for a Director (sidebar → *Pull setlist from shared*) — adopting
+  another device's shared setlist overwrites local, unsynced edits, so it asks first.
+  Players pull automatically every few seconds in the background; nothing to click.
+- A pulled setlist that doesn't match the **currently open REAPER project** (checked via
+  the same project fingerprint used for per-project storage) is rejected rather than
+  applied — you'll see a warning instead of a garbled setlist.
+- **Known limits, by design, for this first pass:** only the active setlist's order and
+  flags sync — not the full named-setlist library, and not the live queue/cue target
+  (that's transient UI state; the actually-playing song already reaches Players for free
+  via REAPER's own transport). Two Directors pushing at nearly the same moment: last push
+  wins, with no conflict warning yet. A dropped chunk (rare, needs a mid-push network
+  hiccup) self-heals within about a second as the next tick retries — worst case, that one
+  push is silently skipped and the next edit's push supersedes it.
+
+---
+
 ## 8) Keyboard Shortcuts
 ReaSet inherently supports the following global keyboard bindings to streamline command operations in rigid setups:
 
@@ -538,6 +597,8 @@ Objetivo principal:
 - 🔢 Badge de loop fraccionario (ej. `2/4`) visible en tiempo real sobre la sección activa.
 - 🖥️ Live View con barra de progreso de sub-región, indicador de sección siguiente y contador de loops.
 - 🌗 Filtros de pantalla en tiempo real: luminancia, contraste y saturación desde la sidebar.
+- 🎬🎧 Modo Director/Player — instancias de solo lectura para músicos que nunca pueden
+  mandarle un comando a REAPER, con setlist compartido sincronizado desde el Director.
 
 Archivo principal:
 - `ReaSet.html`
@@ -919,6 +980,69 @@ Clases disponibles: `.bold` · `.dim` · `.italic` · `.loud`
 |---|---|
 | `STOP` | Marcador de parada de reproducción. |
 | `SONG END` | Alias de `STOP`. |
+
+---
+
+### Modo Director / Player
+Toda instancia de ReaSet habla directo con REAPER a través del mismo Web Interface — no hay
+servidor propio de ReaSet, así que control y visualización comparten un solo canal. Eso
+significa que dos dispositivos abiertos a la vez pueden pelearse de verdad por REAPER (los
+dos auto-avanzando al terminar una canción, por ejemplo). El modo Director/Player existe
+para hacer eso imposible en un dispositivo que no debería estar controlando el show — la
+tablet de un músico, por ejemplo.
+
+**Al cargar por primera vez (o después de limpiar `localStorage`), ReaSet exige elegir:**
+
+| Modo | Qué puede hacer |
+|---|---|
+| 🎬 **Director** | Todo lo que ReaSet ya hace: transporte, cola, loops, skip/chain, MIDI, reordenar. |
+| 🎧 **Player (Músico)** | Solo lectura: canción/sección/progreso en vivo, letras, acordes. Las preferencias de pantalla locales (canvas, colores, fuentes, filtros) siguen siendo tuyas para cambiar — nada de eso llega a REAPER. |
+
+La elección se **recuerda** (`localStorage`, no por sesión) — un refresco, un reinicio de la
+app o del dispositivo no vuelve a preguntar. Es deliberado: recordar un modo guardado no
+otorga ningún privilegio nuevo (ese dispositivo ya eligió Director una vez, a propósito), y
+volver a forzar el selector en cada refresco accidental dejaría a un Director trabado detrás
+de un modal justo en el peor momento. Un pequeño badge en la esquina superior derecha
+siempre muestra el modo actual; hacé click en cualquier momento para cambiarlo (sin
+confirmación al pasar de Director a Player, ya que eso solo reduce lo que el dispositivo
+puede hacer).
+
+**Cómo se hace cumplir:** todo comando que esta página pueda llegar a mandarle a REAPER pasa
+por una sola función (`wwr_req`). En modo Player, esa función descarta cualquier cosa que no
+sea una lectura simple — así que ni un click perdido, ni un atajo de teclado que quedó
+activo, ni una reconexión que gane la carrera contra la verificación de modo pueden mover el
+transporte de REAPER. Los botones y atajos además se ven atenuados/deshabilitados en modo
+Player por honestidad (para que un tap no parezca que falló en silencio), pero esa es una
+capa de cortesía — el bloqueo a nivel de red es lo que realmente sostiene la garantía.
+
+> **No es un límite de seguridad.** El propio Web Interface de REAPER no tiene autenticación
+> — cualquiera en la misma red que conozca el endpoint ya puede controlarlo directamente, con
+> o sin ReaSet. El modo Player evita que *ReaSet* sea una puerta de entrada; no cierra la red.
+
+#### Sincronización de setlist compartido (Director → Players)
+El orden y las banderas de skip/loop/chain de cada canción viven en el `localStorage` del
+propio navegador — normalmente privado a ese dispositivo. Para que los Players vean el
+setlist *real del Director* en vez del suyo propio (viejo o por defecto), un Director puede
+empujar una foto que `Reaset.lua` escribe en un archivo (`reaset_setlist_sync.json`) al lado
+de `ReaSet.html`; los Players lo leen.
+
+- **El push es automático**, con debounce de ~1s después de cualquier edición (reordenar,
+  toggle de skip/loop/chain, importar). No hace falta acordarse de sincronizar antes de un show.
+- **El pull es manual** para un Director (sidebar → *Pull setlist from shared*) — adoptar el
+  setlist compartido de otro dispositivo sobreescribe ediciones locales no sincronizadas, así
+  que primero pregunta. Los Players hacen pull automático cada pocos segundos en segundo
+  plano; no hay nada que clickear.
+- Un setlist compartido que no coincide con el **proyecto de REAPER actualmente abierto**
+  (verificado con el mismo fingerprint de proyecto que usa el almacenamiento por proyecto) se
+  rechaza en vez de aplicarse — vas a ver una advertencia en vez de un setlist mezclado.
+- **Límites conocidos, a propósito, para esta primera versión:** solo sincronizan el orden y
+  las banderas del setlist activo — no toda la biblioteca de setlists nombrados, ni el
+  objetivo de cola en vivo (es estado de UI transitorio; la canción realmente sonando ya le
+  llega gratis a los Players vía el transporte de REAPER). Dos Directores empujando casi al
+  mismo tiempo: gana el último push, sin aviso de conflicto todavía. Un chunk perdido (raro,
+  necesita un corte de red justo en medio de un push) se autorepara en aproximadamente un
+  segundo cuando el siguiente tick reintenta — en el peor caso, ese push se salta en
+  silencio y el push de la siguiente edición lo reemplaza.
 
 ---
 

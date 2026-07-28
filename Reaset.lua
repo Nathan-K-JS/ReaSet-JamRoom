@@ -387,6 +387,60 @@ local lyrics = bridge_new("lyrics", "XR_Lyrics", "lyricsTrack", true)
 local chords = bridge_new("chords", "XR_Chords", "chordsTrack", true)
 
 ----------------------------------------------------------------------------
+-- 4) SETLIST SYNC  — Director's browser → Reaset.lua → shared file → Players
+----------------------------------------------------------------------------
+-- ReaSet has no server of its own, so a Director's browser cannot write a
+-- file directly — the only channel it has into REAPER is SET/EXTSTATE. It
+-- base64url-encodes its setlist snapshot, splits it into pieces small enough
+-- to stay well under any URL-length ceiling, and writes each piece plus a
+-- final "chunk count" key. This script never decodes or parses any of it —
+-- it is opaque text the whole way through — it only watches the count key
+-- for a new value, concatenates that many numbered chunks, and writes the
+-- result to a file living next to ReaSet.html, where Players fetch() it.
+-- See ReaSet.html's "Shared setlist sync" section for the JS-side encode.
+
+local SYNC_FILE_NAME = "reaset_setlist_sync.json"
+
+local function sync_file_path()
+    return reaper.GetResourcePath() .. "/Plugins/reaper_www_root/" .. SYNC_FILE_NAME
+end
+
+local s_syncLastCount = nil   -- last chunk-count value already written to disk
+
+local function sync_tick()
+    local count_str = reaper.GetExtState(SEC, "setlistChunkCount")
+    if count_str == "" or count_str == s_syncLastCount then return end
+
+    local count = tonumber(count_str)
+    if not count or count < 1 then return end
+
+    local parts = {}
+    for i = 0, count - 1 do
+        local chunk = reaper.GetExtState(SEC, "setlistChunk" .. i)
+        if chunk == "" then
+            -- A chunk hasn't landed yet (the browser sends bodies before the
+            -- count, but each is a separate HTTP round-trip, so a brief gap
+            -- is possible). Don't write a half-assembled file — leave
+            -- s_syncLastCount untouched so the NEXT tick retries immediately;
+            -- self-heals within a fraction of a second once the rest arrive.
+            return
+        end
+        parts[#parts + 1] = chunk
+    end
+
+    -- Base64url's alphabet ([A-Za-z0-9_-]) can never contain a quote or
+    -- backslash, so it drops straight into this JSON string with zero
+    -- escaping needed.
+    local f = io.open(sync_file_path(), "wb")
+    if f then
+        f:write('{"v":1,"b64":"' .. table.concat(parts) .. '"}')
+        f:close()
+    end
+    s_syncLastCount = count_str   -- mark handled either way — a permissions
+                                   -- error won't be retried every tick
+end
+
+----------------------------------------------------------------------------
 -- MAIN DEFER LOOP  — drives all three subsystems from one tick
 ----------------------------------------------------------------------------
 
@@ -414,6 +468,9 @@ local function tick_body()
         and reaper.GetPlayPosition() or reaper.GetCursorPosition()
     bridge_tick(lyrics, cur_pos, _hb_tick)
     bridge_tick(chords, cur_pos, _hb_tick)
+
+    -- 4) Shared setlist file, written whenever a Director pushes
+    sync_tick()
 end
 
 local function main()
