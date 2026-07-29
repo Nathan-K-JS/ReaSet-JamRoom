@@ -25,6 +25,7 @@ If this project helps you, you can support development here:
   <img src="https://storage.ko-fi.com/cdn/kofi3.png?v=6" alt="Buy Me a Coffee at ko-fi.com" height="36" style="border:0px;height:36px;" />
 </a>
 
+📜 [Changelog](./CHANGELOG.md) · 🗺️ [Roadmap](./ROADMAP.md)
 
 ---
 
@@ -617,6 +618,7 @@ Si este proyecto te sirve, puedes apoyar su desarrollo aquí:
   <img src="https://storage.ko-fi.com/cdn/kofi3.png?v=6" alt="Invítame un café en Ko-fi" height="36" style="border:0px;height:36px;" />
 </a>
 
+📜 [Changelog](./CHANGELOG.md) · 🗺️ [Roadmap](./ROADMAP.md)
 
 ---
 
