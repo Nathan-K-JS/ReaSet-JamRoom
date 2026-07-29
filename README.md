@@ -536,6 +536,12 @@ or its own heartbeat goes stale. Nothing is blocked either way; REAPER is still 
 choose to share on purpose (a fill-in Director covering a song, for instance) — you just
 can't end up in that state *by accident* without knowing it.
 
+The warning names the other device — *"El dispositivo 'X' ya está activo como
+Director"* — instead of just "another one". Every device has a name: a rough
+OS+browser guess (*"iPad · Safari"*) by default, or a custom one you set from
+the sidebar (**This device: ... → Rename this device**), which is worth doing
+once per tablet before a show so a conflict warning is actually useful.
+
 #### Shared setlist sync (Director → Players)
 Order, and each song's skip/loop/chain flags, live in the browser's own `localStorage` —
 normally private to that one device. So that Players see the *Director's actual* setlist
@@ -1170,6 +1176,13 @@ momento en que el otro Director cierra su pestaña o su propio heartbeat queda o
 Nada se bloquea en ningún caso — REAPER sigue siendo tuyo para compartir a propósito si
 querés (un Director de reemplazo cubriendo una canción, por ejemplo) — solo que ya no podés
 terminar en ese estado *por accidente* sin saberlo.
+
+El aviso nombra al otro dispositivo — *"El dispositivo 'X' ya está activo como
+Director"* — en vez de solo "otro dispositivo". Todo dispositivo tiene un
+nombre: por defecto una estimación de OS+navegador (*"iPad · Safari"*), o uno
+propio que definís desde el sidebar (**This device: ... → Rename this
+device**), algo que conviene hacer una vez por tablet antes de un show para
+que el aviso de conflicto sirva de algo.
 
 #### Sincronización de setlist compartido (Director → Players)
 El orden y las banderas de skip/loop/chain de cada canción viven en el `localStorage` del

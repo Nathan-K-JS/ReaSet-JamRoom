@@ -354,6 +354,13 @@
             font-size: 13px;
             font-family: var(--font-mono);
             color: var(--text-secondary);
+            /* #mode-badge is position:fixed at the very top-right corner (it has
+               to be — it must stay visible over Live View/Canvas too, which
+               this row is not), so this can't just trust flex layout to avoid
+               it. Reserved width matches the badge's own widest state
+               ("DIRECTOR" + sync dot) plus its right:14px offset and a margin
+               of safety. */
+            margin-right: 150px;
         }
 
         .timer-chip {
@@ -3990,6 +3997,11 @@
 
         <div class="sidebar-section">
             <div class="sidebar-section-title">Setlist Sync (Director/Player)</div>
+            <!-- Not mode-gated: naming a device is useful before it's ever a
+                 Director, so the name is already meaningful once it becomes one. -->
+            <button class="sidebar-action-btn sab-slate" onclick="renameDevice();closeSidebar()">
+                <span class="sab-icon">🏷️</span> This device: <span id="deviceNameBtnLabel"></span>
+            </button>
             <!-- Push is meaningless on a Player — its wwr_req writes are already
                  no-ops — so it's hidden there rather than left to fail silently. -->
             <button class="sidebar-action-btn sab-slate" id="syncPushBtn" onclick="_syncPushNow();closeSidebar()">
@@ -4501,7 +4513,8 @@
                          ";GET/EXTSTATE/ReaSet/lyricsTrackMatches;GET/EXTSTATE/ReaSet/chordsTrackMatches" +
                          ";GET/EXTSTATE/ReaSet/tick;GET/EXTSTATE/ReaSet/error" +
                          ";GET/EXTSTATE/ReaSet/directorPinHash" +
-                         ";GET/EXTSTATE/ReaSet/directorHeartbeatId;GET/EXTSTATE/ReaSet/directorHeartbeatTs";
+                         ";GET/EXTSTATE/ReaSet/directorHeartbeatId;GET/EXTSTATE/ReaSet/directorHeartbeatTs" +
+                         ";GET/EXTSTATE/ReaSet/directorHeartbeatName";
         wwr_req(_diagProbe);
         wwr_req_recur(_diagProbe, 2000);
         wwr_start();
@@ -4847,9 +4860,61 @@
         // keep changing, which is why _dcLastChangeAt above is tracked relative
         // to our own clock only, never by comparing timestamps across devices.
         var _directorHeartbeatId = '';
+        var _directorHeartbeatName = '';
         var _dcLastSeenTs = '';
         var _dcLastChangeAt = 0;
         var _dcHeartbeatTimer = null;
+
+        // A human-readable label for THIS device, shown to others via the
+        // heartbeat so a conflict warning can say WHICH device rather than
+        // just "another one". User-settable (sidebar → Rename this device);
+        // falls back to a rough OS+browser guess from the UA string so it's
+        // never blank. Purely cosmetic — never used for any access decision.
+        function _guessDeviceLabel() {
+            var ua = navigator.userAgent || '';
+            var platform = 'Dispositivo';
+            if (/iPad/.test(ua)) platform = 'iPad';
+            else if (/iPhone/.test(ua)) platform = 'iPhone';
+            else if (/Android/.test(ua)) platform = 'Android';
+            else if (/Macintosh/.test(ua)) platform = 'Mac';
+            else if (/Windows/.test(ua)) platform = 'Windows';
+            else if (/Linux/.test(ua)) platform = 'Linux';
+            var browser = '';
+            if (/EdgiOS|Edg\//.test(ua)) browser = 'Edge';
+            else if (/CriOS|Chrome/.test(ua)) browser = 'Chrome';
+            else if (/FxiOS|Firefox/.test(ua)) browser = 'Firefox';
+            else if (/Safari/.test(ua)) browser = 'Safari';
+            return browser ? (platform + ' · ' + browser) : platform;
+        }
+        function _deviceName() {
+            try {
+                var stored = localStorage.getItem('reaset_device_name');
+                if (stored) return stored;
+            } catch (e) { /* private mode etc — fall through to the guess */ }
+            return _guessDeviceLabel();
+        }
+        function renameDevice() {
+            var next = window.prompt('Nombre de este dispositivo (lo ven otros en modo Director/Player):', _deviceName());
+            if (next === null) return; // cancelled
+            next = next.trim();
+            try {
+                if (next) localStorage.setItem('reaset_device_name', next);
+                else localStorage.removeItem('reaset_device_name'); // back to the auto-guess
+            } catch (e) { /* private mode etc — name only applies this session */ }
+            _refreshDeviceNameBtn();
+        }
+        function _refreshDeviceNameBtn() {
+            var el = document.getElementById('deviceNameBtnLabel');
+            if (el) el.textContent = _deviceName();
+        }
+
+        // "El dispositivo "X"" when the name is known, a generic fallback
+        // otherwise (e.g. the name hasn't propagated in the ~2s probe window
+        // yet, even though the id/timestamp already have — they're sent in
+        // the same wwr_req call, so this is a narrow, self-healing gap).
+        function _dcForeignLabel() {
+            return _directorHeartbeatName ? ('El dispositivo "' + _directorHeartbeatName + '"') : 'Otro dispositivo';
+        }
 
         function _dcForeignActive() {
             return !!_directorHeartbeatId && _directorHeartbeatId !== _syncInstanceId() &&
@@ -4860,7 +4925,8 @@
             if (_dcHeartbeatTimer) return;
             var beat = function () {
                 wwr_req('SET/EXTSTATE/ReaSet/directorHeartbeatId/' + _syncInstanceId() +
-                         ';SET/EXTSTATE/ReaSet/directorHeartbeatTs/' + Date.now());
+                         ';SET/EXTSTATE/ReaSet/directorHeartbeatTs/' + Date.now() +
+                         ';SET/EXTSTATE/ReaSet/directorHeartbeatName/' + encodeURIComponent(_deviceName()));
             };
             beat();
             _dcHeartbeatTimer = setInterval(beat, 4000);
@@ -4878,13 +4944,15 @@
                 if (!el) {
                     el = document.createElement('div');
                     el.id = 'reaset-director-conflict-banner';
-                    el.textContent = '⚠ Otro dispositivo también está en modo Director — ambos pueden controlar REAPER a la vez';
                     el.style.cssText = 'position:fixed;top:0;left:0;right:0;z-index:99998;' +
                         'background:#7f1d1d;color:#fff;text-align:center;font-size:13px;' +
                         'font-weight:600;padding:6px 10px;letter-spacing:.02em;' +
                         'box-shadow:0 2px 8px rgba(0,0,0,.35);pointer-events:none;';
                     document.body.appendChild(el);
                 }
+                // Refreshed on every show, not just on creation — the name may
+                // arrive a probe cycle after the id/timestamp already did.
+                el.textContent = '⚠ ' + _dcForeignLabel() + ' también está en modo Director — ambos pueden controlar REAPER a la vez';
                 el.style.display = '';
             } else if (el) {
                 el.style.display = 'none';
@@ -5605,7 +5673,7 @@
                     if (_pinHash(entered.trim()) !== _directorPinHash) { window.alert('PIN incorrecto.'); return; }
                 }
                 if (_dcForeignActive()) {
-                    if (!window.confirm('⚠ Otro dispositivo ya está activo como Director.\n' +
+                    if (!window.confirm('⚠ ' + _dcForeignLabel() + ' ya está activo como Director.\n' +
                         'Si continúas, ambos podrán controlar REAPER al mismo tiempo.\n¿Continuar de todas formas?')) return;
                 }
             }
@@ -5632,6 +5700,7 @@
         // which would otherwise strand a Director mid-show behind a modal.
         if (REASET_MODE_STORED) { applyModeUI(); } else { openModeSelector(true); }
         _dcWatchConflict();
+        _refreshDeviceNameBtn();
 
         // --- 3. REAPER REPLY HANDLER ---
         function wwr_onreply(results) {
@@ -5803,6 +5872,11 @@
                             // last time we looked" needs no clock agreement at all.
                             var _dhbTs = tok.slice(3).join('\t');
                             if (_dhbTs !== _dcLastSeenTs) { _dcLastSeenTs = _dhbTs; _dcLastChangeAt = Date.now(); }
+                        }
+                        if (tok[1] === "ReaSet" && tok[2] === "directorHeartbeatName") {
+                            var _dhbNameRaw = tok.slice(3).join('\t');
+                            try { _directorHeartbeatName = _dhbNameRaw ? decodeURIComponent(_dhbNameRaw) : ''; }
+                            catch (e) { _directorHeartbeatName = ''; } // malformed mid-write read — self-heals next probe
                         }
                         // NOTE: nativeLoop=done is intentionally NOT handled here.
                         // _nativeLoopSubId stays armed until the playhead physically leaves
