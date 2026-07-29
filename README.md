@@ -6,14 +6,15 @@
 - [2) Main features](#2-main-features)
 - [3) Credits and acknowledgements](#3-credits-and-acknowledgements)
 - [4) Requirements](#4-requirements)
-- [5) Installation](#5-installation)
-- [6) Usage setup](#6-usage-setup)
-- [7) Usage Manual](#7-interactive-usage-manual)
+- [5) Tools](#5-tools)
+- [6) Installation](#6-installation)
+- [7) Usage setup](#7-usage-setup)
+- [8) Usage Manual](#8-interactive-usage-manual)
   - [Lyrics & Chords Track Naming](#lyrics--chords-track-naming)
   - [Display Filters](#display-filters)
   - [Region Name Command Reference](#region-name-command-reference)
-- [8) Keyboard Shortcuts](#8-keyboard-shortcuts)
-- [9) Quick troubleshooting](#9-quick-troubleshooting)
+- [9) Keyboard Shortcuts](#9-keyboard-shortcuts)
+- [10) Quick troubleshooting](#10-quick-troubleshooting)
 
 ---
 
@@ -64,7 +65,7 @@ Main file:
 
 Included dependencies:
 - `Sortable.min.js`
-- Lua bridge scripts under `Requirements/`
+- Legacy Lua bridge scripts under `Legacy/` (optional/advanced — see [Requirements](#4-requirements))
 
 ---
 
@@ -105,7 +106,7 @@ Final functional validation was performed in REAPER with real setlist usage test
 - `Reaset.lua` — **single unified companion script** (loop engine + lyrics + chords).
 
 > **Legacy / advanced:** the three original scripts are still bundled under
-> `Requirements/` (`ReaSet_NativeLoop.lua` and the two X-Raym Lyrics/Chords
+> `Legacy/` (`ReaSet_NativeLoop.lua` and the two X-Raym Lyrics/Chords
 > converters). You only need them if you prefer running the subsystems
 > separately. For a normal setup, `Reaset.lua` replaces all three.
 > Note that the legacy scripts require the **exact** track names `lyrics` / `chords` —
@@ -124,12 +125,19 @@ See [Lyrics & Chords Track Naming](#lyrics--chords-track-naming) for the full ru
 Scripts use `reaper.ULT_GetMediaItemNote`.
 - If your REAPER build does not recognize it, install a compatible scripting/API environment (e.g., Ultraschall API) or adapt note reading.
 
-### Optional: authoring tool — Lyrics Tapper
-`Lyrics_Tapper.lua` is a standalone REAPER/ReaImGui tool for **building** the
-`lyrics`/`chords`/`notes` items ReaSet reads — not required to run ReaSet, only
-to author content quickly. Paste a block of text, press **ARM**, then tap
-along (mouse or **Space**) as the song plays: each tap closes the previous
-line's item and opens the next one at the current position, teleprompter-style.
+---
+
+## 5) Tools
+Optional standalone scripts under `Tools/`. Neither is required to run ReaSet
+itself — the always-on setup is just `Reaset.lua` + `ReaSet.html` — these are
+conveniences you reach for occasionally: one for authoring content, one for
+diagnosing the lyrics/chords bridge when a panel stays empty.
+
+### 🎤 Lyrics Tapper — `Tools/Lyrics_Tapper.lua`
+A standalone REAPER/ReaImGui tool for **building** the `lyrics`/`chords`/`notes`
+items ReaSet reads. Paste a block of text, press **ARM**, then tap along
+(mouse or **Space**) as the song plays: each tap closes the previous line's
+item and opens the next one at the current position, teleprompter-style.
 For N lines, that's N taps to place all of them, plus **one more tap** to close
 the last item and finish the take right there — no separate Stop needed for a
 clean finish, though Stop is still available any time to end early.
@@ -138,11 +146,23 @@ It auto-detects the target track with the same flexible naming rules as
 ("Chorus", "Verse 2", "[Coro]", …) so they don't become lyric items.
 
 - Requires the **ReaImGui** extension (separate from SWS).
-- Load via Actions → ReaScript: Load… → `Lyrics_Tapper.lua` → Run.
+- Load via Actions → ReaScript: Load… → `Tools/Lyrics_Tapper.lua` → Run.
+
+### 🔍 ReaSet Diagnose — `Tools/ReaSet_Diagnose.lua`
+A read-only, one-shot diagnostic report for the lyrics/chords bridge — reach
+for it when the [in-app status message](#10-quick-troubleshooting) isn't
+enough on its own. It prints every track with its normalised name and item
+count, which track each bridge would pick, whether SWS is present, the cursor
+position, and a per-item dump of the Notes field, pinpointing shadowed tracks
+(two tracks matching the same keyword) and empty Notes immediately. It also
+self-tests the lookup pipeline at a known-good position, so a badly
+positioned playhead can never look like a broken bridge.
+
+- Load via Actions → ReaScript: Load… → `Tools/ReaSet_Diagnose.lua` → Run.
 
 ---
 
-## 5) Installation
+## 6) Installation
 ### Step 1 — Copy web interface files
 Copy to REAPER web folder (where `main.js` is located):
 - `ReaSet.html`
@@ -198,7 +218,7 @@ Copy to REAPER web folder (where `main.js` is located):
 
 ---
 
-## 6) Usage setup
+## 7) Usage setup
 ### Recommended live workflow
 1. Verify regions.
 2. Run Lyrics/Chords scripts.
@@ -220,7 +240,7 @@ Copy to REAPER web folder (where `main.js` is located):
 
 ---
 
-## 7) Usage Manual
+## 8) Usage Manual
 ### Top Bar & Visualization
 - **Grid View**: Toggles between a detailed hierarchical list or large card blocks for touch-friendly usage.
 - **Hide Skipped**: Visually removes currently "skipped" songs from the view (great for decluttering during a show).
@@ -522,7 +542,7 @@ writes to a file (`reaset_setlist_sync.json`) next to `ReaSet.html`; Players rea
 
 ---
 
-## 8) Keyboard Shortcuts
+## 9) Keyboard Shortcuts
 ReaSet inherently supports the following global keyboard bindings to streamline command operations in rigid setups:
 
 | Key | Action |
@@ -542,14 +562,14 @@ ReaSet inherently supports the following global keyboard bindings to streamline 
 
 ---
 
-## 9) Quick troubleshooting
+## 10) Quick troubleshooting
 ### ❌ Lyrics or chords not showing
 The panel's empty-state message tells you the **actual** cause — read it before
 changing anything. `Reaset.lua` reports its status live:
 
 | Message | Meaning | Fix |
 |---|---|---|
-| *"Reaset.lua is not running"* | The script isn't loaded, or you're on the legacy `Requirements/` scripts | Actions → ReaScript: Load… → `Reaset.lua` → Run |
+| *"Reaset.lua is not running"* | The script isn't loaded, or you're on the legacy `Legacy/` scripts | Actions → ReaScript: Load… → `Reaset.lua` → Run |
 | *"No track named lyrics/chords found"* | Script alive, but no track matched | Check the name against [the naming rules](#lyrics--chords-track-naming) |
 | *"SWS extension missing"* | `ULT_GetMediaItemNote` unavailable | Install [SWS](https://www.sws-extension.org/) |
 | *"Track X detected — no item under the cursor"* | Everything works | Move the playhead over an item that has **Item Notes** |
@@ -558,11 +578,8 @@ The last one is the most common false alarm: the track is found, but the playhea
 is not over an item, or the item's **Notes** field is empty.
 
 #### 🔍 Diagnostic script
-If the message is not enough, run **`ReaSet_Diagnose.lua`** (Actions → ReaScript:
-Load… → Run). It is read-only and prints a full report: every track with its
-normalised name and item count, which track each bridge would pick, whether SWS is
-present, the cursor position, and a per-item dump of the Notes field. It pinpoints
-shadowed tracks (two tracks matching the same keyword) and empty Notes immediately.
+If the message is not enough, run **`Tools/ReaSet_Diagnose.lua`** — see
+[Tools](#5-tools) for what it reports.
 
 ### ❌ `ULT_GetMediaItemNote` error
 - Missing compatible scripting/API environment; install dependency or adapt script.
@@ -581,14 +598,15 @@ shadowed tracks (two tracks matching the same keyword) and empty Notes immediate
 - [2) Funcionalidades principales](#2-funcionalidades-principales)
 - [3) Créditos y agradecimientos](#3-créditos-y-agradecimientos)
 - [4) Requisitos](#4-requisitos)
-- [5) Instalación](#5-instalación)
-- [6) Configuración de uso](#6-configuración-de-uso)
-- [7) Manual de uso](#7-manual-de-uso-interactivo)
+- [5) Herramientas](#5-herramientas)
+- [6) Instalación](#6-instalación)
+- [7) Configuración de uso](#7-configuración-de-uso)
+- [8) Manual de uso](#8-manual-de-uso-interactivo)
   - [Nombres de las pistas de Letras y Acordes](#nombres-de-las-pistas-de-letras-y-acordes)
   - [Filtros de pantalla](#filtros-de-pantalla)
   - [Referencia de comandos en nombres de región](#referencia-de-comandos-en-nombres-de-región)
-- [8) Atajos de teclado](#8-atajos-de-teclado)
-- [9) Solución rápida de problemas](#9-solución-rápida-de-problemas)
+- [9) Atajos de teclado](#9-atajos-de-teclado)
+- [10) Solución rápida de problemas](#10-solución-rápida-de-problemas)
 
 ---
 
@@ -639,7 +657,7 @@ Archivo principal:
 
 Dependencias incluidas:
 - `Sortable.min.js`
-- Scripts Lua de puente en `Requirements/`
+- Scripts Lua de puente legacy en `Legacy/` (opcional/avanzado — ver [Requisitos](#4-requisitos))
 
 ---
 
@@ -680,7 +698,7 @@ La validación funcional final se hizo en REAPER con pruebas reales de uso en se
 - `Reaset.lua` — **script único unificado** (motor de loop + letras + acordes).
 
 > **Legacy / avanzado:** los tres scripts originales siguen incluidos en
-> `Requirements/` (`ReaSet_NativeLoop.lua` y los dos convertidores de X-Raym).
+> `Legacy/` (`ReaSet_NativeLoop.lua` y los dos convertidores de X-Raym).
 > Solo los necesitas si prefieres ejecutar los subsistemas por separado. Para
 > una instalación normal, `Reaset.lua` reemplaza a los tres.
 > Ten en cuenta que los scripts legacy exigen los nombres **exactos** `lyrics` / `chords`:
@@ -700,27 +718,46 @@ para las reglas completas.
 Los scripts usan `reaper.ULT_GetMediaItemNote`.
 - Si tu REAPER no reconoce esa función, instala entorno/API compatible (ej. Ultraschall API) o adapta el método de lectura de notas.
 
-### Opcional: herramienta de autoría — Lyrics Tapper
-`Lyrics_Tapper.lua` es una herramienta independiente para REAPER/ReaImGui que
-sirve para **construir** los items de `lyrics`/`chords`/`notes` que ReaSet lee
-— no hace falta para que ReaSet funcione, solo para crear el contenido rápido.
-Pega un bloque de texto, presiona **ARM** y luego marca el ritmo (mouse o
-**Space**) mientras suena la canción: cada tap cierra el item de la línea
-anterior y abre el siguiente en la posición actual, al estilo teleprompter.
-Con N líneas, son N taps para colocarlas todas, más **un tap más** para cerrar
-el último item y terminar ahí mismo — no hace falta un Stop aparte para
-terminar limpio, aunque Stop sigue disponible en cualquier momento para acabar
-antes de tiempo.
+---
+
+## 5) Herramientas
+Scripts independientes opcionales en `Tools/`. Ninguno hace falta para que
+ReaSet funcione — la instalación siempre activa es solo `Reaset.lua` +
+`ReaSet.html` — son utilidades a las que recurrís de vez en cuando: una para
+crear contenido, otra para diagnosticar el puente de letras/acordes.
+
+### 🎤 Lyrics Tapper — `Tools/Lyrics_Tapper.lua`
+Herramienta independiente para REAPER/ReaImGui que sirve para **construir**
+los items de `lyrics`/`chords`/`notes` que ReaSet lee. Pega un bloque de
+texto, presioná **ARM** y luego marcá el ritmo (mouse o **Space**) mientras
+suena la canción: cada tap cierra el item de la línea anterior y abre el
+siguiente en la posición actual, al estilo teleprompter. Con N líneas, son N
+taps para colocarlas todas, más **un tap más** para cerrar el último item y
+terminar ahí mismo — no hace falta un Stop aparte para terminar limpio,
+aunque Stop sigue disponible en cualquier momento para acabar antes de tiempo.
 Detecta la pista destino con las mismas reglas de nombre flexibles que
 `Reaset.lua`, la crea si no existe, y filtra encabezados de sección ("Coro",
 "Verso 2", "[Chorus]", …) para que no terminen como items de letra.
 
 - Requiere la extensión **ReaImGui** (aparte de SWS).
-- Cárgalo con Actions → ReaScript: Load… → `Lyrics_Tapper.lua` → Run.
+- Cárgalo con Actions → ReaScript: Load… → `Tools/Lyrics_Tapper.lua` → Run.
+
+### 🔍 ReaSet Diagnose — `Tools/ReaSet_Diagnose.lua`
+Informe de diagnóstico de solo lectura, de una sola pasada, para el puente de
+letras/acordes — recurrí a él cuando el
+[mensaje de estado in-app](#10-solución-rápida-de-problemas) no alcanza por
+sí solo. Imprime cada pista con su nombre normalizado y cantidad de items,
+qué pista elegiría cada puente, si SWS está presente, la posición del cursor,
+y un volcado de las notas item por item — detectando al instante pistas que
+se pisan entre sí (dos coincidiendo con la misma palabra clave) y notas
+vacías. También se autotestea en una posición conocida como válida, así un
+playhead mal ubicado nunca puede parecer un puente roto.
+
+- Cárgalo con Actions → ReaScript: Load… → `Tools/ReaSet_Diagnose.lua` → Run.
 
 ---
 
-## 5) Instalación
+## 6) Instalación
 ### Paso 1 — Copiar interfaz web
 Copiar en la carpeta web de REAPER (donde existe `main.js`):
 - `ReaSet.html`
@@ -777,7 +814,7 @@ Copiar en la carpeta web de REAPER (donde existe `main.js`):
 
 ---
 
-## 6) Configuración de uso
+## 7) Configuración de uso
 ### Flujo recomendado (en vivo)
 1. Verificar regiones.
 2. Ejecutar scripts Lyrics/Chords.
@@ -799,7 +836,7 @@ Copiar en la carpeta web de REAPER (donde existe `main.js`):
 
 ---
 
-## 7) Manual de uso
+## 8) Manual de uso
 ### Barra superior y visualización
 - **Grid View (Cuadrícula)**: Alterna entre diseño de lista detallada o tarjetas grandes para uso rápido.
 - **Hide Skipped**: Oculta visualmente las canciones marcadas para "saltar" (útil en vivo para no confundirse).
@@ -1116,7 +1153,7 @@ de `ReaSet.html`; los Players lo leen.
 
 ---
 
-## 8) Atajos de teclado
+## 9) Atajos de teclado
 ReaSet soporta los siguientes comandos de teclado globales para mejorar el control en entornos rígidos:
 
 | Tecla | Acción |
@@ -1136,14 +1173,14 @@ ReaSet soporta los siguientes comandos de teclado globales para mejorar el contr
 
 ---
 
-## 9) Solución rápida de problemas
+## 10) Solución rápida de problemas
 ### ❌ No aparecen letras o acordes
 El mensaje del panel vacío te dice la causa **real** — léelo antes de cambiar nada.
 `Reaset.lua` publica su estado en vivo:
 
 | Mensaje | Significado | Solución |
 |---|---|---|
-| *"Reaset.lua no está corriendo"* | El script no está cargado, o estás usando los scripts legacy de `Requirements/` | Actions → ReaScript: Load… → `Reaset.lua` → Run |
+| *"Reaset.lua no está corriendo"* | El script no está cargado, o estás usando los scripts legacy de `Legacy/` | Actions → ReaScript: Load… → `Reaset.lua` → Run |
 | *"No se encontró ningún track llamado lyrics/chords"* | El script vive, pero ninguna pista coincidió | Revisa el nombre según [las reglas](#nombres-de-las-pistas-de-letras-y-acordes) |
 | *"Falta la extensión SWS"* | `ULT_GetMediaItemNote` no está disponible | Instala [SWS](https://www.sws-extension.org/) |
 | *"Track X detectado — no hay item bajo el cursor"* | Todo funciona | Mueve el playhead sobre un item que tenga **notas** |
@@ -1152,12 +1189,8 @@ El último es la falsa alarma más común: la pista se encontró, pero el playhe
 está sobre ningún item, o el campo **Notes** del item está vacío.
 
 #### 🔍 Script de diagnóstico
-Si el mensaje no basta, ejecuta **`ReaSet_Diagnose.lua`** (Actions → ReaScript:
-Load… → Run). Es de solo lectura e imprime un informe completo: todas las pistas con
-su nombre normalizado y cantidad de items, qué pista elegiría cada puente, si SWS
-está presente, la posición del cursor y un volcado de las notas item por item.
-Detecta al instante pistas que se pisan entre sí (dos coincidiendo con la misma
-palabra clave) y notas vacías.
+Si el mensaje no basta, ejecutá **`Tools/ReaSet_Diagnose.lua`** — ver
+[Herramientas](#5-herramientas) para saber qué informa.
 
 ### ❌ Error `ULT_GetMediaItemNote`
 - Falta entorno/API compatible; instalar dependencia o adaptar script.
