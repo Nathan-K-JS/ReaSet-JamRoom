@@ -354,13 +354,6 @@
             font-size: 13px;
             font-family: var(--font-mono);
             color: var(--text-secondary);
-            /* #mode-badge is position:fixed at the very top-right corner (it has
-               to be — it must stay visible over Live View/Canvas too, which
-               this row is not), so this can't just trust flex layout to avoid
-               it. Reserved width matches the badge's own widest state
-               ("DIRECTOR" + sync dot) plus its right:14px offset and a margin
-               of safety. */
-            margin-right: 150px;
         }
 
         .timer-chip {
@@ -3235,11 +3228,10 @@
         .mode-opt-label { font-size: 14.5px; font-weight: 700; color: var(--text-primary); margin-bottom: 3px; }
         .mode-opt-desc  { font-size: 11.5px; color: var(--text2); line-height: 1.45; }
 
-        /* Persistent badge — always visible once a mode is set, so the answer
-           to "what mode am I in" is never more than a glance away. Click to
-           reopen the same selector and switch. */
+        /* Persistent badge — lives in the topbar's own info row, at the same
+           level as the show timer/song count, not floating above other
+           views. Click to reopen the mode selector and switch. */
         #mode-badge {
-            position: fixed; top: 10px; right: 14px; z-index: 4200;
             display: none; align-items: center; gap: 6px;
             padding: 5px 11px; border-radius: 999px; cursor: pointer;
             font-family: var(--font-ui);
@@ -3709,6 +3701,10 @@
                 <span class="timer-chip" id="show-timer-display">00:00</span>
                 <span>Active: <span id="song-count">0</span> · <span id="total-time">0:00</span></span>
                 <span class="timer-reset" onclick="resetShowTimer()" style="cursor:pointer; font-size:12px;">↻</span>
+                <!-- Mode badge — click to reopen the mode selector and switch. -->
+                <div id="mode-badge" onclick="openModeSelector(false)" title="Click para cambiar de modo">
+                    <span class="mb-dot"></span><span id="mode-badge-label">MODE</span><span class="mb-sync" id="mode-badge-sync"></span>
+                </div>
             </div>
         </div>
 
@@ -4094,11 +4090,6 @@
             <button id="mode-select-cancel" class="m-btn m-btn-cancel" style="margin-top:16px;width:100%;display:none"
                 onclick="closeModeSelector()">Cancelar</button>
         </div>
-    </div>
-
-    <!-- Persistent mode badge — click to switch -->
-    <div id="mode-badge" onclick="openModeSelector(false)" title="Click para cambiar de modo">
-        <span class="mb-dot"></span><span id="mode-badge-label">MODE</span><span class="mb-sync" id="mode-badge-sync"></span>
     </div>
 
     <!-- MIDI LEARN MODAL -->
