@@ -12,6 +12,7 @@
 - [8) Usage Manual](#8-interactive-usage-manual)
   - [Lyrics & Chords Track Naming](#lyrics--chords-track-naming)
   - [Display Filters](#display-filters)
+  - [MIDI Learn](#-midi-learn)
   - [Region Name Command Reference](#region-name-command-reference)
 - [9) Keyboard Shortcuts](#9-keyboard-shortcuts)
 - [10) Quick troubleshooting](#10-quick-troubleshooting)
@@ -398,6 +399,23 @@ Located under **Settings — Appearance** in the sidebar. Three independent real
 
 Values persist across sessions. A "Reset" button restores all three to default.
 
+### 🎹 MIDI Learn
+Located in the sidebar (**MIDI Learn** button). Maps notes/CC messages from a
+connected MIDI controller to Play, Stop, Play/Pause, next/previous song,
+next/previous section, toggle loop, restart song, and toggle skip. Click
+**Escuchar siguiente nota / CC…**, send the message from your controller,
+and the mapping is saved; multiple mappings can be active at once, and can
+be cleared individually or all at once.
+
+> ⚠️ **Not currently supported: Safari (macOS, iPadOS, iOS).** MIDI Learn
+> is built on the **Web MIDI API** (`navigator.requestMIDIAccess`), which
+> Safari has never implemented, on any Apple platform. The MIDI Learn panel
+> will show no available devices there — this isn't a bug to report, it's a
+> missing browser API. Use a Chromium-based browser (Chrome, Edge) instead,
+> or route the controller through REAPER itself rather than the browser
+> (REAPER's own MIDI mapping isn't affected by this at all). See the
+> [Roadmap](./ROADMAP.md) for the longer-term plan here.
+
 ### Smooth Seek
 **Smooth Seek** is enabled by default under **Show Options** and is saved separately for each REAPER project. When playback is already running, selecting a song or section manually — including MIDI **Next/Previous Section** and **Restart Song** — sends only the new position to REAPER. This lets REAPER honour its own *Do not change playback position immediately when seeking (smooth seek)* preference.
 
@@ -589,6 +607,13 @@ If the message is not enough, run **`Tools/ReaSet_Diagnose.lua`** — see
 - Verify Web Interface is enabled and reachable.
 - Verify `main.js` loads from the same folder.
 
+### ❌ MIDI Learn shows no devices / doesn't respond
+**Not currently supported in Safari — macOS, iPadOS, or iOS**, on any Apple
+device. This is not a bug: Safari has never implemented the Web MIDI API
+that the feature is built on, so there is no in-browser MIDI to detect.
+Use a Chromium-based browser (Chrome, Edge), or map the controller directly
+in REAPER instead of through ReaSet. See the [Roadmap](./ROADMAP.md).
+
 ---
 
 # 🇪🇸 SECCIÓN EN ESPAÑOL (INICIO)
@@ -605,6 +630,7 @@ If the message is not enough, run **`Tools/ReaSet_Diagnose.lua`** — see
 - [8) Manual de uso](#8-manual-de-uso-interactivo)
   - [Nombres de las pistas de Letras y Acordes](#nombres-de-las-pistas-de-letras-y-acordes)
   - [Filtros de pantalla](#filtros-de-pantalla)
+  - [MIDI Learn](#-midi-learn-1)
   - [Referencia de comandos en nombres de región](#referencia-de-comandos-en-nombres-de-región)
 - [9) Atajos de teclado](#9-atajos-de-teclado)
 - [10) Solución rápida de problemas](#10-solución-rápida-de-problemas)
@@ -1002,6 +1028,24 @@ Disponibles en **Settings — Appearance** dentro de la sidebar. Tres sliders in
 
 Los valores persisten entre sesiones. El botón "Restablecer valores" devuelve todo al 100%.
 
+### 🎹 MIDI Learn
+Está en la sidebar (botón **MIDI Learn**). Mapea notas/mensajes CC de un
+controlador MIDI conectado a Play, Stop, Play/Pause, canción siguiente/anterior,
+sección siguiente/anterior, toggle loop, reiniciar canción y toggle skip.
+Hacé click en **Escuchar siguiente nota / CC…**, mandá el mensaje desde tu
+controlador, y la asignación queda guardada; podés tener varias activas a la
+vez, y borrarlas de a una o todas juntas.
+
+> ⚠️ **No soportado actualmente en Safari — macOS, iPadOS o iOS**, en
+> ningún dispositivo de Apple. MIDI Learn está construido sobre la **Web
+> MIDI API** (`navigator.requestMIDIAccess`), que Safari nunca implementó,
+> en ninguna plataforma de Apple. El panel de MIDI Learn no va a mostrar
+> dispositivos ahí — no es un bug para reportar, es una API de navegador
+> que falta. Usá un navegador basado en Chromium (Chrome, Edge), o mapeá el
+> controlador directamente en REAPER en vez de por el navegador (el mapeo
+> MIDI nativo de REAPER no se ve afectado por esto para nada). Ver el
+> [Roadmap](./ROADMAP.md) para el plan a más largo plazo.
+
 ### Smooth Seek
 **Smooth Seek** está activado por defecto en **Show Options** y se guarda de forma independiente para cada proyecto de REAPER. Cuando la reproducción ya está en curso, al seleccionar manualmente una canción o sección —incluidos los controles MIDI **Siguiente/Anterior sección** y **Reiniciar canción**— ReaSet envía a REAPER solo la nueva posición. Así REAPER puede respetar su propia preferencia *No cambiar inmediatamente la posición de reproducción al buscar (smooth seek)*.
 
@@ -1200,3 +1244,11 @@ Si el mensaje no basta, ejecutá **`Tools/ReaSet_Diagnose.lua`** — ver
 ### ❌ Interfaz sin datos/control
 - Verificar Web Interface habilitada y accesible.
 - Verificar carga correcta de `main.js` en la misma carpeta.
+
+### ❌ MIDI Learn no muestra dispositivos / no responde
+**No soportado actualmente en Safari — macOS, iPadOS o iOS**, en ningún
+dispositivo de Apple. Esto no es un bug: Safari nunca implementó la Web
+MIDI API sobre la que está construida la función, así que no hay MIDI
+disponible en el navegador para detectar. Usá un navegador basado en
+Chromium (Chrome, Edge), o mapeá el controlador directamente en REAPER en
+vez de por ReaSet. Ver el [Roadmap](./ROADMAP.md).
