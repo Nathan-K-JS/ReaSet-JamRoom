@@ -424,6 +424,12 @@ These used to be seven separate sidebar sections — 742px of a 1626px sidebar o
 nearly half the drawer was styling knobs you set once and forget. The sidebar is down to
 985px now and reads as what it is: navigation and show controls.
 
+Each tab uses the same control kit, full width and aligned: typefaces are dropdowns rather
+than a wrapping grid of buttons, every slider shares one look, and the size presets are no
+longer a separate row of pills — they're **marks on the slider's own scale**, so you can see
+where S/M/L/XL sit before you drag, and they stay clickable. The mark matching the current
+size lights up; a value between marks lights none.
+
 The **gear popover inside the lyrics panel stays**, and it is not a second, competing copy:
 both it and the modal drive the same functions, and those write through to every control on
 screen. Change the size from the gear while reading lyrics and the modal's slider is already
@@ -1130,6 +1136,13 @@ Todo lo que cambia cómo se *ve* ReaSet vive en un solo modal, que se abre desde
 Antes eran siete secciones sueltas de la sidebar — 742px de una sidebar de 1626px en un
 teléfono, o sea casi la mitad del cajón eran perillas de estilo que configurás una vez y no
 tocás más. La sidebar quedó en 985px y se lee como lo que es: navegación y controles de show.
+
+Cada pestaña usa el mismo kit de controles, a ancho completo y alineado: las tipografías
+son listas desplegables en vez de una grilla de botones que se parte en filas, todos los
+sliders comparten un mismo estilo, y los presets de tamaño ya no son una fila aparte de
+pastillas — son **marcas sobre la escala del propio slider**, así ves dónde caen S/M/L/XL
+antes de arrastrar, y siguen siendo clickeables. La marca que coincide con el tamaño actual
+se enciende; un valor entre marcas no enciende ninguna.
 
 **El popover del engranaje dentro del panel de letras se queda**, y no es una segunda copia
 que compita: tanto él como el modal manejan las mismas funciones, y esas escriben en todos
