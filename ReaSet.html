@@ -1832,10 +1832,33 @@
            give the name back another 18px. */
         .song-row .song-actions .sa-btn { width: 28px; height: 28px; font-size: 14px; }
 
+        /* Where there is room the button states its CURRENT mode as a word —
+           SHOW in green, EDIT in amber — which is unambiguous in a way a
+           pencil is not (does the pencil mean "you are editing" or "tap to
+           edit"?). A phone has no room for the word, so it keeps the icon and
+           relies on the amber fill to say which mode is active. */
+        #editModeBtn {
+            width: auto;
+            min-width: 78px;
+            padding: 0 12px;
+            gap: 6px;
+            font-size: 11px;
+            font-weight: 800;
+            letter-spacing: 0.08em;
+            font-family: var(--font-ui);
+        }
+        #editModeBtn .emb-icon { display: none; font-size: 15px; }
         #editModeBtn.active {
             background: rgba(255, 159, 10, 0.16);
             border-color: rgba(255, 159, 10, 0.5);
             color: var(--color-timer);
+        }
+        /* Phones: back to the compact circular pencil. */
+        @media (max-width: 600px), (max-height: 520px) {
+            /* min-width would otherwise beat the 34px width above. */
+            #editModeBtn { width: 34px; min-width: 0; padding: 0; font-size: 18px; }
+            #editModeBtn .emb-icon { display: inline; }
+            #editModeBtn .emb-label { display: none; }
         }
         /* A Player has nothing to edit. */
         body.reaset-player #editModeBtn { display: none; }
@@ -4125,7 +4148,7 @@
         <div class="app-setlist-row">
             <select id="setlistSelect" class="n-select" onchange="changeSetlist()"></select>
             <button class="n-btn-new" onclick="createSetlist()" title="New">+</button>
-            <button class="n-btn-new" id="editModeBtn" onclick="toggleEditMode()" title="Edit mode">&#9998;</button>
+            <button class="n-btn-new" id="editModeBtn" onclick="toggleEditMode()" title="Edit mode"><span class="emb-icon">&#9998;</span><span class="emb-label" id="editModeLabel">SHOW</span></button>
             <div class="dotmenu-wrap" id="dotMenuWrap" style="position:relative">
                 <button class="n-dotmenu-btn" onclick="toggleDotMenu(event)" title="Options">···</button>
                 <div class="dotmenu-dropdown" id="dotMenuDropdown">
@@ -5025,6 +5048,7 @@
         // language, so translation is symmetric, needs no markup changes at
         // all, and re-running it is idempotent.
         var I18N_ROWS = [
+            ["EDIT", "EDICIÓN"],
             ["When this song ends", "Al terminar esta canción"],
             ["Auto", "Auto"],
             ["Continue", "Continuar"],
@@ -5272,6 +5296,7 @@
                     if (typeof updatePlaybackUI === 'function') updatePlaybackUI();
                     if (typeof updateMidiStatusUI === 'function') updateMidiStatusUI();
                     if (typeof renderMidiMappings === 'function') renderMidiMappings();
+                    if (typeof _refreshEditModeBtn === 'function') _refreshEditModeBtn();
                 } catch (e) { /* a view not built yet must not block the switch */ }
             }
             _i18nWalk();
@@ -6476,6 +6501,7 @@
         // avoids re-forcing the choice on every accidental refresh or restart,
         // which would otherwise strand a Director mid-show behind a modal.
         if (REASET_MODE_STORED) { applyModeUI(); } else { openModeSelector(true); }
+        _refreshEditModeBtn();
         // Runs after the UI exists so the first walk sees every static node.
         applyLanguage(REASET_LANG, true);
         _dcWatchConflict();
@@ -7827,11 +7853,23 @@
         // edit mode, with drag handles live, is exactly the state you don't
         // want to land in. Always starts in show mode.
         var REASET_EDITING = false;
+        // The chip names the mode you are IN, matching how the Director/Player
+        // badge reads. Called from applyLanguage() too, so the word follows the
+        // EN/ES switch.
+        function _refreshEditModeBtn() {
+            var b = document.getElementById('editModeBtn');
+            // !! matters: this runs once at boot, before `var REASET_EDITING`
+            // is assigned, so the flag is `undefined` there — and
+            // classList.toggle(cls, undefined) ignores the force argument and
+            // FLIPS the class instead, which lit the chip on a fresh load.
+            if (b) b.classList.toggle('active', !!REASET_EDITING);
+            var l = document.getElementById('editModeLabel');
+            if (l) l.textContent = REASET_EDITING ? t('EDIT') : t('SHOW');
+        }
         function toggleEditMode() {
             REASET_EDITING = !REASET_EDITING;
             document.body.classList.toggle('reaset-editing', REASET_EDITING);
-            var b = document.getElementById('editModeBtn');
-            if (b) b.classList.toggle('active', REASET_EDITING);
+            _refreshEditModeBtn();
             closeOpenCtxPanel();
         }
 
