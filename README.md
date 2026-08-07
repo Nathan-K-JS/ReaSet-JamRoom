@@ -416,7 +416,7 @@ Everything that changes how ReaSet *looks* lives in one modal, opened from the s
 
 | Tab | Contains |
 |---|---|
-| **General** | Display filters (luminance / contrast / saturation) and the theme |
+| **General** | Display filters (luminance / contrast / saturation), layout, theme, language and full screen |
 | **Lyrics** | Typeface, global size, main-line and context-line sizes, weight, colour, and the prev/next context toggle |
 | **Chords** | Typeface, size and colour |
 
@@ -436,6 +436,26 @@ screen. Change the size from the gear while reading lyrics and the modal's slide
 moved when you open it, and vice versa. The gear is the quick, in-context adjustment while
 you're looking at the words; the modal is the complete set (it also carries the typeface,
 which the gear never had).
+
+### Layout — song durations and full-screen views
+Two display switches in **Appearance → General → Layout**, both remembered per device.
+
+**Song durations** (on by default) hides the per-song time on the right of every setlist row
+— and with it the section times under an expanded song and the times on the grid cards, since
+they are the same information in three places. Off, the rows carry only what identifies the
+song. Useful on a phone, where every pixel the name gets back is worth having.
+
+**Full-screen views** (off by default) decides whether Lyrics, Chords and Canvas cover the
+top bar. They used to, always. Now the bar stays put by default, which keeps the clock, the
+show progress and the mode pill readable while you're reading words or chords — and on tablet
+and desktop it keeps the **view tabs** reachable, so going from Lyrics to Chords no longer
+needs a round trip through SHOW.
+
+The switch is not the only way in: each of those three views carries a **⤢ button** next to
+its close button (glyph only on a phone, worded on wider screens) that does the same thing
+from inside the view. It is **one setting behind two controls**, not two settings — flip it
+in the view and the modal's switch has already moved, and it survives a reload, so a choice
+made at soundcheck is still there at showtime.
 
 ### Language — English / Spanish
 ReaSet ships in both languages. The switch lives in **Appearance → General**, right under
@@ -1184,7 +1204,7 @@ Todo lo que cambia cómo se *ve* ReaSet vive en un solo modal, que se abre desde
 
 | Pestaña | Contiene |
 |---|---|
-| **General** | Filtros de pantalla (luminancia / contraste / saturación) y el tema |
+| **General** | Filtros de pantalla (luminancia / contraste / saturación), disposición, tema, idioma y pantalla completa |
 | **Lyrics** | Tipografía, tamaño global, tamaño de línea principal y de contexto, grosor, color y el toggle de versos anterior/siguiente |
 | **Chords** | Tipografía, tamaño y color |
 
@@ -1205,6 +1225,27 @@ los controles que estén en pantalla. Cambiás el tamaño desde el engranaje mie
 letras y el slider del modal ya está movido cuando lo abrís, y al revés. El engranaje es el
 ajuste rápido y en contexto mientras mirás la letra; el modal es el set completo (además
 tiene la tipografía, que el engranaje nunca tuvo).
+
+### Disposición — duración por canción y vistas en pantalla completa
+Dos interruptores en **Appearance → General → Disposición**, ambos recordados por dispositivo.
+
+**Duración por canción** (encendido por defecto) oculta el tiempo a la derecha de cada fila
+del setlist — y con él los tiempos de sección de una canción expandida y los de las tarjetas
+de la grilla, porque son la misma información en tres lugares. Apagado, las filas llevan solo
+lo que identifica a la canción. Sirve sobre todo en teléfono, donde cada píxel que recupera
+el nombre vale.
+
+**Vistas en pantalla completa** (apagado por defecto) decide si Letras, Acordes y Canvas
+tapan la barra superior. Antes la tapaban siempre. Ahora la barra se queda por defecto, así
+el reloj, el progreso del show y el pill de modo siguen legibles mientras leés letras o
+acordes — y en tablet y escritorio deja alcanzables las **pestañas de vista**, así que ir de
+Letras a Acordes ya no obliga a pasar por SHOW.
+
+El interruptor no es la única puerta: cada una de esas tres vistas lleva un **botón ⤢** al
+lado del de cerrar (solo el glifo en teléfono, con texto en pantallas anchas) que hace lo
+mismo desde adentro de la vista. Es **un ajuste con dos controles**, no dos ajustes — lo
+cambiás en la vista y el switch del modal ya se movió, y sobrevive a una recarga, así que lo
+que decidiste en la prueba de sonido sigue ahí en el show.
 
 ### Idioma — Inglés / Español
 ReaSet viene en ambos idiomas. El selector está en **Appearance → General**, justo debajo de

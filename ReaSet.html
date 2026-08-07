@@ -49,6 +49,11 @@
             --radius-pill: 9999px;
             --radius-card: 18px;
             --radius-sm: 8px;
+            /* Height of the top bar, and therefore how far Lyrics/Chords/Canvas
+               are pushed down when they leave room for it. One source of truth so
+               the bar and that offset can never drift apart. Overridden for phones
+               and again when running full screen (notch). */
+            --topbar-h: 56px;
             --font-ui: -apple-system, BlinkMacSystemFont, 'SF Pro Display', 'Segoe UI', 'Helvetica Neue', Arial, sans-serif;
             --font-mono: 'SF Mono', 'Roboto Mono', 'Consolas', 'Courier New', monospace;
         }
@@ -284,7 +289,7 @@
             border-bottom: 1px solid rgba(255, 255, 255, 0.08);
             display: flex;
             align-items: stretch;
-            height: 56px;
+            height: var(--topbar-h);
             flex-shrink: 0;
             padding: 0 4px;
         }
@@ -1576,7 +1581,7 @@
             .app-topbar .app-topbar-info { margin-left: auto; }
             /* 56px was sized for the tabs' stacked icon-over-label; ☰ and a
                line of 13px text don't need it. */
-            .app-topbar { height: 46px; }
+            :root { --topbar-h: 46px; }
             #sidebar-views { display: block; }
         }
 
@@ -1809,16 +1814,67 @@
            class exists only so the CSS doesn't have to care which of the two
            mechanisms produced the full screen. (.app-transport already pads
            for safe-area-inset-bottom, so the bottom edge is covered.) */
-        body.reaset-fullscreen .app-topbar {
-            height: calc(56px + env(safe-area-inset-top));
-            padding-top: env(safe-area-inset-top);
-        }
+        body.reaset-fullscreen { --topbar-h: calc(56px + env(safe-area-inset-top)); }
+        body.reaset-fullscreen .app-topbar { padding-top: env(safe-area-inset-top); }
         body.reaset-fullscreen #sidebar { padding-top: env(safe-area-inset-top); }
         @media (max-width: 600px), (max-height: 520px) {
-            body.reaset-fullscreen .app-topbar {
-                height: calc(46px + env(safe-area-inset-top));
-            }
+            body.reaset-fullscreen { --topbar-h: calc(46px + env(safe-area-inset-top)); }
         }
+
+        /* ── View chrome ─────────────────────────────────────────────────
+           Lyrics, Chords and Canvas were inset:0 — edge to edge, swallowing
+           the top bar. They now start below it by default, so the clock, the
+           mode pill and (on tablet/desktop) the view tabs stay reachable
+           without leaving the view: Lyrics to Chords no longer needs a round
+           trip through SHOW. The ⤢ button in each view, and the matching
+           switch in Appearance, restore the old edge-to-edge behaviour —
+           one persisted setting behind two controls, so they can't disagree. */
+        body:not(.reaset-viewfs) #lyrics-panel,
+        body:not(.reaset-viewfs) #chords-panel,
+        body:not(.reaset-viewfs) #canvas-mode { top: var(--topbar-h); }
+
+        .panel-fs-btn {
+            width: 28px;
+            height: 28px;
+            border-radius: 50%;
+            background: rgba(255, 255, 255, 0.08);
+            border: none;
+            color: var(--text-subdued);
+            font-size: 13px;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+        .panel-fs-btn.is-on {
+            background: rgba(30, 215, 96, 0.16);
+            color: var(--color-brand);
+        }
+        /* Chords has no header row — its close button floats, so this sits
+           beside it on the same absolute rail. */
+        #chords-panel .panel-fs-btn {
+            position: absolute;
+            top: 12px;
+            right: 50px;
+        }
+        /* The canvas header already wraps to two lines on a phone; adding a
+           worded button would make it three. There it keeps the glyph only,
+           matching how Lyrics and Chords carry the same control. */
+        @media (max-width: 600px), (max-height: 520px) {
+            #canvas-fs-btn span { display: none; }
+        }
+        #canvas-fs-btn.is-on {
+            background: rgba(30, 215, 96, 0.16);
+            border-color: rgba(30, 215, 96, 0.45);
+            color: var(--color-brand);
+        }
+
+        /* Per-song durations, hidden as one group wherever they appear:
+           the setlist rows, the section rows under an expanded song, and the
+           grid cards. */
+        body.reaset-nodur .song-duration,
+        body.reaset-nodur .section-row-dur,
+        body.reaset-nodur .grid-card-dur { display: none; }
 
         /* Full-width action button + explanatory copy for the modal. */
         .ap-btn-wide {
@@ -4549,6 +4605,25 @@
                     </div>
                 </div>
 
+                <div class="ap-group">
+                    <div class="ap-group-title">Layout</div>
+                    <label class="ap-toggle-row" style="margin-bottom:12px">
+                        <span>Song durations</span>
+                        <span class="n-switch">
+                            <input type="checkbox" class="js-show-dur" checked onchange="setShowDurations(this.checked)">
+                            <span class="n-track"><span class="n-thumb"></span></span>
+                        </span>
+                    </label>
+                    <label class="ap-toggle-row">
+                        <span>Full-screen views</span>
+                        <span class="n-switch">
+                            <input type="checkbox" class="js-viewfs" onchange="setViewFullscreen(this.checked)">
+                            <span class="n-track"><span class="n-thumb"></span></span>
+                        </span>
+                    </label>
+                    <div class="ap-hint" style="margin-top:9px">Hides the top bar in Lyrics, Chords and Canvas.</div>
+                </div>
+
                 <div class="ap-group" id="ap-fs-group">
                     <div class="ap-group-title">Full screen</div>
                     <button class="ap-btn-wide" id="ap-fs-btn" onclick="toggleFullscreen()">Enter full screen</button>
@@ -4780,6 +4855,7 @@
             <span class="lyrics-hdr-actions">
                 <span class="lyrics-gear" id="lyrics-gear" title="Ajustes de letra"
                       onclick="toggleLyricsSettings(event)">&#9881;</span>
+                <span class="panel-fs-btn" onclick="toggleViewFullscreen()" title="Hide top bar">&#10530;</span>
                 <span class="panel-close-btn" onclick="toggleLyricsPanel()">✕</span>
             </span>
         </div>
@@ -4845,6 +4921,7 @@
 
     <!-- CHORDS PANEL -->
     <div id="chords-panel">
+        <span class="panel-fs-btn" onclick="toggleViewFullscreen()" title="Hide top bar">&#10530;</span>
         <span class="chord-close-btn" onclick="toggleChordsPanel()">✕</span>
         <div class="chord-row">
             <span class="chord-slot chord-ctx chord-prev empty" id="chord-prev"></span>
@@ -4968,6 +5045,8 @@
                 Exit</button>
             <button class="lt-btn lt-play" id="canvas-edit-btn" onclick="toggleCanvasEdit()"
                 style="font-size: 14px; padding: 6px 16px;">Edit Canvas</button>
+            <button class="lt-btn lt-ghost" id="canvas-fs-btn" onclick="toggleViewFullscreen()"
+                style="font-size: 14px; padding: 6px 16px;">&#10530; <span>Hide top bar</span></button>
         </div>
         <div id="canvas-workspace">
             <!-- Song Name widget -->
@@ -5153,6 +5232,12 @@
         // language, so translation is symmetric, needs no markup changes at
         // all, and re-running it is idempotent.
         var I18N_ROWS = [
+            ["Layout", "Disposición"],
+            ["Song durations", "Duración por canción"],
+            ["Full-screen views", "Vistas en pantalla completa"],
+            ["Hides the top bar in Lyrics, Chords and Canvas.", "Oculta la barra superior en Letras, Acordes y Canvas."],
+            ["Hide top bar", "Ocultar barra superior"],
+            ["Show top bar", "Mostrar barra superior"],
             ["Full screen", "Pantalla completa"],
             ["Enter full screen", "Entrar en pantalla completa"],
             ["Exit full screen", "Salir de pantalla completa"],
@@ -5419,6 +5504,8 @@
                     if (typeof updateMidiStatusUI === 'function') updateMidiStatusUI();
                     if (typeof renderMidiMappings === 'function') renderMidiMappings();
                     if (typeof _refreshEditModeBtn === 'function') _refreshEditModeBtn();
+                    // title= attributes are not walked, so they need re-stating.
+                    if (typeof _applyViewFullscreen === 'function') _applyViewFullscreen();
                 } catch (e) { /* a view not built yet must not block the switch */ }
             }
             _i18nWalk();
@@ -9325,6 +9412,56 @@
 
         // --- APPEARANCE FILTERS (brightness / contrast / saturation on .app-content) ---
         var g_appearance = { brightness: 100, contrast: 100, saturation: 100 };
+
+        // ── View chrome + setlist durations ──────────────────────────────
+        // Two display preferences, each reachable from more than one control
+        // (a button inside the view and a switch in Appearance). Every control
+        // reads back from the one variable rather than from whichever one the
+        // user last touched, so they can never disagree.
+        var REASET_VIEWFS  = false;   // true = Lyrics/Chords/Canvas cover the top bar
+        var REASET_SHOWDUR = true;    // per-song durations in the setlist
+        try {
+            REASET_VIEWFS  = localStorage.getItem('reaset_view_fullscreen') === '1';
+            REASET_SHOWDUR = localStorage.getItem('reaset_show_durations') !== '0';
+        } catch (e) { /* private mode — the defaults stand */ }
+
+        function _syncChecks(cls, on) {
+            var els = document.querySelectorAll('.' + cls);
+            for (var i = 0; i < els.length; i++) els[i].checked = !!on;
+        }
+
+        function _applyViewFullscreen() {
+            document.body.classList.toggle('reaset-viewfs', !!REASET_VIEWFS);
+            var label = t(REASET_VIEWFS ? 'Show top bar' : 'Hide top bar');
+            var btns = document.querySelectorAll('.panel-fs-btn, #canvas-fs-btn');
+            for (var i = 0; i < btns.length; i++) {
+                btns[i].classList.toggle('is-on', !!REASET_VIEWFS);
+                btns[i].title = label;
+            }
+            // Canvas's button carries a visible label as well as the glyph.
+            var span = document.querySelector('#canvas-fs-btn span');
+            if (span) span.textContent = label;
+            _syncChecks('js-viewfs', REASET_VIEWFS);
+        }
+        function setViewFullscreen(on) {
+            REASET_VIEWFS = !!on;
+            try { localStorage.setItem('reaset_view_fullscreen', REASET_VIEWFS ? '1' : '0'); } catch (e) {}
+            _applyViewFullscreen();
+        }
+        function toggleViewFullscreen() { setViewFullscreen(!REASET_VIEWFS); }
+
+        function _applyShowDurations() {
+            document.body.classList.toggle('reaset-nodur', !REASET_SHOWDUR);
+            _syncChecks('js-show-dur', REASET_SHOWDUR);
+        }
+        function setShowDurations(on) {
+            REASET_SHOWDUR = !!on;
+            try { localStorage.setItem('reaset_show_durations', REASET_SHOWDUR ? '1' : '0'); } catch (e) {}
+            _applyShowDurations();
+        }
+
+        _applyViewFullscreen();
+        _applyShowDurations();
 
         // ── Full screen ──────────────────────────────────────────────────
         // Two mechanisms, because neither one covers both phones:
