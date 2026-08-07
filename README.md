@@ -533,6 +533,18 @@ chains into the next. Skipped songs stay clearly greyed out, the currently-playi
 renders at full strength, and the rest of the rows are only lightly dimmed so the names,
 times and progress stay easy to read on stage.
 
+**The sidebar is filtered the same way.** A Player keeps everything that only changes their
+own screen — Display Filters, Theme, lyrics/chords fonts, sizes and colours, plus
+**Auto-Scroll, Hide Skips and Grid View**, which are view toggles that never reach REAPER
+(Auto-Scroll is a plain `scrollIntoView()`; the other two only re-render the list). What
+goes is what steers the *show*: Queue Mode and Smooth Seek change how a click seeks, and a
+Player can't click; Auto-Stop and Init Song MIDI send REAPER commands outright; Stop Hold
+tunes a transport button that isn't there in Player mode; and MIDI Learn maps a controller
+onto those same blocked commands, so a Player could bind a pedal and then watch it do
+nothing. The three view toggles stay on purpose — they're the same ones Player mode already
+leaves working on the keyboard, so hiding their switches would contradict shortcuts that
+still respond.
+
 The footer transport follows the same rule. PLAY / STOP / Loop are gone in Player mode —
 they do nothing, and PLAY was the worst of them, since its label is the *action* rather
 than the state, so it read "PAUSE" while playing on a screen where nothing can be paused.
@@ -1211,6 +1223,18 @@ activo: un Player no puede presionarlos, pero *sí* necesita saber que una canci
 engancha con la siguiente. Las canciones skipeadas quedan claramente grises, la fila que
 está sonando se muestra a intensidad plena, y el resto se atenúa apenas para que los
 nombres, tiempos y progreso se lean bien en escena.
+
+**La sidebar se filtra con el mismo criterio.** Un Player conserva todo lo que solo cambia
+su propia pantalla — Display Filters, Theme, fuentes/tamaños/colores de letras y acordes,
+más **Auto-Scroll, Hide Skips y Grid View**, que son toggles de vista que nunca llegan a
+REAPER (Auto-Scroll es un `scrollIntoView()` pelado; los otros dos solo re-renderizan la
+lista). Lo que se va es lo que dirige el *show*: Queue Mode y Smooth Seek cambian cómo
+busca un click, y un Player no puede clickear; Auto-Stop e Init Song MIDI mandan comandos a
+REAPER directamente; Stop Hold ajusta un botón de transporte que en modo Player ni existe;
+y MIDI Learn mapea un controlador contra esos mismos comandos bloqueados, así que un Player
+podría asignar un pedal y después verlo no hacer nada. Los tres toggles de vista se quedan a
+propósito — son los mismos que el modo Player ya deja funcionando por teclado, así que
+esconder sus switches contradiría atajos que sí responden.
 
 La barra de transporte inferior sigue la misma regla. PLAY / STOP / Loop desaparecen en
 modo Player — no hacen nada, y PLAY era el peor de los tres, porque su etiqueta es la

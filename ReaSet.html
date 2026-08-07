@@ -3458,6 +3458,24 @@
            silently do nothing when clicked. */
         body.reaset-player #syncPushBtn { display: none; }
         body.reaset-player #directorPinBtn { display: none; }
+
+        /* ── Sidebar options a Player has no use for ─────────────────────
+           Marked in the markup with `director-only` rather than matched by
+           id here, so the reason travels with the control it applies to.
+           Covers the Show Options that steer the SHOW — Queue Mode and
+           Smooth Seek change how a click seeks (a Player can't click),
+           Auto-Stop and Init Song MIDI send REAPER commands outright, Stop
+           Hold tunes a transport button that isn't there — plus MIDI Learn,
+           whose mappings resolve to those same gated commands, so a Player
+           could map a pedal and then watch it do nothing.
+
+           Auto-Scroll, Hide Skips and Grid View deliberately STAY: all three
+           only re-render this device's own screen and never reach REAPER
+           (verified — Auto-Scroll is a bare row.scrollIntoView()). They are
+           also exactly the view toggles Player mode already leaves on the
+           keyboard (KeyG et al), so hiding their switches would contradict
+           shortcuts that still work. */
+        body.reaset-player .director-only { display: none; }
         .midi-modal {
             background: #1c1c1e;
             border: 1px solid rgba(255,255,255,0.14);
@@ -3985,7 +4003,7 @@
                 <button class="help-btn" style="margin-left:auto" onclick="showHelp('scroll')">?</button>
             </div>
 
-            <div class="toggle-row">
+            <div class="toggle-row director-only">
                 <label class="n-switch"><input type="checkbox" id="queueModeToggle">
                     <div class="n-track">
                         <div class="n-thumb"></div>
@@ -3995,7 +4013,7 @@
                 <button class="help-btn" style="margin-left:auto" onclick="showHelp('queue')">?</button>
             </div>
 
-            <div class="toggle-row">
+            <div class="toggle-row director-only">
                 <label class="n-switch"><input type="checkbox" id="smoothSeekToggle" checked onchange="setSmoothSeek(this.checked)">
                     <div class="n-track">
                         <div class="n-thumb"></div>
@@ -4005,7 +4023,7 @@
                 <button class="help-btn" style="margin-left:auto" onclick="showHelp('smoothseek')">?</button>
             </div>
 
-            <div class="toggle-row">
+            <div class="toggle-row director-only">
                 <label class="n-switch"><input type="checkbox" id="autoStopToggle" checked>
                     <div class="n-track">
                         <div class="n-thumb"></div>
@@ -4025,7 +4043,7 @@
                 <button class="help-btn" style="margin-left:auto" onclick="showHelp('hide')">?</button>
             </div>
 
-            <div class="toggle-row">
+            <div class="toggle-row director-only">
                 <label class="n-switch"><input type="checkbox" id="initSongMidiToggle" checked>
                     <div class="n-track">
                         <div class="n-thumb"></div>
@@ -4035,7 +4053,7 @@
                 <button class="help-btn" style="margin-left:auto" onclick="showHelp('initsongmidi')">?</button>
             </div>
 
-            <div class="toggle-row">
+            <div class="toggle-row director-only">
                 <label class="n-switch"><input type="checkbox" id="stopHoldToggle"
                         onchange="setStopMode(this.checked ? 'hold' : 'tap')">
                     <div class="n-track">
@@ -4056,7 +4074,7 @@
             </div>
         </div>
 
-        <div class="sidebar-section">
+        <div class="sidebar-section director-only">
             <div class="sidebar-section-title">Settings &mdash; MIDI <span id="midi-sidebar-indicator" class="midi-indicator"></span></div>
             <button class="sidebar-action-btn sab-slate" onclick="openMidiModal()">
                 <span class="sab-icon">
