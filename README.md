@@ -468,7 +468,11 @@ next/previous section, toggle loop, restart song, and toggle skip. Click
 and the mapping is saved; multiple mappings can be active at once, and can
 be cleared individually or all at once.
 
-> ⚠️ **Not currently supported: Safari (macOS, iPadOS, iOS).** MIDI Learn
+> ⛔ **Currently disabled in the app.** The whole MIDI module is commented out
+> for now — see below for why — and will come back when ReaSet becomes an
+> installable app with real MIDI access ([Roadmap](./ROADMAP.md)).
+
+> ⚠️ **Not supported by Safari (macOS, iPadOS, iOS).** MIDI Learn
 > is built on the **Web MIDI API** (`navigator.requestMIDIAccess`), which
 > Safari has never implemented, on any Apple platform. The MIDI Learn panel
 > will show no available devices there — this isn't a bug to report, it's a
@@ -1198,7 +1202,11 @@ Hacé click en **Escuchar siguiente nota / CC…**, mandá el mensaje desde tu
 controlador, y la asignación queda guardada; podés tener varias activas a la
 vez, y borrarlas de a una o todas juntas.
 
-> ⚠️ **No soportado actualmente en Safari — macOS, iPadOS o iOS**, en
+> ⛔ **Desactivado en la app por ahora.** El módulo MIDI completo está
+> comentado —abajo el motivo— y vuelve cuando ReaSet sea una app instalable
+> con acceso MIDI real ([Roadmap](./ROADMAP.md)).
+
+> ⚠️ **No soportado por Safari — macOS, iPadOS o iOS**, en
 > ningún dispositivo de Apple. MIDI Learn está construido sobre la **Web
 > MIDI API** (`navigator.requestMIDIAccess`), que Safari nunca implementó,
 > en ninguna plataforma de Apple. El panel de MIDI Learn no va a mostrar

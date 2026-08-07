@@ -4299,7 +4299,8 @@
             </div>
         </div>
 
-        <div class="sidebar-section director-only">
+        <!-- MIDI sidebar section — DISABLED, see the MIDI MODULE note in the script
+<div class="sidebar-section director-only">
             <div class="sidebar-section-title">Settings &mdash; MIDI <span id="midi-sidebar-indicator" class="midi-indicator"></span></div>
             <button class="sidebar-action-btn sab-slate" onclick="openMidiModal()">
                 <span class="sab-icon">
@@ -4316,6 +4317,7 @@
                 MIDI Learn
             </button>
         </div>
+        -->
 
         <div class="sidebar-section">
             <div class="sidebar-section-title">Appearance</div>
@@ -4609,7 +4611,8 @@
     </div>
 
     <!-- MIDI LEARN MODAL -->
-    <div id="midi-modal-overlay" onclick="if(event.target===this)closeMidiModal()">
+    <!-- MIDI Learn modal — DISABLED, see the MIDI MODULE note in the script
+<div id="midi-modal-overlay" onclick="if(event.target===this)closeMidiModal()">
         <div class="midi-modal">
             <div class="midi-modal-title">MIDI Learn</div>
 
@@ -4656,6 +4659,7 @@
             </div>
         </div>
     </div>
+        -->
 
     <!-- LYRICS PANEL -->
     <div id="lyrics-panel">
@@ -5037,6 +5041,8 @@
         // language, so translation is symmetric, needs no markup changes at
         // all, and re-running it is idempotent.
         var I18N_ROWS = [
+            ["Connected to REAPER", "Conectado a REAPER"],
+            ["No reply from REAPER", "Sin respuesta de REAPER"],
             ["Active songs", "Canciones activas"],
             ["Show progress / total", "Progreso del show / total"],
             ["Session time since first playback — long-press to reset", "Tiempo de sesión desde la primera reproducción — mantené presionado para reiniciar"],
@@ -5481,15 +5487,28 @@
             };
         }
 
-        // Small ● / ⚠ mark next to the mode badge. Meaningful mainly for
-        // Players, the only instances polling continuously — a Director only
-        // pulls manually and already gets an alert() on failure.
-        function _syncSetBadgeStatus(ok) {
+        // The mark beside the mode badge reports the REAPER CONNECTION, which
+        // is what anyone reads a dot on a status pill to mean.
+        //
+        // It used to report the shared-setlist file instead, and that was wrong
+        // in both modes: a Player polling for a setlist no Director had pushed
+        // yet showed a permanent red ⚠ despite a perfectly healthy connection —
+        // "nobody shared a setlist" is a normal state, not a fault — while a
+        // Director showed nothing at all until it happened to push one.
+        //
+        // Connection health is already tracked: wwr_onreply() stamps
+        // _lastReplyTs on every reply, and TRANSPORT polls at ~33ms, so a gap
+        // of more than a second means the stream is not flowing.
+        var CONN_STALE_MS = 1500;
+        function _refreshConnBadge() {
             var el = document.getElementById('mode-badge-sync');
             if (!el) return;
-            el.textContent = ok ? '●' : '⚠';
-            el.style.color = ok ? '' : '#ff453a';
+            var live = _lastReplyTs && (Date.now() - _lastReplyTs) < CONN_STALE_MS;
+            el.textContent = live ? '\u25CF' : '\u26A0';
+            el.style.color = live ? 'var(--color-brand)' : '#ff453a';
+            el.title = live ? t('Connected to REAPER') : t('No reply from REAPER');
         }
+        setInterval(_refreshConnBadge, 1000);
 
         // Sends the current setlist to Reaset.lua for writing into the shared
         // file. Director-only by construction: wwr_req's own Player-mode gate
@@ -5508,7 +5527,6 @@
                 wwr_req('SET/EXTSTATE/ReaSet/setlistChunk' + c + '/' + chunks[c]);
             }
             wwr_req('SET/EXTSTATE/ReaSet/setlistChunkCount/' + chunks.length);
-            _syncSetBadgeStatus(true);
         }
 
         // Debounced entry point — every setlist edit (skip/loop/chain, reorder,
@@ -5531,10 +5549,10 @@
                 .then(function (envelope) {
                     if (!envelope || typeof envelope.b64 !== 'string') throw new Error('archivo de sincronización inválido');
                     _syncApplyPayload(JSON.parse(_b64uDecode(envelope.b64)), manual);
-                    _syncSetBadgeStatus(true);
                 })
                 .catch(function (err) {
-                    _syncSetBadgeStatus(false);
+                    // A missing shared file just means no Director has pushed
+                    // one; only an explicit Pull click deserves to be told.
                     if (manual) showAppAlert('No se pudo leer el setlist compartido: ' + err.message, 'Pull');
                 });
         }
@@ -9798,6 +9816,22 @@
             }
         });
 
+        /* ══════════════════════════════════════════════════════════
+           MIDI MODULE — Web MIDI API — COMMENTED OUT
+           ══════════════════════════════════════════════════════════
+           Disabled on purpose, not broken. It is built on the Web MIDI API,
+           which Safari has never implemented on any Apple platform — so on
+           the iPad or iPhone a musician is most likely to run this on, MIDI
+           Learn could map a pedal and then watch it do nothing. Keeping a
+           control that cannot work is worse than not offering it.
+
+           Everything is preserved verbatim below so it can be switched back
+           on when ReaSet becomes an installable app with real MIDI access
+           (see ROADMAP.md). Nothing else depends on it: every midi* action
+           here is only called from onMidiMessage, and triggerMidi() — which
+           fires REAPER's own transport to initialise MIDI hardware, and is
+           NOT Web MIDI — lives elsewhere and is untouched.
+
         // ══════════════════════════════════════════════════════════
         // MIDI MODULE — Web MIDI API (Phase 1)
         // ══════════════════════════════════════════════════════════
@@ -10120,6 +10154,8 @@
 
         // ── Boot ───────────────────────────────────────────────────
         initMidi();
+        ══════════════════════════════════════════════════════════ */
+
 
         // ══════════════════════════════════════════════════════════
 
