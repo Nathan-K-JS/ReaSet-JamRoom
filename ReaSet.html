@@ -1569,6 +1569,53 @@
             #sidebar-views { display: block; }
         }
 
+        /* ── Appearance modal tabs ───────────────────────────────────────
+           Every appearance control used to be a separate sidebar section:
+           7 of them, 742px of a 1626px sidebar on a phone, so nearly half the
+           drawer was styling knobs you touch once. They live here now, split
+           by subject so the modal stays about one screen instead of becoming
+           the same long scroll in a different container. */
+        .ap-tabs {
+            display: flex;
+            gap: 4px;
+            padding-bottom: 14px;
+            margin-bottom: 16px;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+        }
+        .ap-tab {
+            flex: 1;
+            padding: 9px 4px;
+            border-radius: 9px;
+            border: 1px solid transparent;
+            background: rgba(255, 255, 255, 0.05);
+            color: var(--text-subdued);
+            font-family: var(--font-ui);
+            font-size: 11px;
+            font-weight: 800;
+            letter-spacing: 0.06em;
+            text-transform: uppercase;
+            cursor: pointer;
+            transition: all 0.15s;
+        }
+        .ap-tab.active {
+            background: rgba(30, 215, 96, 0.12);
+            border-color: rgba(30, 215, 96, 0.45);
+            color: var(--color-brand);
+        }
+        .ap-group { margin-bottom: 18px; }
+        .ap-group:last-child { margin-bottom: 0; }
+        .ap-group-title {
+            font-size: 10px;
+            text-transform: uppercase;
+            letter-spacing: 2px;
+            font-weight: 700;
+            color: var(--text-subdued);
+            margin-bottom: 10px;
+        }
+        /* The modal can now hold more than three sliders, so it scrolls
+           internally rather than growing past a short phone screen. */
+        .appearance-modal { max-height: 86vh; overflow-y: auto; }
+
         .sidebar-action-btn {
             display: flex;
             align-items: center;
@@ -2420,10 +2467,10 @@
 
         .lyrics-settings.open { display: block; }
 
-        .lyrics-settings .ls-row { margin-bottom: 13px; }
-        .lyrics-settings .ls-row:last-child { margin-bottom: 0; }
+        .ls-row { margin-bottom: 13px; }
+        .ls-row:last-child { margin-bottom: 0; }
 
-        .lyrics-settings .ls-label {
+        .ls-label {
             display: flex;
             justify-content: space-between;
             font-size: 11px;
@@ -2434,7 +2481,9 @@
             margin-bottom: 7px;
         }
 
-        .lyrics-settings input[type="range"] { width: 100%; }
+        /* Applies wherever an .ls-row lives — the popover and the modal both
+           host these now. */
+        .ls-row input[type="range"] { width: 100%; }
 
         .ls-btn-group { display: flex; gap: 6px; }
 
@@ -4093,7 +4142,7 @@
         </div>
 
         <div class="sidebar-section">
-            <div class="sidebar-section-title">Settings &mdash; Appearance</div>
+            <div class="sidebar-section-title">Appearance</div>
             <button class="sidebar-action-btn sab-slate" onclick="openAppearanceModal()">
                 <span class="sab-icon">
                     <svg width="18" height="18" viewBox="0 0 18 18" fill="none" xmlns="http://www.w3.org/2000/svg">
@@ -4102,100 +4151,16 @@
                         <line x1="1.5" y1="9" x2="16.5" y2="9" stroke="white" stroke-opacity="0.85" stroke-width="1.5"/>
                     </svg>
                 </span>
-                Display Filters
+                Appearance
             </button>
         </div>
 
-        <div class="sidebar-section">
-            <div class="sidebar-section-title">Settings &mdash; Theme</div>
-            <div class="theme-selector">
-                <div class="theme-dot active" data-theme="dark" onclick="setTheme('dark')"
-                    style="background:#121212;border-color:#fff" title="Dark"></div>
-            </div>
-        </div>
-
-        <div class="sidebar-section">
-            <div class="sidebar-section-title">Lyrics &mdash; Font</div>
-            <div class="font-options">
-                <button class="font-btn active" data-font="'Helvetica Neue', Helvetica, Arial, sans-serif"
-                    onclick="applyLyricsFont(this)">Helvetica</button>
-                <button class="font-btn" data-font="Arial, sans-serif" onclick="applyLyricsFont(this)">Arial</button>
-                <button class="font-btn" data-font="Impact, 'Arial Narrow', sans-serif"
-                    onclick="applyLyricsFont(this)">Gothic</button>
-                <button class="font-btn" data-font="Verdana, Geneva, sans-serif"
-                    onclick="applyLyricsFont(this)">Verdana</button>
-                <button class="font-btn" data-font="'Trebuchet MS', sans-serif"
-                    onclick="applyLyricsFont(this)">Trebuchet</button>
-                <button class="font-btn" data-font="'Courier New', Courier, monospace"
-                    onclick="applyLyricsFont(this)">Mono</button>
-                <button class="font-btn" data-font="Georgia, 'Times New Roman', serif"
-                    onclick="applyLyricsFont(this)">Georgia</button>
-            </div>
-        </div>
-
-        <div class="sidebar-section">
-            <div class="sidebar-section-title">Lyrics &mdash; Size <span id="font-size-label"
-                    style="color:var(--color-brand);float:right">36px</span></div>
-            <input type="range" id="font-size-slider" class="size-slider" min="16" max="144" step="2" value="36"
-                oninput="applyLyricsSize(this.value)">
-            <div class="size-presets">
-                <button class="size-preset" onclick="applyLyricsSize(20)">S</button>
-                <button class="size-preset" onclick="applyLyricsSize(36)">M</button>
-                <button class="size-preset" onclick="applyLyricsSize(52)">L</button>
-                <button class="size-preset" onclick="applyLyricsSize(72)">XL</button>
-                <button class="size-preset" onclick="applyLyricsSize(96)">XXL</button>
-                <button class="size-preset" onclick="applyLyricsSize(120)">3XL</button>
-                <button class="size-preset" onclick="applyLyricsSize(144)">4XL</button>
-            </div>
-        </div>
-
-        <div class="sidebar-section">
-            <div class="sidebar-section-title">Chords &mdash; Font</div>
-            <div class="font-options" id="chords-font-options">
-                <button class="font-btn active" data-font="Georgia, serif"
-                    onclick="applyChordsFont(this)">Georgia</button>
-                <button class="font-btn" data-font="'Helvetica Neue', Helvetica, Arial, sans-serif"
-                    onclick="applyChordsFont(this)">Helvetica</button>
-                <button class="font-btn" data-font="Impact, 'Arial Narrow', sans-serif"
-                    onclick="applyChordsFont(this)">Impact</button>
-                <button class="font-btn" data-font="'Courier New', Courier, monospace"
-                    onclick="applyChordsFont(this)">Mono</button>
-            </div>
-        </div>
-
-        <div class="sidebar-section">
-            <div class="sidebar-section-title">Chords &mdash; Size <span id="chords-size-label"
-                    style="color:var(--color-brand);float:right">110px</span></div>
-            <input type="range" id="chords-size-slider" class="size-slider" min="40" max="220" step="4" value="110"
-                oninput="applyChordsSize(this.value)">
-            <div class="size-presets">
-                <button class="size-preset" onclick="applyChordsSize(60)">S</button>
-                <button class="size-preset" onclick="applyChordsSize(110)">M</button>
-                <button class="size-preset" onclick="applyChordsSize(160)">L</button>
-                <button class="size-preset" onclick="applyChordsSize(200)">XL</button>
-            </div>
-        </div>
-
-        <div class="sidebar-section">
-            <div class="sidebar-section-title">Chords &mdash; Color</div>
-            <div id="chords-color-selector" class="color-dots">
-                <div class="color-dot" style="background:#BF5AF2" onclick="applyChordsColor('#BF5AF2')" title="Lilac">
-                </div>
-                <div class="color-dot" style="background:#FC3C44" onclick="applyChordsColor('#FC3C44')" title="Red">
-                </div>
-                <div class="color-dot" style="background:#FFFFFF" onclick="applyChordsColor('#FFFFFF')" title="White">
-                </div>
-                <div class="color-dot" style="background:#1ED760" onclick="applyChordsColor('#1ED760')" title="Green">
-                </div>
-                <div class="color-dot" style="background:#64D2FF" onclick="applyChordsColor('#64D2FF')" title="Blue">
-                </div>
-                <div class="color-dot" style="background:#FF9F0A" onclick="applyChordsColor('#FF9F0A')" title="Amber">
-                </div>
-                <div class="color-dot" style="background:#30D158" onclick="applyChordsColor('#30D158')" title="Teal">
-                </div>
-            </div>
-        </div>
-
+        
+        
+        
+        
+        
+        
         <div class="sidebar-section">
             <div class="sidebar-section-title">Data &mdash; Backup</div>
             <button class="sidebar-action-btn sab-slate" onclick="exportAllData()">
@@ -4240,13 +4205,25 @@
     <div id="appearance-modal-overlay" onclick="if(event.target===this)closeAppearanceModal()">
         <div class="appearance-modal">
             <div class="appearance-modal-header">
-                <span class="appearance-modal-title">Display Filters</span>
+                <span class="appearance-modal-title">Appearance</span>
                 <button class="appearance-modal-close" onclick="closeAppearanceModal()">
                     <svg width="11" height="11" viewBox="0 0 11 11" fill="none">
                         <path d="M1 1L10 10M10 1L1 10" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/>
                     </svg>
                 </button>
             </div>
+
+            <!-- Appearance is one place with three subjects; tabs keep the
+                 modal one screen tall instead of a long scroll. -->
+            <div class="ap-tabs" role="tablist">
+                <button class="ap-tab active" id="ap-tab-general" onclick="setAppearanceTab('general')">General</button>
+                <button class="ap-tab" id="ap-tab-lyrics" onclick="setAppearanceTab('lyrics')">Lyrics</button>
+                <button class="ap-tab" id="ap-tab-chords" onclick="setAppearanceTab('chords')">Chords</button>
+            </div>
+
+            <div class="ap-pane" id="ap-pane-general">
+                <div class="ap-group">
+                    <div class="ap-group-title">Display filters</div>
 
             <div class="appearance-slider-row">
                 <div class="appearance-slider-label-row">
@@ -4277,9 +4254,139 @@
                     min="0" max="200" step="1" value="100"
                     oninput="updateAppearanceSlider('saturation', this.value)">
             </div>
+                    <button class="appearance-reset-btn" onclick="resetAppearance()">Restablecer valores</button>
+                </div>
+                <div class="ap-group">
+                    <div class="ap-group-title">Theme</div>
+<div class="theme-selector">
+                <div class="theme-dot active" data-theme="dark" onclick="setTheme('dark')"
+                    style="background:#121212;border-color:#fff" title="Dark"></div>
+            </div>
+                </div>
+            </div>
 
-            <hr class="appearance-divider">
-            <button class="appearance-reset-btn" onclick="resetAppearance()">Restablecer valores</button>
+            <div class="ap-pane" id="ap-pane-lyrics" style="display:none">
+                <div class="ap-group">
+                    <div class="ap-group-title">Typeface</div>
+<div class="font-options" id="lyrics-font-options">
+                <button class="font-btn active" data-font="'Helvetica Neue', Helvetica, Arial, sans-serif"
+                    onclick="applyLyricsFont(this)">Helvetica</button>
+                <button class="font-btn" data-font="Arial, sans-serif" onclick="applyLyricsFont(this)">Arial</button>
+                <button class="font-btn" data-font="Impact, 'Arial Narrow', sans-serif"
+                    onclick="applyLyricsFont(this)">Gothic</button>
+                <button class="font-btn" data-font="Verdana, Geneva, sans-serif"
+                    onclick="applyLyricsFont(this)">Verdana</button>
+                <button class="font-btn" data-font="'Trebuchet MS', sans-serif"
+                    onclick="applyLyricsFont(this)">Trebuchet</button>
+                <button class="font-btn" data-font="'Courier New', Courier, monospace"
+                    onclick="applyLyricsFont(this)">Mono</button>
+                <button class="font-btn" data-font="Georgia, 'Times New Roman', serif"
+                    onclick="applyLyricsFont(this)">Georgia</button>
+            </div>
+                </div>
+                <div class="ap-group">
+                    <div class="ap-group-title">Global size <span class="js-lyr-size-val" id="font-size-label" style="float:right;color:var(--color-brand)">36px</span></div>
+                        <input type="range" id="font-size-slider" class="size-slider js-lyr-size" min="16" max="144" step="2" value="36"
+                oninput="applyLyricsSize(this.value)">
+            <div class="size-presets">
+                <button class="size-preset" onclick="applyLyricsSize(20)">S</button>
+                <button class="size-preset" onclick="applyLyricsSize(36)">M</button>
+                <button class="size-preset" onclick="applyLyricsSize(52)">L</button>
+                <button class="size-preset" onclick="applyLyricsSize(72)">XL</button>
+                <button class="size-preset" onclick="applyLyricsSize(96)">XXL</button>
+                <button class="size-preset" onclick="applyLyricsSize(120)">3XL</button>
+                <button class="size-preset" onclick="applyLyricsSize(144)">4XL</button>
+            </div>
+                </div>
+                <div class="ap-group">
+                    <div class="ap-group-title">Line sizes</div>
+                    <div class="ls-row">
+                        <div class="ls-label"><span>Main line</span><span class="js-lyr-main-val">100%</span></div>
+                        <input type="range" class="js-lyr-main" min="50" max="150" step="1" value="100"
+                               oninput="applyLyricsMainScale(this.value)">
+                    </div>
+                    <div class="ls-row">
+                        <div class="ls-label"><span>Context lines</span><span class="js-lyr-sec-val">44%</span></div>
+                        <input type="range" class="js-lyr-sec" min="10" max="100" step="1" value="44"
+                               oninput="applyLyricsSecScale(this.value)">
+                    </div>
+                </div>
+                <div class="ap-group">
+                    <div class="ap-group-title">Weight</div>
+                    <div class="ls-btn-group js-lyr-weight">
+                        <button class="ls-btn" data-weight="400" onclick="applyLyricsWeight(400)">Fino</button>
+                        <button class="ls-btn" data-weight="600" onclick="applyLyricsWeight(600)">Medio</button>
+                        <button class="ls-btn" data-weight="700" onclick="applyLyricsWeight(700)">Negrita</button>
+                        <button class="ls-btn" data-weight="900" onclick="applyLyricsWeight(900)">Black</button>
+                    </div>
+                </div>
+                <div class="ap-group">
+                    <div class="ap-group-title">Colour</div>
+                    <div class="ls-swatches js-lyr-swatches">
+                        <span class="ls-swatch" data-color="#ffffff" style="background:#ffffff" onclick="applyLyricsColor('#ffffff')"></span>
+                        <span class="ls-swatch" data-color="#ffd166" style="background:#ffd166" onclick="applyLyricsColor('#ffd166')"></span>
+                        <span class="ls-swatch" data-color="#8ecae6" style="background:#8ecae6" onclick="applyLyricsColor('#8ecae6')"></span>
+                        <span class="ls-swatch" data-color="#a7f3d0" style="background:#a7f3d0" onclick="applyLyricsColor('#a7f3d0')"></span>
+                        <span class="ls-swatch" data-color="#f4978e" style="background:#f4978e" onclick="applyLyricsColor('#f4978e')"></span>
+                        <span class="ls-swatch" title="Color personalizado" style="background:linear-gradient(135deg,#f00,#0f0,#00f)">
+                            <input type="color" class="js-lyr-color-custom" oninput="applyLyricsColor(this.value)">
+                        </span>
+                    </div>
+                </div>
+                <div class="ap-group">
+                    <label class="ls-toggle">
+                        <span>Mostrar versos anterior/siguiente</span>
+                        <input type="checkbox" class="js-lyr-context" checked onchange="applyLyricsContext(this.checked)">
+                    </label>
+                </div>
+            </div>
+
+            <div class="ap-pane" id="ap-pane-chords" style="display:none">
+                <div class="ap-group">
+                    <div class="ap-group-title">Typeface</div>
+<div class="font-options" id="chords-font-options">
+                <button class="font-btn active" data-font="Georgia, serif"
+                    onclick="applyChordsFont(this)">Georgia</button>
+                <button class="font-btn" data-font="'Helvetica Neue', Helvetica, Arial, sans-serif"
+                    onclick="applyChordsFont(this)">Helvetica</button>
+                <button class="font-btn" data-font="Impact, 'Arial Narrow', sans-serif"
+                    onclick="applyChordsFont(this)">Impact</button>
+                <button class="font-btn" data-font="'Courier New', Courier, monospace"
+                    onclick="applyChordsFont(this)">Mono</button>
+            </div>
+                </div>
+                <div class="ap-group">
+                    <div class="ap-group-title">Size <span id="chords-size-label" style="float:right;color:var(--color-brand)">110px</span></div>
+<input type="range" id="chords-size-slider" class="size-slider" min="40" max="220" step="4" value="110"
+                oninput="applyChordsSize(this.value)">
+            <div class="size-presets">
+                <button class="size-preset" onclick="applyChordsSize(60)">S</button>
+                <button class="size-preset" onclick="applyChordsSize(110)">M</button>
+                <button class="size-preset" onclick="applyChordsSize(160)">L</button>
+                <button class="size-preset" onclick="applyChordsSize(200)">XL</button>
+            </div>
+                </div>
+                <div class="ap-group">
+                    <div class="ap-group-title">Colour</div>
+<div id="chords-color-selector" class="color-dots">
+                <div class="color-dot" style="background:#BF5AF2" onclick="applyChordsColor('#BF5AF2')" title="Lilac">
+                </div>
+                <div class="color-dot" style="background:#FC3C44" onclick="applyChordsColor('#FC3C44')" title="Red">
+                </div>
+                <div class="color-dot" style="background:#FFFFFF" onclick="applyChordsColor('#FFFFFF')" title="White">
+                </div>
+                <div class="color-dot" style="background:#1ED760" onclick="applyChordsColor('#1ED760')" title="Green">
+                </div>
+                <div class="color-dot" style="background:#64D2FF" onclick="applyChordsColor('#64D2FF')" title="Blue">
+                </div>
+                <div class="color-dot" style="background:#FF9F0A" onclick="applyChordsColor('#FF9F0A')" title="Amber">
+                </div>
+                <div class="color-dot" style="background:#30D158" onclick="applyChordsColor('#30D158')" title="Teal">
+                </div>
+            </div>
+                </div>
+            </div>
+
         </div>
     </div>
 
@@ -4378,23 +4485,23 @@
         <!-- Discreet settings popover: size / weight / colour / context lines -->
         <div class="lyrics-settings" id="lyrics-settings" onclick="event.stopPropagation()">
             <div class="ls-row">
-                <div class="ls-label"><span>Tamaño global</span><span id="ls-size-val">42px</span></div>
-                <input type="range" id="ls-size" min="16" max="120" step="1"
+                <div class="ls-label"><span>Tamaño global</span><span class="js-lyr-size-val" id="ls-size-val">42px</span></div>
+                <input type="range" class="js-lyr-size" id="ls-size" min="16" max="120" step="1"
                        oninput="applyLyricsSize(this.value)">
             </div>
             <div class="ls-row">
-                <div class="ls-label"><span>Línea principal</span><span id="ls-size-main-val">100%</span></div>
-                <input type="range" id="ls-size-main" min="50" max="150" step="1" value="100"
+                <div class="ls-label"><span>Línea principal</span><span class="js-lyr-main-val" id="ls-size-main-val">100%</span></div>
+                <input type="range" class="js-lyr-main" id="ls-size-main" min="50" max="150" step="1" value="100"
                        oninput="applyLyricsMainScale(this.value)">
             </div>
             <div class="ls-row">
-                <div class="ls-label"><span>Letras secundarias</span><span id="ls-size-sec-val">44%</span></div>
-                <input type="range" id="ls-size-sec" min="10" max="100" step="1" value="44"
+                <div class="ls-label"><span>Letras secundarias</span><span class="js-lyr-sec-val" id="ls-size-sec-val">44%</span></div>
+                <input type="range" class="js-lyr-sec" id="ls-size-sec" min="10" max="100" step="1" value="44"
                        oninput="applyLyricsSecScale(this.value)">
             </div>
             <div class="ls-row">
                 <div class="ls-label"><span>Grosor</span></div>
-                <div class="ls-btn-group" id="ls-weight-group">
+                <div class="ls-btn-group js-lyr-weight" id="ls-weight-group">
                     <button class="ls-btn" data-weight="400" onclick="applyLyricsWeight(400)">Fino</button>
                     <button class="ls-btn" data-weight="600" onclick="applyLyricsWeight(600)">Medio</button>
                     <button class="ls-btn" data-weight="700" onclick="applyLyricsWeight(700)">Negrita</button>
@@ -4403,7 +4510,7 @@
             </div>
             <div class="ls-row">
                 <div class="ls-label"><span>Color</span></div>
-                <div class="ls-swatches" id="ls-swatches">
+                <div class="ls-swatches js-lyr-swatches" id="ls-swatches">
                     <span class="ls-swatch" data-color="#ffffff" style="background:#ffffff"
                           onclick="applyLyricsColor('#ffffff')"></span>
                     <span class="ls-swatch" data-color="#ffd166" style="background:#ffd166"
@@ -4416,7 +4523,7 @@
                           onclick="applyLyricsColor('#f4978e')"></span>
                     <span class="ls-swatch" id="ls-swatch-custom" title="Color personalizado"
                           style="background:linear-gradient(135deg,#f00,#0f0,#00f)">
-                        <input type="color" id="ls-color-custom"
+                        <input type="color" class="js-lyr-color-custom" id="ls-color-custom"
                                oninput="applyLyricsColor(this.value)">
                     </span>
                 </div>
@@ -4424,7 +4531,7 @@
             <div class="ls-row">
                 <label class="ls-toggle">
                     <span>Mostrar versos anterior/siguiente</span>
-                    <input type="checkbox" id="ls-context" checked
+                    <input type="checkbox" class="js-lyr-context" id="ls-context" checked
                            onchange="applyLyricsContext(this.checked)">
                 </label>
             </div>
@@ -8196,7 +8303,9 @@
             var font = btn.getAttribute("data-font");
             document.getElementById("lyrics-content").style.fontFamily = font;
             localStorage.setItem("lyrics_font", font);
-            var btns = document.querySelectorAll(".font-btn");
+            // Scoped to the lyrics group: a bare ".font-btn" also matched the
+            // chords typeface buttons and silently cleared their highlight.
+            var btns = document.querySelectorAll("#lyrics-font-options .font-btn");
             for (var i = 0; i < btns.length; i++) btns[i].classList.remove("active");
             btn.classList.add("active");
         }
@@ -8209,10 +8318,8 @@
             var slider = document.getElementById("font-size-slider");
             if (slider) slider.value = val;
             // Keep the gear popover in sync with the sidebar control.
-            var lsv = document.getElementById("ls-size-val");
-            if (lsv) lsv.innerText = val + "px";
-            var lss = document.getElementById("ls-size");
-            if (lss) lss.value = val;
+            _lyrSyncText('js-lyr-size-val', val + "px");
+            _lyrSyncVal('js-lyr-size', val);
             // A bigger/smaller global size can itself change how many lines
             // the current verse wraps onto, so the wrap-clearance push (see
             // _lyrWrapPush) needs re-measuring here too — unlike the rest of
@@ -8223,14 +8330,27 @@
 
         // "Principal" — current-line size, as a % of the global size, applied
         // live to whatever is on screen right now (see _reapplyLyricsGeometry).
+        // Appearance controls now exist in more than one place at once: the
+        // gear popover inside the lyrics panel (quick, in-context) and the
+        // Appearance modal (the complete set). These write through to EVERY
+        // copy by class, so a change made in one is immediately reflected in
+        // the other without each call site having to know how many copies
+        // exist — adding a third place later needs no code change here.
+        function _lyrSyncText(cls, txt) {
+            var els = document.querySelectorAll('.' + cls);
+            for (var i = 0; i < els.length; i++) els[i].innerText = txt;
+        }
+        function _lyrSyncVal(cls, val) {
+            var els = document.querySelectorAll('.' + cls);
+            for (var i = 0; i < els.length; i++) els[i].value = val;
+        }
+
         function applyLyricsMainScale(val) {
             val = parseInt(val);
             lyrMainScale = val / 100;
             localStorage.setItem("lyrics_size_main", val);
-            var lbl = document.getElementById("ls-size-main-val");
-            if (lbl) lbl.innerText = val + "%";
-            var sld = document.getElementById("ls-size-main");
-            if (sld) sld.value = val;
+            _lyrSyncText('js-lyr-main-val', val + "%");
+            _lyrSyncVal('js-lyr-main', val);
             _reapplyLyricsGeometry();
         }
 
@@ -8240,10 +8360,8 @@
             val = parseInt(val);
             lyrSecScale = val / 100;
             localStorage.setItem("lyrics_size_secondary", val);
-            var lbl = document.getElementById("ls-size-sec-val");
-            if (lbl) lbl.innerText = val + "%";
-            var sld = document.getElementById("ls-size-sec");
-            if (sld) sld.value = val;
+            _lyrSyncText('js-lyr-sec-val', val + "%");
+            _lyrSyncVal('js-lyr-sec', val);
             _reapplyLyricsGeometry();
         }
 
@@ -8251,7 +8369,7 @@
             var el = document.getElementById("lyrics-content");
             if (el) el.style.fontWeight = w;
             localStorage.setItem("lyrics_weight", w);
-            var btns = document.querySelectorAll("#ls-weight-group .ls-btn");
+            var btns = document.querySelectorAll(".js-lyr-weight .ls-btn");
             for (var i = 0; i < btns.length; i++) {
                 if (btns[i].getAttribute("data-weight") === String(w)) btns[i].classList.add("active");
                 else btns[i].classList.remove("active");
@@ -8262,13 +8380,12 @@
             var el = document.getElementById("lyrics-content");
             if (el) el.style.color = c;
             localStorage.setItem("lyrics_color", c);
-            var sw = document.querySelectorAll("#ls-swatches .ls-swatch");
+            var sw = document.querySelectorAll(".js-lyr-swatches .ls-swatch");
             for (var i = 0; i < sw.length; i++) {
                 if (sw[i].getAttribute("data-color") === c) sw[i].classList.add("active");
                 else sw[i].classList.remove("active");
             }
-            var cust = document.getElementById("ls-color-custom");
-            if (cust && /^#[0-9a-f]{6}$/i.test(c)) cust.value = c;
+            if (/^#[0-9a-f]{6}$/i.test(c)) _lyrSyncVal('js-lyr-color-custom', c);
         }
 
         function applyLyricsContext(on) {
@@ -8278,8 +8395,8 @@
                 else el.classList.add("no-context");
             }
             localStorage.setItem("lyrics_context", on ? "1" : "0");
-            var cb = document.getElementById("ls-context");
-            if (cb) cb.checked = !!on;
+            var cbs = document.querySelectorAll('.js-lyr-context');
+            for (var i = 0; i < cbs.length; i++) cbs[i].checked = !!on;
         }
 
         function toggleLyricsSettings(e) {
@@ -8416,6 +8533,20 @@
         function openAppearanceModal() {
             document.getElementById('appearance-modal-overlay').classList.add('open');
             closeSidebar();
+        }
+
+        // Appearance modal tab switching. Panes are plain show/hide — every
+        // control stays in the DOM whichever tab is showing, so the sync
+        // helpers (_lyrSyncVal/_lyrSyncText) reach the modal's copies even
+        // while the user is looking at a different tab.
+        function setAppearanceTab(name) {
+            var tabs = ['general', 'lyrics', 'chords'];
+            for (var i = 0; i < tabs.length; i++) {
+                var t = document.getElementById('ap-tab-' + tabs[i]);
+                var p = document.getElementById('ap-pane-' + tabs[i]);
+                if (t) t.classList.toggle('active', tabs[i] === name);
+                if (p) p.style.display = (tabs[i] === name) ? '' : 'none';
+            }
         }
 
         function closeAppearanceModal() {

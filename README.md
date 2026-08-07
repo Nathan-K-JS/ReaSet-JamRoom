@@ -410,6 +410,27 @@ phone-sized.
 Both sets of tabs always exist in the DOM and stay in sync, so rotating a phone or resizing
 a window switches between the two layouts instantly with no stale highlight.
 
+### Appearance modal
+Everything that changes how ReaSet *looks* lives in one modal, opened from the sidebar's
+**Appearance** button, split into three tabs:
+
+| Tab | Contains |
+|---|---|
+| **General** | Display filters (luminance / contrast / saturation) and the theme |
+| **Lyrics** | Typeface, global size, main-line and context-line sizes, weight, colour, and the prev/next context toggle |
+| **Chords** | Typeface, size and colour |
+
+These used to be seven separate sidebar sections — 742px of a 1626px sidebar on a phone, so
+nearly half the drawer was styling knobs you set once and forget. The sidebar is down to
+985px now and reads as what it is: navigation and show controls.
+
+The **gear popover inside the lyrics panel stays**, and it is not a second, competing copy:
+both it and the modal drive the same functions, and those write through to every control on
+screen. Change the size from the gear while reading lyrics and the modal's slider is already
+moved when you open it, and vice versa. The gear is the quick, in-context adjustment while
+you're looking at the words; the modal is the complete set (it also carries the typeface,
+which the gear never had).
+
 ### Display Filters
 Located under **Settings — Appearance** in the sidebar. Three independent real-time sliders apply a CSS filter to the setlist body:
 - **Luminance** — 50% to 150% (default 100%)
@@ -1095,6 +1116,27 @@ layout de teléfono, que es lo correcto — ese panel realmente tiene tamaño de
 Los dos juegos de pestañas siempre existen en el DOM y se mantienen sincronizados, así que
 rotar el teléfono o redimensionar la ventana cambia entre layouts al instante y sin dejar un
 resaltado viejo.
+
+### Modal de apariencia
+Todo lo que cambia cómo se *ve* ReaSet vive en un solo modal, que se abre desde el botón
+**Appearance** de la sidebar, dividido en tres pestañas:
+
+| Pestaña | Contiene |
+|---|---|
+| **General** | Filtros de pantalla (luminancia / contraste / saturación) y el tema |
+| **Lyrics** | Tipografía, tamaño global, tamaño de línea principal y de contexto, grosor, color y el toggle de versos anterior/siguiente |
+| **Chords** | Tipografía, tamaño y color |
+
+Antes eran siete secciones sueltas de la sidebar — 742px de una sidebar de 1626px en un
+teléfono, o sea casi la mitad del cajón eran perillas de estilo que configurás una vez y no
+tocás más. La sidebar quedó en 985px y se lee como lo que es: navegación y controles de show.
+
+**El popover del engranaje dentro del panel de letras se queda**, y no es una segunda copia
+que compita: tanto él como el modal manejan las mismas funciones, y esas escriben en todos
+los controles que estén en pantalla. Cambiás el tamaño desde el engranaje mientras leés las
+letras y el slider del modal ya está movido cuando lo abrís, y al revés. El engranaje es el
+ajuste rápido y en contexto mientras mirás la letra; el modal es el set completo (además
+tiene la tipografía, que el engranaje nunca tuvo).
 
 ### Filtros de pantalla
 Disponibles en **Settings — Appearance** dentro de la sidebar. Tres sliders independientes aplican un filtro CSS en tiempo real al cuerpo del setlist:
