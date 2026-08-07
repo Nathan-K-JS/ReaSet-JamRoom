@@ -504,6 +504,16 @@ cannot move REAPER's transport. Buttons and shortcuts are *additionally* dimmed/
 Player mode for honesty (so a tap doesn't look like it silently failed), but that's a
 courtesy layer — the network-level block is what actually holds.
 
+**The setlist looks different in Player mode**, because a musician's screen has a different
+job than a Director's. Controls that a Player can never use are *removed* rather than
+dimmed — the drag handle, the ⋮ edit menus, the "Play Song" button — which on a phone hands
+roughly 217px of a 347px-wide row back to the song name (it was getting 18px, about one
+letter of a title). The skip/loop/chain toggles collapse to compact badges that appear only
+when the flag is set: a Player can't press them, but *does* need to know a song loops or
+chains into the next. Skipped songs stay clearly greyed out, the currently-playing row
+renders at full strength, and the rest of the rows are only lightly dimmed so the names,
+times and progress stay easy to read on stage.
+
 > **Not a security boundary.** REAPER's own Web Interface has no authentication — anyone on
 > the same network who knows the endpoint can already control it directly, with or without
 > ReaSet. Player mode stops *ReaSet* from being a way in; it does not lock the network down.
@@ -1142,6 +1152,17 @@ activo, ni una reconexión que gane la carrera contra la verificación de modo p
 transporte de REAPER. Los botones y atajos además se ven atenuados/deshabilitados en modo
 Player por honestidad (para que un tap no parezca que falló en silencio), pero esa es una
 capa de cortesía — el bloqueo a nivel de red es lo que realmente sostiene la garantía.
+
+**El setlist se ve distinto en modo Player**, porque la pantalla de un músico tiene otro
+trabajo que la de un Director. Los controles que un Player nunca va a poder usar se
+*eliminan* en vez de atenuarse — el drag handle, los menús ⋮ de edición, el botón "Play
+Song" — lo que en un teléfono le devuelve unos 217px de una fila de 347px al nombre de la
+canción (venía recibiendo 18px, más o menos una letra del título). Los toggles de
+skip/loop/chain se colapsan a badges compactos que aparecen solo cuando el flag está
+activo: un Player no puede presionarlos, pero *sí* necesita saber que una canción loopea o
+engancha con la siguiente. Las canciones skipeadas quedan claramente grises, la fila que
+está sonando se muestra a intensidad plena, y el resto se atenúa apenas para que los
+nombres, tiempos y progreso se lean bien en escena.
 
 > **No es un límite de seguridad.** El propio Web Interface de REAPER no tiene autenticación
 > — cualquiera en la misma red que conozca el endpoint ya puede controlarlo directamente, con

@@ -3264,8 +3264,51 @@
         body.reaset-player #live-transport-bar,
         body.reaset-player #cw-transport {
             pointer-events: none;
+        }
+        /* Transport widgets are pure controls — there is nothing to READ in
+           them — so they stay clearly disclaimed at the original strength. */
+        body.reaset-player .app-transport,
+        body.reaset-player #live-transport-bar,
+        body.reaset-player #cw-transport {
             opacity: 0.62;
             filter: grayscale(0.35);
+        }
+        /* Content rows are the opposite case: they carry the song name, time
+           and progress a Player is here to read. Dimming them to 0.62 taxed
+           exactly the content that matters, which on a phone (see the row
+           slimming further down) is most of the screen. Since the rows no
+           longer contain any dead-looking BUTTONS to disclaim, a lighter
+           treatment is enough to still say "tapping this does nothing". */
+        body.reaset-player .song-row,
+        body.reaset-player .grid-card,
+        body.reaset-player .section-row {
+            opacity: 0.88;
+            filter: grayscale(0.15);
+        }
+        /* The row that is actually playing is the single most important thing
+           on a musician's screen — never dim it. "Active" says nothing about
+           interactivity, so full strength here is not misleading. */
+        body.reaset-player .song-row.active,
+        body.reaset-player .grid-card.active,
+        body.reaset-player .section-row.active {
+            opacity: 1;
+            filter: none;
+        }
+        /* `.song-row.skipped` is specificity (0,2,0) and the Player rule above
+           is (0,2,1), so Player mode's blanket dimming was WINNING over the
+           skipped styling: a skipped song rendered identically to one that
+           will play, leaving a musician no way to see which songs are being
+           dropped tonight. Restated at matching specificity. This also has to
+           hold before the skip toggle can be collapsed away below — otherwise
+           skip state would have no representation left at all. */
+        body.reaset-player .song-row.skipped,
+        body.reaset-player .grid-card.skipped {
+            opacity: 0.34;
+            filter: grayscale(1);
+        }
+        body.reaset-player .section-row.skipped {
+            opacity: 0.42;
+            filter: grayscale(1);
         }
         /* opacity/filter on the ancestor row can't be un-done per-descendant
            (unlike pointer-events, which genuinely can) — the chevron stays
@@ -3274,6 +3317,50 @@
         body.reaset-player .song-row .song-chevron {
             pointer-events: auto;
         }
+
+        /* ── Player-mode row slimming ────────────────────────────────────
+           A song row is 347px wide on a 375px phone, and 217px of that went
+           to the drag handle (61), the edit menu (28) and the three action
+           buttons (124) — leaving the song NAME 17.6px, about 10% of a title
+           like "Pegasus Fantasy". Measured in Chromium against this exact
+           CSS, not estimated. Every one of those 217px is a control the whole
+           row's pointer-events:none already made inert for a Player. */
+
+        /* Reordering and the edit menu: dead at any width, so hidden at any
+           width rather than dimmed and still eating the row. */
+        body.reaset-player .drag-handle,
+        body.reaset-player .song-dotmenu-btn,
+        body.reaset-player .sub-dotmenu-btn { display: none; }
+        /* "Play Song" at the bottom of an expanded song — a pure control. */
+        body.reaset-player .expanded-controls { display: none; }
+
+        /* The chain/loop/skip toggles are the interesting case: a Player can't
+           press them, but their STATE is information a musician wants (does
+           this run into the next song? does it loop?). So they collapse to
+           compact badges instead of disappearing — and only render when the
+           flag is ON, since an off-state toggle tells a Player nothing that
+           its absence doesn't say already. Skip needs no badge of its own:
+           the skipped row styling restored above is unmistakable. (The bare
+           `.sa-btn` in a section row is a smartStop() control with no state
+           at all, so the same rule correctly removes it.) */
+        body.reaset-player .song-actions,
+        body.reaset-player .section-actions { gap: 4px; }
+        body.reaset-player .sa-btn {
+            width: auto;
+            height: 22px;
+            padding: 0 7px;
+            border-radius: 6px;
+            font-size: 13px;
+            cursor: default;
+        }
+        body.reaset-player .sa-btn:not(.chain-on):not(.loop-on) { display: none; }
+
+        /* With ~217px handed back, the name can take the size it wants on a
+           phone that's on a mic stand at arm's length. */
+        @media (max-width: 560px) {
+            body.reaset-player .song-name { font-size: 17px; }
+        }
+
         /* Pushing the shared setlist is meaningless on a Player (the write is
            already a no-op via wwr_req's gate) — hidden rather than left to
            silently do nothing when clicked. */
