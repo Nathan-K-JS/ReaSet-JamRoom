@@ -361,6 +361,19 @@
             font-weight: 700;
         }
 
+        /* Elapsed / total. Two numbers in the same monospace family read as a
+           pair without needing labels — which is what pushed this block off a
+           375px screen before, since the words wrapped onto three lines. */
+        .timer-sep {
+            color: rgba(255, 255, 255, 0.22);
+            margin: 0 -4px;
+        }
+
+        .timer-total {
+            color: var(--text-subdued);
+            font-weight: 600;
+        }
+
         /* SETLIST ROW */
         .app-setlist-row {
             display: flex;
@@ -4134,8 +4147,9 @@
             <div class="vtab-spacer"></div>
 
             <div class="app-topbar-info">
-                <span class="timer-chip" id="show-timer-display">00:00</span>
-                <span>Active: <span id="song-count">0</span> · <span id="total-time">0:00</span></span>
+                <span class="timer-chip" id="show-timer-display" title="Elapsed show time">00:00</span>
+                <span class="timer-sep">/</span>
+                <span class="timer-total" id="total-time" title="Total setlist duration">0:00</span>
                 <span class="timer-reset" onclick="resetShowTimer()" style="cursor:pointer; font-size:12px;">↻</span>
                 <!-- Mode badge — click to reopen the mode selector and switch. -->
                 <div id="mode-badge" onclick="openModeSelector(false)" title="Click para cambiar de modo">
@@ -5048,6 +5062,10 @@
         // language, so translation is symmetric, needs no markup changes at
         // all, and re-running it is idempotent.
         var I18N_ROWS = [
+            ["DIRECTOR", "DIRECTOR"],
+            ["PLAYER", "MÚSICO"],
+            ["Elapsed show time", "Tiempo transcurrido del show"],
+            ["Total setlist duration", "Duración total del setlist"],
             ["EDIT", "EDICIÓN"],
             ["When this song ends", "Al terminar esta canción"],
             ["Auto", "Auto"],
@@ -6490,7 +6508,7 @@
             badge.classList.add('show');
             badge.classList.toggle('is-director', REASET_MODE === 'director');
             badge.classList.toggle('is-player',   REASET_MODE === 'player');
-            document.getElementById('mode-badge-label').textContent = (REASET_MODE === 'director') ? 'DIRECTOR' : 'MÚSICO';
+            document.getElementById('mode-badge-label').textContent = (REASET_MODE === 'director') ? t('DIRECTOR') : t('PLAYER');
             if (REASET_MODE === 'player') { _syncStartPlayerPolling(); _dcStopHeartbeat(); }
             else { _dcStartHeartbeat(); }
         }
@@ -7751,8 +7769,7 @@
             }
 
             listEl.scrollTop = scrollPos;
-            document.getElementById('song-count').innerText = t("Active:") + " " + activeCount;
-            document.getElementById('total-time').innerText = t("Playtime:") + " " + formatTotalTime(totalDur);
+            document.getElementById('total-time').innerText = formatTotalTime(totalDur);
         }
 
         // --- 7. ACTIONS ---
