@@ -364,14 +364,24 @@
         /* Elapsed / total. Two numbers in the same monospace family read as a
            pair without needing labels — which is what pushed this block off a
            375px screen before, since the words wrapped onto three lines. */
-        .timer-sep {
-            color: rgba(255, 255, 255, 0.22);
-            margin: 0 -4px;
-        }
+        /* Four numbers in three groups: progress and total are naturally a
+           fraction, so they share one. Glyphs instead of words — the labelled
+           version wrapped onto three lines and ran off a 375px screen. */
+        .tb-grp { display: flex; align-items: baseline; gap: 3px; }
+        .tb-ico { font-size: 11px; color: rgba(255, 255, 255, 0.30); }
+        .tb-sep { color: rgba(255, 255, 255, 0.16); margin: 0 2px; }
+        .tb-strong { color: var(--color-timer); font-weight: 700; }
+        .tb-dim { color: var(--text-subdued); font-weight: 600; }
+        .tb-sess { color: #64D2FF; font-weight: 700; }
+        #tb-session-grp { cursor: pointer; user-select: none; -webkit-user-select: none; }
+        #tb-session-grp.resetting .tb-sess { color: var(--color-brand); }
 
-        .timer-total {
-            color: var(--text-subdued);
-            font-weight: 600;
+        /* Four values plus the badge's word do not fit a phone — measured 51px
+           over at 375px. The badge keeps its dot, whose colour already carries
+           the mode, and stays tappable. */
+        @media (max-width: 600px), (max-height: 520px) {
+            #mode-badge { padding: 5px 8px; gap: 0; }
+            #mode-badge #mode-badge-label { display: none; }
         }
 
         /* SETLIST ROW */
@@ -444,40 +454,9 @@
         }
 
         /* INFO ROW */
-        .app-info-row {
-            display: flex;
-            align-items: center;
-            gap: 10px;
-            margin: 8px 14px;
-            padding: 7px 14px;
-            background: rgba(255, 255, 255, 0.05);
-            border: 1px solid rgba(255, 255, 255, 0.08);
-            border-radius: var(--radius-sm);
-            font-size: 11px;
-            font-family: var(--font-mono);
-            color: rgba(255, 255, 255, 0.30);
-            flex-shrink: 0;
-        }
 
-        .info-setlist-name {
-            color: rgba(255, 255, 255, 0.54);
-            font-weight: 600;
-        }
 
-        .info-live-chip {
-            background: rgba(100, 210, 255, 0.12);
-            color: var(--color-live);
-            border: 1px solid rgba(100, 210, 255, 0.22);
-            border-radius: 20px;
-            padding: 1px 8px;
-            font-size: 10px;
-            font-weight: 700;
-            letter-spacing: 0.5px;
-        }
 
-        .info-spacer {
-            flex: 1;
-        }
 
         .info-timer {
             color: var(--color-timer);
@@ -4147,10 +4126,14 @@
             <div class="vtab-spacer"></div>
 
             <div class="app-topbar-info">
-                <span class="timer-chip" id="show-timer-display" title="Elapsed show time">00:00</span>
-                <span class="timer-sep">/</span>
-                <span class="timer-total" id="total-time" title="Total setlist duration">0:00</span>
-                <span class="timer-reset" onclick="resetShowTimer()" style="cursor:pointer; font-size:12px;">↻</span>
+                <span class="tb-grp" title="Active songs">
+                    <span class="tb-ico">&#9834;</span><span class="tb-dim" id="tb-count">0</span></span>
+                <span class="tb-sep">·</span>
+                <span class="tb-grp" title="Show progress / total">
+                    <span class="tb-strong" id="show-timer-display">0:00</span><span class="tb-dim" id="total-time">/0:00</span></span>
+                <span class="tb-sep">·</span>
+                <span class="tb-grp" id="tb-session-grp" title="Session time since first playback — long-press to reset">
+                    <span class="tb-ico">&#9201;</span><span class="tb-sess" id="tb-session">0:00</span></span>
                 <!-- Mode badge — click to reopen the mode selector and switch. -->
                 <div id="mode-badge" onclick="openModeSelector(false)" title="Click para cambiar de modo">
                     <span class="mb-dot"></span><span id="mode-badge-label">MODE</span><span class="mb-sync" id="mode-badge-sync"></span>
@@ -4178,14 +4161,6 @@
                 </div>
             </div>
             <input type="file" id="importInput" style="display:none" accept=".json" onchange="importSetlists(this)">
-        </div>
-
-        <!-- INFO ROW -->
-        <div class="app-info-row">
-            <span class="info-setlist-name" id="current-setlist-name-display">Active Setlist</span>
-            <span class="info-live-chip" id="live-indicator-chip" style="display:none;">● LIVE</span>
-            <span class="info-spacer"></span>
-            <!-- removed count and time as it is on the top bar now, just keep space for balance -->
         </div>
 
         <div class="app-content">
@@ -5062,6 +5037,9 @@
         // language, so translation is symmetric, needs no markup changes at
         // all, and re-running it is idempotent.
         var I18N_ROWS = [
+            ["Active songs", "Canciones activas"],
+            ["Show progress / total", "Progreso del show / total"],
+            ["Session time since first playback — long-press to reset", "Tiempo de sesión desde la primera reproducción — mantené presionado para reiniciar"],
             ["DIRECTOR", "DIRECTOR"],
             ["PLAYER", "MÚSICO"],
             ["Elapsed show time", "Tiempo transcurrido del show"],
@@ -5108,7 +5086,6 @@
             ["Export", "Exportar"],
             ["Import", "Importar"],
             ["Delete", "Eliminar"],
-            ["Active Setlist", "Setlist activo"],
             ["Up Next:", "Sigue:"],
             ["↻ Loop", "↻ Loop"],
             ["Views", "Vistas"],
@@ -6444,9 +6421,8 @@
         }
 
         // Show timer state
-        var showStartTime = null;         // Date.now() when show first started
-        var showAccumulatedMs = 0;        // ms accumulated before last pause
-        var showTimerInterval = null;
+        // (the old play-only show timer lived here; replaced by the topbar
+        //  progress figure and the session clock)
         var wasPlayingLast = false;
 
         // Live view state
@@ -6580,14 +6556,9 @@
                     case "TRANSPORT":
                         var nowPlaying = (parseInt(tok[1]) & 1) === 1;
                         currentPos = parseFloat(tok[2]);
-                        if (nowPlaying && !wasPlayingLast) {
-                            if (!showStartTime) { showStartTime = Date.now() - showAccumulatedMs; }
-                            else if (showTimerInterval === null) { showStartTime = Date.now() - showAccumulatedMs; }
-                            startShowTimerTick();
-                        } else if (!nowPlaying && wasPlayingLast) {
-                            showAccumulatedMs = Date.now() - showStartTime;
-                            stopShowTimerTick();
-                        }
+                        // First playback of the session starts the session clock,
+                        // which then runs through every later stop and pause.
+                        if (nowPlaying && !wasPlayingLast) _sessionBegin();
                         wasPlayingLast = nowPlaying;
                         isPlaying = nowPlaying;
                         updatePlaybackUI();
@@ -7769,7 +7740,9 @@
             }
 
             listEl.scrollTop = scrollPos;
-            document.getElementById('total-time').innerText = formatTotalTime(totalDur);
+            g_totalDur = totalDur; g_activeCount = activeCount;
+            document.getElementById('tb-count').innerText = activeCount;
+            document.getElementById('total-time').innerText = '/' + formatTotalTime(totalDur);
         }
 
         // --- 7. ACTIONS ---
@@ -7974,6 +7947,10 @@
                 if (currentPos >= r.start && currentPos < r.end) { activeIdx = j; break; }
             }
             var activeRegion = (activeIdx !== -1) ? displayList[activeIdx] : null;
+
+            // Show progress, refreshed on every transport tick.
+            var _pEl = document.getElementById('show-timer-display');
+            if (_pEl) _pEl.innerText = _fmtClock(_showProgressSec(activeIdx));
 
             var isLooping = false;
             if (activeRegion) {
@@ -8682,25 +8659,88 @@
                 else wwr_req(1007);
             }
         }
-        // --- 9. SHOW TIMER ---
-        function startShowTimerTick() {
-            if (showTimerInterval) return;
-            if (!showStartTime) showStartTime = Date.now() - showAccumulatedMs;
-            showTimerInterval = setInterval(function () {
-                var elapsed = showStartTime ? Date.now() - showStartTime : showAccumulatedMs;
-                var totalSec = Math.floor(elapsed / 1000);
-                var h = Math.floor(totalSec / 3600); var m = Math.floor((totalSec % 3600) / 60); var s = totalSec % 60;
-                var str = (h > 0 ? (h + ":" + (m < 10 ? "0" : "")) : "") + m + ":" + (s < 10 ? "0" : "") + s;
-                document.getElementById("show-timer-display").innerText = str;
-                if (liveViewOpen) { var lv = document.getElementById("live-show-time"); if (lv) lv.innerText = str; }
-            }, 1000);
+        // ── Topbar counters ─────────────────────────────────────────────
+        var g_totalDur = 0, g_activeCount = 0;
+
+        function _fmtClock(sec) {
+            sec = Math.max(0, Math.floor(sec));
+            var h = Math.floor(sec / 3600), m = Math.floor((sec % 3600) / 60), s2 = sec % 60;
+            return (h > 0 ? h + ':' + (m < 10 ? '0' : '') : '') + m + ':' + (s2 < 10 ? '0' : '') + s2;
         }
-        function stopShowTimerTick() { if (showTimerInterval) { clearInterval(showTimerInterval); showTimerInterval = null; } }
-        function resetShowTimer() {
-            stopShowTimerTick(); showStartTime = null; showAccumulatedMs = 0; wasPlayingLast = false;
-            document.getElementById("show-timer-display").innerText = "00:00";
-            var lv = document.getElementById("live-show-time"); if (lv) lv.innerText = "00:00";
+
+        // Progress = position in the PLANNED show: every active song before the
+        // one playing, plus however far into it we are. Chosen over "seconds
+        // actually played" because only this pairs with the total as a real
+        // fraction — replaying a song would push an accumulator past 100%.
+        // Jumping to song 5 therefore jumps the number forward, which is
+        // honest: that IS where the show is.
+        function _showProgressSec(activeIdx) {
+            if (activeIdx < 0) return 0;
+            var acc = 0;
+            for (var i = 0; i < activeIdx && i < displayList.length; i++) {
+                var r = displayList[i];
+                if (!r.skipped && !r.nosong) acc += r.duration;
+            }
+            var cur = displayList[activeIdx];
+            if (cur && !cur.skipped && !cur.nosong) acc += Math.max(0, currentPos - cur.start);
+            return acc;
         }
+
+        // ── Session clock ───────────────────────────────────────────────
+        // Wall-clock from the FIRST playback, and it keeps running through
+        // stops and pauses — the point is "how long have we been at this",
+        // for a rehearsal with breaks. Persisted as a start timestamp rather
+        // than a counter, so an accidental refresh mid-rehearsal doesn't zero
+        // the very thing it exists to measure.
+        var _sessionStart = (function () {
+            try {
+                var v = parseInt(localStorage.getItem('reaset_session_start'), 10);
+                return (v && v > 0) ? v : null;
+            } catch (e) { return null; }
+        })();
+
+        function _sessionBegin() {
+            if (_sessionStart) return;
+            _sessionStart = Date.now();
+            try { localStorage.setItem('reaset_session_start', String(_sessionStart)); } catch (e) {}
+        }
+
+        function resetSessionClock() {
+            _sessionStart = null;
+            try { localStorage.removeItem('reaset_session_start'); } catch (e) {}
+            _tickSessionClock();
+            var g = document.getElementById('tb-session-grp');
+            if (g) { g.classList.add('resetting'); setTimeout(function () { g.classList.remove('resetting'); }, 450); }
+        }
+
+        function _tickSessionClock() {
+            var txt = _sessionStart ? _fmtClock((Date.now() - _sessionStart) / 1000) : '0:00';
+            var el = document.getElementById('tb-session');
+            if (el) el.innerText = txt;
+            var lv = document.getElementById('live-show-time');
+            if (lv) lv.innerText = txt;
+        }
+        setInterval(_tickSessionClock, 1000);
+
+        // Long-press, not tap: the topbar is where a thumb reaches for ☰, and
+        // silently zeroing a rehearsal clock has no undo. Still undiscoverable
+        // to anyone who isn't told, which is what was asked for.
+        (function () {
+            var el = document.getElementById('tb-session-grp');
+            if (!el) return;
+            var timer = null;
+            var arm = function (e) {
+                if (e.type === 'touchstart') e.preventDefault();
+                clearTimeout(timer);
+                timer = setTimeout(resetSessionClock, 600);
+            };
+            var cancel = function () { clearTimeout(timer); };
+            el.addEventListener('mousedown', arm);
+            el.addEventListener('touchstart', arm, { passive: false });
+            ['mouseup', 'mouseleave', 'touchend', 'touchcancel', 'touchmove'].forEach(function (ev) {
+                el.addEventListener(ev, cancel);
+            });
+        })();
 
         // --- 10. LYRICS PANEL (via X-Raym Lua bridge) ---
         function toggleLyricsPanel() {
