@@ -1758,34 +1758,15 @@
         }
 
         /* Colour swatches, evenly spread across the modal width. */
+        /* Distribution only — the swatches keep their own .ls-swatch look
+           (22px circles). An earlier version also set flex/height/radius here,
+           which stretched them into ovals; spacing them out is the whole job. */
         .ap-swatches {
             display: flex;
             justify-content: space-between;
             align-items: center;
-            gap: 8px;
-        }
-        .ap-swatches > * {
-            flex: 1 1 0;
-            height: 30px;
-            border-radius: 8px;
-            cursor: pointer;
-            border: 2px solid transparent;
-            position: relative;
-            overflow: hidden;
-        }
-        .ap-swatches > *.active {
-            border-color: #fff;
-            box-shadow: 0 0 0 2px rgba(0, 0, 0, 0.5) inset;
-        }
-        .ap-swatches input[type="color"] {
-            position: absolute;
-            inset: 0;
-            opacity: 0;
-            width: 100%;
-            height: 100%;
-            border: none;
-            padding: 0;
-            cursor: pointer;
+            flex-wrap: nowrap;
+            gap: 6px;
         }
 
         /* Toggle row — same switch the sidebar uses, with the modal's own
