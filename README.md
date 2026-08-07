@@ -452,6 +452,35 @@ lookup key**, so switching is symmetric and re-running it is harmless. Views tha
 as the show runs — the setlist, section rows, MIDI mappings — are re-rendered on a switch
 and then swept, so nothing is left behind in the old language.
 
+### Full screen — launching from the home screen
+ReaSet can run without the browser's address bar and toolbar, which on a phone is the
+difference between reading a song name and squinting at it. The control lives in
+**Appearance → General → Full screen**, and it shows only the route that actually works on
+the device looking at it.
+
+**iPhone / iPad — Add to Home Screen.** Safari on iPhone has no element-fullscreen API at
+all, so no button can help; the route is Share → **Add to Home Screen**, then open ReaSet
+from the new icon. It launches standalone: no address bar, no bottom toolbar. As a bonus the
+swipe-back gesture and pull-to-refresh are disabled, so a stray thumb mid-show can't navigate
+away. The modal spells the three steps out on screen.
+
+**Android / desktop — a button.** These browsers do expose the Fullscreen API, and crucially
+it is *not* gated on a secure context: it works over the plain HTTP that REAPER serves. One
+tap per session gives true full screen, hiding the system bars too. The button turns green
+and switches to *Exit full screen* while it's active.
+
+> **No HTTPS, no service worker, no manifest, no extra files.** A "real" PWA install would
+> need all of those, and they need a secure context that REAPER's plain-HTTP LAN server can
+> never provide (`navigator.serviceWorker` does not even exist there). The `apple-mobile-web-app-*`
+> meta tags carry no such requirement, so ReaSet stays a **single file** you drop next to
+> `main.js`. The icon is embedded in the page as a data URI rather than shipped as a separate
+> image, for the same reason.
+
+**What this does not give you** is offline launch. Without a service worker nothing is
+cached, so if REAPER is off or unreachable the icon opens on an error page. And note that in
+standalone mode there is no reload button and no address bar — the way out is to close the
+app and reopen it.
+
 ### Display Filters
 Located under **Settings — Appearance** in the sidebar. Three independent real-time sliders apply a CSS filter to the setlist body:
 - **Luminance** — 50% to 150% (default 100%)
@@ -708,6 +737,13 @@ If the message is not enough, run **`Tools/ReaSet_Diagnose.lua`** — see
 ### ❌ No interface data/control
 - Verify Web Interface is enabled and reachable.
 - Verify `main.js` loads from the same folder.
+
+### ❌ The home-screen icon opens with an HTTPS error
+Safari 18.2 added *"Warn before connecting to a website over HTTP"*, which on many devices
+**blocks instead of warning**. REAPER's Web Interface serves plain HTTP, so the icon fails to
+open with a message about HTTPS. Turn the option off in **Settings → Apps → Safari** (under
+Privacy & Security). Adding ReaSet to the Home Screen itself does not require HTTPS — only
+this Safari setting stands in the way.
 
 ### ❌ MIDI Learn shows no devices / doesn't respond
 **Not currently supported in Safari — macOS, iPadOS, or iOS**, on any Apple
@@ -1186,6 +1222,37 @@ inofensivo. Las vistas que el JS construye durante el show — el setlist, las f
 sección, las asignaciones MIDI — se vuelven a renderizar al cambiar y después se barren, así
 que nada queda en el idioma anterior.
 
+### Pantalla completa — lanzar desde la pantalla de inicio
+ReaSet puede correr sin la barra de direcciones ni la barra inferior del navegador, que en un
+teléfono es la diferencia entre leer el nombre de una canción y adivinarlo. El control está en
+**Appearance → General → Pantalla completa**, y muestra solamente el camino que realmente
+funciona en el dispositivo que lo está mirando.
+
+**iPhone / iPad — Añadir a pantalla de inicio.** Safari en iPhone no tiene API de pantalla
+completa para elementos, así que ningún botón puede ayudar; el camino es Compartir →
+**Añadir a pantalla de inicio** y después abrir ReaSet desde el ícono nuevo. Se lanza en modo
+standalone: sin barra de direcciones ni barra inferior. De regalo, se desactivan el gesto de
+volver atrás y el tirar-para-recargar, así que un dedo perdido a mitad del show no puede
+navegar a otro lado. El modal explica los tres pasos en pantalla.
+
+**Android / escritorio — un botón.** Estos navegadores sí exponen la Fullscreen API, y lo
+importante es que *no* está detrás del muro del contexto seguro: funciona sobre el HTTP plano
+que sirve REAPER. Un toque por sesión da pantalla completa real, ocultando también las barras
+del sistema. El botón se pone verde y pasa a decir *Salir de pantalla completa* mientras está
+activo.
+
+> **Sin HTTPS, sin service worker, sin manifest, sin archivos extra.** Una instalación PWA "de
+> verdad" necesitaría todo eso, y eso necesita un contexto seguro que el servidor HTTP plano de
+> REAPER en la LAN no puede dar nunca (ahí `navigator.serviceWorker` ni siquiera existe). Las
+> meta tags `apple-mobile-web-app-*` no tienen ese requisito, así que ReaSet sigue siendo **un
+> solo archivo** que dejás al lado de `main.js`. El ícono va embebido en la página como data URI
+> en vez de ir como imagen aparte, por la misma razón.
+
+**Lo que esto no te da** es arranque offline. Sin service worker no se cachea nada, así que si
+REAPER está apagado o fuera de alcance el ícono abre en una página de error. Y ojo: en modo
+standalone no hay botón de recargar ni barra de direcciones — la salida es cerrar la app y
+volver a abrirla.
+
 ### Filtros de pantalla
 Disponibles en **Settings — Appearance** dentro de la sidebar. Tres sliders independientes aplican un filtro CSS en tiempo real al cuerpo del setlist:
 - **Luminancia** — 50% a 150% (por defecto 100%)
@@ -1454,6 +1521,13 @@ Si el mensaje no basta, ejecutá **`Tools/ReaSet_Diagnose.lua`** — ver
 ### ❌ Interfaz sin datos/control
 - Verificar Web Interface habilitada y accesible.
 - Verificar carga correcta de `main.js` en la misma carpeta.
+
+### ❌ El ícono de la pantalla de inicio abre con un error de HTTPS
+Safari 18.2 agregó *«Avisar antes de conectarse a un sitio web por HTTP»*, que en muchos
+dispositivos **bloquea en vez de avisar**. El Web Interface de REAPER sirve HTTP plano, así que
+el ícono no abre y muestra un mensaje sobre HTTPS. Desactivá esa opción en **Ajustes → Apps →
+Safari** (en Privacidad y seguridad). Agregar ReaSet a la pantalla de inicio no requiere HTTPS
+por sí mismo — lo único que estorba es ese ajuste de Safari.
 
 ### ❌ MIDI Learn no muestra dispositivos / no responde
 **No soportado actualmente en Safari — macOS, iPadOS o iOS**, en ningún

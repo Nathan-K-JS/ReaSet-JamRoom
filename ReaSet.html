@@ -4,7 +4,23 @@
 <head>
     <meta charset="utf-8">
     <title>ReaSet</title>
-    <meta name="viewport" content="width=device-width,initial-scale=1.0,maximum-scale=1.0,user-scalable=no">
+    <meta name="viewport" content="width=device-width,initial-scale=1.0,maximum-scale=1.0,user-scalable=no,viewport-fit=cover">
+    <!-- Home-screen launch. Deliberately NO manifest and NO service worker:
+         both need a secure context, and REAPER serves plain HTTP on the LAN,
+         where navigator.serviceWorker does not even exist. These meta tags are
+         not gated that way — iOS honours them over http://, so Share > Add to
+         Home Screen launches ReaSet with no address bar and no toolbar, and
+         ReaSet stays a single file you drop next to main.js.
+         NOTE for iOS 18.2+: Safari's "Warn before connecting to a website over
+         HTTP" blocks rather than warns, and the home-screen icon then fails to
+         open. Turning it off in Settings > Apps > Safari is the fix; the
+         appearance modal says so on-screen too. -->
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <meta name="apple-mobile-web-app-title" content="ReaSet">
+    <link rel="apple-touch-icon" href="data:image/png;base64,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">
+    <link rel="icon" type="image/png" href="data:image/png;base64,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">
     <script src="main.js"></script>
     <script src="Sortable.min.js"></script>
     <style>
@@ -1780,6 +1796,86 @@
 
         /* Language picker — the segmented control, sized for two cells. */
         #lang-seg { max-width: 180px; }
+
+        /* ── Full screen ─────────────────────────────────────────────────
+           iOS standalone and the Fullscreen API both hand the page the WHOLE
+           screen, including the strip behind the status bar and the home
+           indicator — which is why viewport-fit=cover is set in <head>. The
+           topbar has to step out of the way of the notch itself. env() is 0 in
+           an ordinary browser tab, so these rules cost nothing there; the body
+           class exists only so the CSS doesn't have to care which of the two
+           mechanisms produced the full screen. (.app-transport already pads
+           for safe-area-inset-bottom, so the bottom edge is covered.) */
+        body.reaset-fullscreen .app-topbar {
+            height: calc(56px + env(safe-area-inset-top));
+            padding-top: env(safe-area-inset-top);
+        }
+        body.reaset-fullscreen #sidebar { padding-top: env(safe-area-inset-top); }
+        @media (max-width: 600px), (max-height: 520px) {
+            body.reaset-fullscreen .app-topbar {
+                height: calc(46px + env(safe-area-inset-top));
+            }
+        }
+
+        /* Full-width action button + explanatory copy for the modal. */
+        .ap-btn-wide {
+            width: 100%;
+            padding: 11px 12px;
+            border-radius: 10px;
+            border: 1px solid rgba(255, 255, 255, 0.12);
+            background: rgba(255, 255, 255, 0.05);
+            color: var(--text-secondary);
+            font-family: var(--font-ui);
+            font-size: 11px;
+            font-weight: 700;
+            letter-spacing: 0.06em;
+            text-transform: uppercase;
+            cursor: pointer;
+            transition: all 0.15s;
+        }
+        .ap-btn-wide:hover { background: rgba(255, 255, 255, 0.09); color: var(--text-primary); }
+        .ap-btn-wide.is-on {
+            background: rgba(30, 215, 96, 0.12);
+            border-color: rgba(30, 215, 96, 0.45);
+            color: var(--color-brand);
+        }
+        .ap-hint {
+            font-family: var(--font-ui);
+            font-size: 11.5px;
+            line-height: 1.5;
+            color: var(--text-subdued);
+        }
+        .ap-step {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            margin-top: 7px;
+            color: var(--text-secondary);
+        }
+        .ap-step > i {
+            flex: 0 0 18px;
+            height: 18px;
+            border-radius: 50%;
+            background: rgba(30, 215, 96, 0.14);
+            color: var(--color-brand);
+            font-style: normal;
+            font-size: 10px;
+            font-weight: 800;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+        .ap-note {
+            margin-top: 11px;
+            padding: 8px 10px;
+            border-radius: 8px;
+            border: 1px solid rgba(255, 159, 10, 0.28);
+            background: rgba(255, 159, 10, 0.08);
+            color: var(--text-secondary);
+            font-family: var(--font-ui);
+            font-size: 11px;
+            line-height: 1.45;
+        }
 
         /* ── End-of-song button states ───────────────────────────────────
            'auto' is deliberately dim: it means the song inherits the global
@@ -4449,6 +4545,19 @@
                         <button data-lang="es" onclick="applyLanguage('es')">ES</button>
                     </div>
                 </div>
+
+                <div class="ap-group" id="ap-fs-group">
+                    <div class="ap-group-title">Full screen</div>
+                    <button class="ap-btn-wide" id="ap-fs-btn" onclick="toggleFullscreen()">Enter full screen</button>
+                    <div class="ap-hint" id="ap-fs-hint-on" style="display:none">ReaSet is already running full screen.</div>
+                    <div class="ap-hint" id="ap-fs-hint-ios" style="display:none">
+                        <div>Safari on iPhone cannot hide its bars from a web page. Add ReaSet to the Home Screen instead — it launches with no address bar and no toolbar.</div>
+                        <div class="ap-step"><i>1</i>Tap Share in Safari</div>
+                        <div class="ap-step"><i>2</i>Choose Add to Home Screen</div>
+                        <div class="ap-step"><i>3</i>Open ReaSet from the new icon</div>
+                        <div class="ap-note">If the icon opens with an HTTPS error, turn off “Warn before connecting to a website over HTTP” in Settings › Apps › Safari. REAPER serves plain HTTP.</div>
+                    </div>
+                </div>
             </div>
 
             <div class="ap-pane" id="ap-pane-lyrics" style="display:none">
@@ -5041,6 +5150,15 @@
         // language, so translation is symmetric, needs no markup changes at
         // all, and re-running it is idempotent.
         var I18N_ROWS = [
+            ["Full screen", "Pantalla completa"],
+            ["Enter full screen", "Entrar en pantalla completa"],
+            ["Exit full screen", "Salir de pantalla completa"],
+            ["ReaSet is already running full screen.", "ReaSet ya está en pantalla completa."],
+            ["Safari on iPhone cannot hide its bars from a web page. Add ReaSet to the Home Screen instead — it launches with no address bar and no toolbar.", "Safari en iPhone no puede ocultar sus barras desde una página web. En su lugar, agregá ReaSet a la pantalla de inicio — se abre sin barra de direcciones ni barra inferior."],
+            ["Tap Share in Safari", "Tocá Compartir en Safari"],
+            ["Choose Add to Home Screen", "Elegí Añadir a pantalla de inicio"],
+            ["Open ReaSet from the new icon", "Abrí ReaSet desde el ícono nuevo"],
+            ["If the icon opens with an HTTPS error, turn off “Warn before connecting to a website over HTTP” in Settings › Apps › Safari. REAPER serves plain HTTP.", "Si el ícono abre con un error de HTTPS, desactivá «Avisar antes de conectarse a un sitio web por HTTP» en Ajustes › Apps › Safari. REAPER sirve HTTP plano."],
             ["Connected to REAPER", "Conectado a REAPER"],
             ["No reply from REAPER", "Sin respuesta de REAPER"],
             ["Active songs", "Canciones activas"],
@@ -9205,8 +9323,81 @@
         // --- APPEARANCE FILTERS (brightness / contrast / saturation on .app-content) ---
         var g_appearance = { brightness: 100, contrast: 100, saturation: 100 };
 
+        // ── Full screen ──────────────────────────────────────────────────
+        // Two mechanisms, because neither one covers both phones:
+        //
+        //   Android / desktop -> the Fullscreen API. Crucially it is NOT gated
+        //   on a secure context (verified: document.fullscreenEnabled === true
+        //   on a plain-HTTP LAN origin with isSecureContext false), so it works
+        //   exactly where REAPER serves this file. It needs a user gesture,
+        //   which is why it is a button and not something applied at load.
+        //
+        //   iPhone -> Safari has no element fullscreen at all, so there is
+        //   nothing to call. The only route is Add to Home Screen, which the
+        //   apple-mobile-web-app-* meta tags in <head> turn into a standalone
+        //   launch with no address bar and no toolbar.
+        //
+        // A manifest + service worker (the "real" PWA install) would need
+        // HTTPS, which REAPER does not serve — neither mechanism here does.
+        function _fsApiAvailable() {
+            return !!(document.fullscreenEnabled && document.documentElement.requestFullscreen);
+        }
+
+        // Standalone is the iOS home-screen launch (and Android's WebAPK, if a
+        // shortcut ever becomes one). navigator.standalone is the only reliable
+        // signal on iOS; the media queries cover everyone else.
+        function _isStandalone() {
+            if (navigator.standalone === true) return true;
+            try {
+                return window.matchMedia('(display-mode: standalone)').matches ||
+                       window.matchMedia('(display-mode: fullscreen)').matches;
+            } catch (e) { return false; }
+        }
+
+        function toggleFullscreen() {
+            if (document.fullscreenElement) {
+                if (document.exitFullscreen) document.exitFullscreen();
+                return;
+            }
+            var el = document.documentElement;
+            if (!el.requestFullscreen) return;
+            var pr = el.requestFullscreen();
+            // Denied (no gesture, or a browser that refuses): the fullscreenchange
+            // handler never fires, so refresh here or the button would lie.
+            if (pr && pr['catch']) pr['catch'](function () { _refreshFullscreenUI(); });
+        }
+
+        // Shows exactly one of the three states, so the modal never offers a
+        // button that cannot work on the device looking at it.
+        function _refreshFullscreenUI() {
+            var standalone = _isStandalone();
+            var real = !!document.fullscreenElement || standalone;
+            document.body.classList.toggle('reaset-fullscreen', real);
+
+            var btn = document.getElementById('ap-fs-btn');
+            var ios = document.getElementById('ap-fs-hint-ios');
+            var on  = document.getElementById('ap-fs-hint-on');
+            if (!btn || !ios || !on) return;
+
+            var api = _fsApiAvailable();
+            // Standalone already owns the whole screen and the API cannot undo
+            // it, so there is nothing to offer — just say so.
+            on.style.display  = standalone ? '' : 'none';
+            btn.style.display = (!standalone && api) ? '' : 'none';
+            ios.style.display = (!standalone && !api) ? '' : 'none';
+            if (!standalone && api) {
+                var isOn = !!document.fullscreenElement;
+                btn.classList.toggle('is-on', isOn);
+                btn.textContent = t(isOn ? 'Exit full screen' : 'Enter full screen');
+            }
+        }
+
+        document.addEventListener('fullscreenchange', _refreshFullscreenUI);
+        _refreshFullscreenUI();
+
         function openAppearanceModal() {
             document.getElementById('appearance-modal-overlay').classList.add('open');
+            _refreshFullscreenUI();
             closeSidebar();
         }
 
