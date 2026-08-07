@@ -391,6 +391,25 @@ idle and everything else (transport, loops, setlist) keeps working.
 - **&#8635; (Loop)**: Activates infinite looping over the bounded region or currently selected sub-section segment.
 - **&#10005; (Skip)**: Strikethroughs the track, completely ignoring it from linear continuous playback chains.
 
+### Phone layout — view tabs move to the sidebar
+On a phone, the five view tabs (SHOW / LYRICS / CHORDS / LIVE / CANVAS) move out of the top
+bar and into a **Views** grid at the top of the sidebar. This isn't only about saving space:
+five tabs at their minimum width plus the menu button plus the timer readout add up to
+438px of content in a 375px-wide screen, so the timer and song count were being pushed
+**63px off the right edge** — invisible on a phone. With the tabs relocated everything fits,
+and the bar itself slims from 56px to 46px since it no longer has to house stacked
+icon-over-label tabs.
+
+The swap is driven purely by screen size, not by Director/Player mode — a Director on a
+phone has the same screen. **Tablets and desktops keep the tabs on top**, unchanged. The
+rule covers phones in portrait *and* landscape (`max-width: 600px` or `max-height: 520px`);
+an iPad is at least 744px in both directions either way round, so it never matches. An iPad
+in a narrow Split View pane does get the phone layout, which is correct — the pane really is
+phone-sized.
+
+Both sets of tabs always exist in the DOM and stay in sync, so rotating a phone or resizing
+a window switches between the two layouts instantly with no stale highlight.
+
 ### Display Filters
 Located under **Settings — Appearance** in the sidebar. Three independent real-time sliders apply a CSS filter to the setlist body:
 - **Luminance** — 50% to 150% (default 100%)
@@ -1044,6 +1063,26 @@ inactivo y todo lo demás (transporte, loops, setlist) sigue funcionando.
 - **&#9632; / &#8677; (Follow Action)**: Alterna si la canción se detiene al final o continúa sin pausas hacia la siguiente en la lista.
 - **&#8635; (Loop)**: Bloquea un ciclo infinito sobre la región actual o la sub-sección seleccionada.
 - **&#10005; (Skip)**: Marca la canción con una línea tachada y se la saltará de la lista de reproducción continua.
+
+### Layout en teléfono — las pestañas se van a la sidebar
+En un teléfono, las cinco pestañas de vista (SHOW / LYRICS / CHORDS / LIVE / CANVAS) salen
+de la barra superior y pasan a una grilla **Views** al tope de la sidebar. No es solo por
+ganar espacio: cinco pestañas en su ancho mínimo, más el botón de menú, más el bloque de
+timer suman 438px de contenido en una pantalla de 375px, así que el timer y el contador de
+canciones quedaban empujados **63px fuera del borde derecho** — invisibles en un teléfono.
+Con las pestañas reubicadas entra todo, y la barra baja de 56px a 46px porque ya no tiene
+que alojar pestañas con ícono sobre etiqueta.
+
+El cambio lo dispara el tamaño de pantalla, no el modo Director/Player — un Director en
+teléfono tiene la misma pantalla. **Tablets y escritorio conservan las pestañas arriba**,
+sin cambios. La regla cubre teléfonos en vertical *y* en horizontal (`max-width: 600px` o
+`max-height: 520px`); un iPad mide al menos 744px en ambas direcciones en cualquier
+orientación, así que nunca entra. Un iPad en un panel angosto de Split View sí recibe el
+layout de teléfono, que es lo correcto — ese panel realmente tiene tamaño de teléfono.
+
+Los dos juegos de pestañas siempre existen en el DOM y se mantienen sincronizados, así que
+rotar el teléfono o redimensionar la ventana cambia entre layouts al instante y sin dejar un
+resaltado viejo.
 
 ### Filtros de pantalla
 Disponibles en **Settings — Appearance** dentro de la sidebar. Tres sliders independientes aplican un filtro CSS en tiempo real al cuerpo del setlist:

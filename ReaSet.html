@@ -1502,6 +1502,73 @@
             margin-bottom: 10px;
         }
 
+        /* ── Sidebar view switcher (phone only) ──────────────────────────
+           The topbar's five .vtab tabs cost 56px of vertical space, which on
+           a phone is a lot of a short screen. On phones they move here and
+           the topbar keeps only ☰ + the timer/song count; the swap is done
+           entirely in CSS (both sets always exist in the DOM), so rotating
+           the device switches back and forth with no JS and no state to
+           rebuild. Laid out as a wrapping grid rather than a stack so all
+           five stay reachable without scrolling the sidebar. */
+        #sidebar-views { display: none; }
+
+        .sview-grid {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 8px;
+        }
+
+        .sview-btn {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            gap: 4px;
+            padding: 12px 4px;
+            border-radius: 12px;
+            border: 1px solid rgba(255, 255, 255, 0.10);
+            background: rgba(255, 255, 255, 0.05);
+            cursor: pointer;
+            font-family: var(--font-ui);
+            font-size: 10px;
+            font-weight: 700;
+            letter-spacing: 0.8px;
+            text-transform: uppercase;
+            color: var(--text-subdued);
+            transition: all 0.15s;
+        }
+
+        .sview-btn .sview-icon {
+            font-size: 18px;
+            line-height: 1;
+        }
+
+        /* Active view. Colours mirror the topbar tabs exactly, so the two
+           layouts read as the same control in a different place. */
+        .sview-btn.active { background: rgba(255, 255, 255, 0.10); }
+        .sview-btn.t-show.active   { color: var(--color-brand); border-color: var(--color-brand); }
+        .sview-btn.t-lyrics.active { color: var(--color-chain); border-color: var(--color-chain); }
+        .sview-btn.t-chords.active { color: var(--color-loop);  border-color: var(--color-loop); }
+        .sview-btn.t-live.active   { color: var(--color-live);  border-color: var(--color-live); }
+        .sview-btn.t-canvas.active { color: var(--color-timer); border-color: var(--color-timer); }
+
+        /* Phones only: portrait (narrow) OR landscape (short). A tablet is
+           excluded by both halves — an iPad is ≥744px wide in portrait and
+           ≥744px tall in landscape — so it keeps the topbar tabs. An iPad in
+           a narrow Split View pane does get this layout, which is correct:
+           the pane really is phone-sized. */
+        @media (max-width: 600px), (max-height: 520px) {
+            .app-topbar .vtab,
+            .app-topbar .vtab-spacer { display: none; }
+            /* The info block was pushed right by .vtab-spacer, which is now
+               gone; keep it right-aligned so ☰ stays alone on the left. */
+            .app-topbar .app-topbar-info { margin-left: auto; }
+            /* 56px was sized for the tabs' stacked icon-over-label; ☰ and a
+               line of 13px text don't need it. */
+            .app-topbar { height: 46px; }
+            #sidebar-views { display: block; }
+        }
+
         .sidebar-action-btn {
             display: flex;
             align-items: center;
@@ -3877,6 +3944,32 @@
         <div class="sidebar-head">
             <span class="sidebar-logo">REASET</span>
             <button class="sidebar-close-btn" onclick="closeSidebar()">✕</button>
+        </div>
+
+        <!-- View switcher — PHONE ONLY (hidden by default, revealed by the
+             phone media query, which hides the topbar .vtab set at the same
+             time). Deliberately first in the sidebar: on a phone this is the
+             primary navigation, not a setting. Both copies stay in sync via
+             _setViewTabActive(). -->
+        <div class="sidebar-section" id="sidebar-views">
+            <div class="sidebar-section-title">Views</div>
+            <div class="sview-grid">
+                <button class="sview-btn t-show active" id="stab-btn-show" onclick="showMainView();closeSidebar()">
+                    <span class="sview-icon">&#9654;</span><span>SHOW</span>
+                </button>
+                <button class="sview-btn t-lyrics" id="stab-btn-lyrics" onclick="toggleLyricsPanel();closeSidebar()">
+                    <span class="sview-icon">&#9834;</span><span>LYRICS</span>
+                </button>
+                <button class="sview-btn t-chords" id="stab-btn-chords" onclick="toggleChordsPanel();closeSidebar()">
+                    <span class="sview-icon">&#9837;</span><span>CHORDS</span>
+                </button>
+                <button class="sview-btn t-live" id="stab-btn-live" onclick="openLiveView();closeSidebar()">
+                    <span class="sview-icon">&#9654;</span><span>LIVE</span>
+                </button>
+                <button class="sview-btn t-canvas" id="stab-btn-canvas" onclick="openCanvasMode();closeSidebar()">
+                    <span class="sview-icon">&#9635;</span><span>CANVAS</span>
+                </button>
+            </div>
         </div>
 
         <div class="sidebar-section">
@@ -7667,14 +7760,14 @@
         function openCanvasMode() {
             canvasOpen = true;
             document.getElementById("canvas-mode").classList.add("open");
-            var tabBtn = document.getElementById('tab-btn-canvas'); if (tabBtn) tabBtn.classList.add('active');
+            _setViewTabActive('canvas', true);
             updatePlaybackUI();
         }
 
         function closeCanvasMode() {
             canvasOpen = false;
             document.getElementById("canvas-mode").classList.remove("open");
-            var tabBtn = document.getElementById('tab-btn-canvas'); if (tabBtn) tabBtn.classList.remove('active');
+            _setViewTabActive('canvas', false);
             toggleCanvasEdit(false);
         }
 
@@ -8238,16 +8331,25 @@
             updateTopTabs();
         }
 
+        // The five view tabs exist in TWO places: the topbar (tablet/desktop)
+        // and the sidebar (phone — only one set is ever visible, see the
+        // .vtab media query). Both carry the same active state regardless of
+        // which is on screen, so rotating a phone into landscape or resizing a
+        // window never reveals a stale highlight on the set that just appeared.
+        function _setViewTabActive(name, on) {
+            var top = document.getElementById('tab-btn-' + name);
+            var side = document.getElementById('stab-btn-' + name);
+            if (top) top.classList.toggle('active', on);
+            if (side) side.classList.toggle('active', on);
+        }
+
         function updateTopTabs() {
             var lyricsOpen = document.getElementById('lyrics-panel').classList.contains('open');
             var chordsOpen = document.getElementById('chords-panel').classList.contains('open');
             var noneOpen = !lyricsOpen && !chordsOpen && !liveViewOpen && !canvasOpen;
-            var showBtn = document.getElementById('tab-btn-show');
-            var lbtn = document.getElementById('tab-btn-lyrics');
-            var cbtn = document.getElementById('tab-btn-chords');
-            if (showBtn) showBtn.classList.toggle('active', noneOpen);
-            if (lbtn) lbtn.classList.toggle('active', lyricsOpen);
-            if (cbtn) cbtn.classList.toggle('active', chordsOpen);
+            _setViewTabActive('show', noneOpen);
+            _setViewTabActive('lyrics', lyricsOpen);
+            _setViewTabActive('chords', chordsOpen);
         }
 
         // F11: Chords font/size/color prefs
@@ -8564,7 +8666,7 @@
             liveViewOpen = true;
             document.getElementById("live-view").classList.add("open");
             document.getElementById("live-setlist-name").innerText = currentSetlistName;
-            var tl = document.getElementById('tab-btn-live'); if (tl) tl.classList.add('active');
+            _setViewTabActive('live', true);
             _lrmLastSongId = null; // force region map rebuild on open
             applyLiveSettings();
             updatePlaybackUI();
@@ -8572,7 +8674,7 @@
         function closeLiveView() {
             liveViewOpen = false;
             document.getElementById("live-view").classList.remove("open");
-            var tl = document.getElementById('tab-btn-live'); if (tl) tl.classList.remove('active');
+            _setViewTabActive('live', false);
             closeLiveConfig();
             updateTopTabs();
         }
