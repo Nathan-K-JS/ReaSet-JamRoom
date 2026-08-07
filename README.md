@@ -437,6 +437,21 @@ moved when you open it, and vice versa. The gear is the quick, in-context adjust
 you're looking at the words; the modal is the complete set (it also carries the typeface,
 which the gear never had).
 
+### Language — English / Spanish
+ReaSet ships in both languages. The switch lives in **Appearance → General**, right under
+Theme: a two-cell **EN / ES** control that applies immediately, with no reload.
+
+On a device that has never chosen, ReaSet follows the browser's own language (Spanish if
+`navigator.language` starts with `es`, English otherwise), so a Spanish-speaking musician
+isn't greeted in English by a device that already stated its preference. Once you pick, the
+choice is remembered per device.
+
+Translation works by matching the strings themselves rather than by tagging every element
+with a key: each entry in the table is simply `[english, spanish]` and **both sides act as a
+lookup key**, so switching is symmetric and re-running it is harmless. Views that JS builds
+as the show runs — the setlist, section rows, MIDI mappings — are re-rendered on a switch
+and then swept, so nothing is left behind in the old language.
+
 ### Display Filters
 Located under **Settings — Appearance** in the sidebar. Three independent real-time sliders apply a CSS filter to the setlist body:
 - **Luminance** — 50% to 150% (default 100%)
@@ -1150,6 +1165,22 @@ los controles que estén en pantalla. Cambiás el tamaño desde el engranaje mie
 letras y el slider del modal ya está movido cuando lo abrís, y al revés. El engranaje es el
 ajuste rápido y en contexto mientras mirás la letra; el modal es el set completo (además
 tiene la tipografía, que el engranaje nunca tuvo).
+
+### Idioma — Inglés / Español
+ReaSet viene en ambos idiomas. El selector está en **Appearance → General**, justo debajo de
+Theme: un control de dos celdas **EN / ES** que se aplica al instante, sin recargar.
+
+En un dispositivo que nunca eligió, ReaSet sigue el idioma del propio navegador (español si
+`navigator.language` empieza con `es`, inglés si no), así un músico hispanohablante no
+recibe la app en inglés desde un dispositivo que ya declaró su preferencia. Una vez que
+elegís, la decisión queda guardada por dispositivo.
+
+La traducción funciona haciendo coincidir las cadenas mismas, no etiquetando cada elemento
+con una clave: cada entrada de la tabla es simplemente `[inglés, español]` y **ambos lados
+sirven como clave de búsqueda**, así el cambio es simétrico y volver a ejecutarlo es
+inofensivo. Las vistas que el JS construye durante el show — el setlist, las filas de
+sección, las asignaciones MIDI — se vuelven a renderizar al cambiar y después se barren, así
+que nada queda en el idioma anterior.
 
 ### Filtros de pantalla
 Disponibles en **Settings — Appearance** dentro de la sidebar. Tres sliders independientes aplican un filtro CSS en tiempo real al cuerpo del setlist:

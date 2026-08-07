@@ -1786,6 +1786,9 @@
             color: var(--text2);
         }
 
+        /* Language picker — the segmented control, sized for two cells. */
+        #lang-seg { max-width: 180px; }
+
         .sidebar-action-btn {
             display: flex;
             align-items: center;
@@ -4369,6 +4372,14 @@
                     style="background:#121212;border-color:#fff" title="Dark"></div>
             </div>
                 </div>
+
+                <div class="ap-group">
+                    <div class="ap-group-title">Language</div>
+                    <div class="ap-seg" id="lang-seg">
+                        <button data-lang="en" onclick="applyLanguage('en')">EN</button>
+                        <button data-lang="es" onclick="applyLanguage('es')">ES</button>
+                    </div>
+                </div>
             </div>
 
             <div class="ap-pane" id="ap-pane-lyrics" style="display:none">
@@ -4946,6 +4957,238 @@
         wwr_req(_diagProbe);
         wwr_req_recur(_diagProbe, 2000);
         wwr_start();
+
+        // ══════════════════════════════════════════════════════════
+        // I18N — English / Spanish
+        // ══════════════════════════════════════════════════════════
+        // The app grew with both languages hardcoded in place. Rather than
+        // annotate ~150 elements with keys — which means editing markup all
+        // over a 10k-line file — each row below is simply [english, spanish]
+        // and BOTH sides act as a lookup key. Whatever string a node happens
+        // to hold today is found in the table and swapped for the other
+        // language, so translation is symmetric, needs no markup changes at
+        // all, and re-running it is idempotent.
+        var I18N_ROWS = [
+            ["SHOW", "SHOW"],
+            ["LYRICS", "LETRAS"],
+            ["CHORDS", "ACORDES"],
+            ["LIVE", "LIVE"],
+            ["CANVAS", "CANVAS"],
+            ["Active:", "Activas:"],
+            ["Playtime:", "Duración:"],
+            ["Export", "Exportar"],
+            ["Import", "Importar"],
+            ["Delete", "Eliminar"],
+            ["Active Setlist", "Setlist activo"],
+            ["Up Next:", "Sigue:"],
+            ["↻ Loop", "↻ Loop"],
+            ["Views", "Vistas"],
+            ["Show Options", "Opciones de show"],
+            ["Auto-Scroll", "Auto-scroll"],
+            ["Queue Mode", "Modo cola"],
+            ["Smooth Seek", "Seek suave"],
+            ["Auto-Stop", "Auto-stop"],
+            ["Hide Skips", "Ocultar omitidas"],
+            ["MIDI Init", "Init MIDI"],
+            ["Stop Hold (3s)", "Stop sostenido (3s)"],
+            ["Grid View", "Vista grilla"],
+            ["Settings — MIDI", "Ajustes — MIDI"],
+            ["MIDI Learn", "MIDI Learn"],
+            ["Appearance", "Apariencia"],
+            ["Data — Backup", "Datos — Respaldo"],
+            ["Export Settings JSON", "Exportar ajustes JSON"],
+            ["Import Settings JSON", "Importar ajustes JSON"],
+            ["REAPER Connection", "Conexión con REAPER"],
+            ["Sync", "Sincronizar"],
+            ["Setlist Sync (Director/Player)", "Sync de setlist (Director/Músico)"],
+            ["This device:", "Este dispositivo:"],
+            ["Push setlist to shared", "Enviar setlist al compartido"],
+            ["Pull setlist from shared", "Traer setlist del compartido"],
+            ["Set/Change Director PIN", "Definir/cambiar PIN de Director"],
+            ["General", "General"],
+            ["Lyrics", "Letras"],
+            ["Chords", "Acordes"],
+            ["Display filters", "Filtros de pantalla"],
+            ["Luminance", "Luminancia"],
+            ["Contrast", "Contraste"],
+            ["Saturation", "Saturación"],
+            ["Reset to defaults", "Restablecer valores"],
+            ["Theme", "Tema"],
+            ["Language", "Idioma"],
+            ["Typeface", "Tipografía"],
+            ["Sizes", "Tamaños"],
+            ["Global", "Global"],
+            ["Main line", "Línea principal"],
+            ["Context lines", "Líneas de contexto"],
+            ["Weight", "Grosor"],
+            ["Colour", "Color"],
+            ["Size", "Tamaño"],
+            ["Thin", "Fino"],
+            ["Medium", "Medio"],
+            ["Bold", "Negrita"],
+            ["Black", "Black"],
+            ["Previous / next verses", "Versos anterior / siguiente"],
+            ["Global size", "Tamaño global"],
+            ["Context lines size", "Letras secundarias"],
+            ["Show previous/next verses", "Mostrar versos anterior/siguiente"],
+            ["How will you use ReaSet on this device?", "¿Cómo vas a usar ReaSet en este dispositivo?"],
+            ["Director controls playback. Player only shows it live — it cannot move REAPER, not even by accident.", "Director controla la reproducción. Músico solo la muestra en vivo — no puede mover REAPER ni por accidente."],
+            ["Director", "Director"],
+            ["Full control: transport, queue, loops, sections, MIDI. This device runs the show.", "Control total: transporte, cola, loops, secciones, MIDI. Este dispositivo maneja el show."],
+            ["Player", "Músico"],
+            ["Read-only: song, progress, lyrics and chords live. You can still adjust your canvas, colours and fonts — none of that controls REAPER.", "Solo lectura: canción, progreso, letras y acordes en vivo. Podés ajustar tu canvas, colores y fuentes — nada de esto controla REAPER."],
+            ["Cancel", "Cancelar"],
+            ["Initializing…", "Inicializando…"],
+            ["Action to assign", "Acción a asignar"],
+            ["▶ Play", "▶ Play"],
+            ["■ Stop", "■ Stop"],
+            ["⏸ Play / Pause", "⏸ Play / Pausa"],
+            ["→ Next song", "→ Canción siguiente"],
+            ["← Previous song", "← Canción anterior"],
+            ["↓ Next section", "↓ Sección siguiente"],
+            ["↑ Previous section", "↑ Sección anterior"],
+            ["⟳ Toggle Loop (active song)", "⟳ Toggle Loop (canción activa)"],
+            ["↺ Restart song", "↺ Reiniciar canción"],
+            ["⊘ Toggle Skip (active song)", "⊘ Toggle Skip (canción activa)"],
+            ["Listen for next note / CC…", "Escuchar siguiente nota / CC…"],
+            ["Active mappings", "Asignaciones activas"],
+            ["No mappings yet","Sin asignaciones todavía"],
+            ["Clear all mappings", "Borrar todas las asignaciones"],
+            ["Close", "Cerrar"],
+            ["MIDI access denied: ", "Acceso MIDI denegado: "],
+            ["Visible elements", "Elementos visibles"],
+            ["View", "Vista"],
+            ["SIZE", "TAMAÑO"],
+            ["Song", "Canción"],
+            ["Current section", "Sección actual"],
+            ["✕ Exit", "✕ Salir"],
+            ["Edit Canvas", "Editar canvas"],
+            ["Lyrics on Canvas", "Letras en canvas"],
+            ["UI Default", "UI por defecto"],
+            ["Heading", "Título"],
+            ["Heading Default", "Título por defecto"],
+            ["■ STOP (Hold)", "■ STOP (sostener)"],
+            ["Mode: Hold", "Modo: sostener"],
+            ["Title−", "Título−"],
+            ["Title+", "Título+"],
+            ["Section−", "Sección−"],
+            ["Section+", "Sección+"],
+            ["Next−", "Sigue−"],
+            ["Next+", "Sigue+"],
+            ["Confirm", "Confirmar"],
+            ["Notification", "Notificación"],
+            ["Export Setlists", "Exportar setlists"],
+            ["Download all your setlists as a JSON file.", "Descarga todos tus setlists como archivo JSON."],
+            ["↓ Download", "↓ Descargar"],
+            ["Menu", "Menú"],
+            ["Click to change mode", "Click para cambiar de modo"],
+            ["New", "Nuevo"],
+            ["Options", "Opciones"],
+            ["ReaSet NativeLoop connected", "ReaSet NativeLoop conectado"],
+            ["Dark", "Oscuro"],
+            ["Custom colour", "Color personalizado"],
+            ["Lyrics settings", "Ajustes de letra"],
+            ["Font", "Fuente"],
+            ["Text color", "Color de texto"],
+            ["Stop button mode", "Modo del botón Stop"],
+            ["Lilac", "Lila"],
+            ["Red", "Rojo"],
+            ["White", "Blanco"],
+            ["Green", "Verde"],
+            ["Blue", "Azul"],
+            ["Amber", "Ámbar"],
+            ["Teal", "Verde azulado"]
+        ];
+
+        var I18N_MAP = (function () {
+            var m = {};
+            for (var i = 0; i < I18N_ROWS.length; i++) {
+                var en = I18N_ROWS[i][0], es = I18N_ROWS[i][1];
+                m[en] = I18N_ROWS[i];
+                if (es !== en) m[es] = I18N_ROWS[i];
+            }
+            return m;
+        })();
+
+        // Default to the browser's language when nothing was chosen yet, so a
+        // Spanish-speaking musician isn't greeted in English on a device that
+        // already stated its preference.
+        var REASET_LANG = (function () {
+            try {
+                var stored = localStorage.getItem('reaset_lang');
+                if (stored === 'en' || stored === 'es') return stored;
+            } catch (e) {}
+            return /^es/i.test(navigator.language || '') ? 'es' : 'en';
+        })();
+
+        // For strings built in JS. Takes the English source text and returns
+        // it in the active language, falling through unchanged when the table
+        // has no row for it — so an untranslated string still reads fine.
+        function t(en) {
+            var row = I18N_MAP[en];
+            if (!row) return en;
+            return REASET_LANG === 'es' ? row[1] : row[0];
+        }
+
+        // Walk the live DOM and swap every recognised string. Deliberately not
+        // cached: the setlist, section rows and status strips are rebuilt as
+        // the show runs, so a fresh walk is what keeps newly created nodes in
+        // the right language. A few hundred text nodes costs nothing at the
+        // rate this runs (only on an explicit language change / boot).
+        function _i18nWalk() {
+            var want = REASET_LANG === 'es' ? 1 : 0;
+            var w = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT, null, false);
+            var n;
+            while ((n = w.nextNode())) {
+                var raw = n.nodeValue;
+                var key = raw.trim();
+                if (!key) continue;
+                var row = I18N_MAP[key];
+                if (!row || row[want] === key) continue;
+                // Preserve the surrounding whitespace exactly: several labels
+                // sit next to an icon element and rely on that spacing.
+                var at = raw.indexOf(key);
+                n.nodeValue = raw.slice(0, at) + row[want] + raw.slice(at + key.length);
+            }
+            var els = document.querySelectorAll('[title], [placeholder]');
+            for (var i = 0; i < els.length; i++) {
+                ['title', 'placeholder'].forEach(function (a) {
+                    var v = els[i].getAttribute(a);
+                    if (!v) return;
+                    var r2 = I18N_MAP[v.trim()];
+                    if (r2 && r2[want] !== v.trim()) els[i].setAttribute(a, r2[want]);
+                });
+            }
+        }
+
+        function applyLanguage(lang, skipRerender) {
+            if (lang !== 'en' && lang !== 'es') return;
+            REASET_LANG = lang;
+            try { localStorage.setItem('reaset_lang', lang); } catch (e) {}
+            document.documentElement.setAttribute('lang', lang);
+
+            var seg = document.getElementById('lang-seg');
+            if (seg) {
+                var bs = seg.querySelectorAll('button');
+                for (var i = 0; i < bs.length; i++) {
+                    bs[i].classList.toggle('active', bs[i].getAttribute('data-lang') === lang);
+                }
+            }
+
+            // Views built from JS bake their strings in at render time, so they
+            // are rebuilt rather than patched. Done BEFORE the DOM walk so the
+            // freshly rendered nodes get swept too.
+            if (!skipRerender) {
+                try {
+                    if (typeof lastRenderChecksum !== 'undefined') lastRenderChecksum = '';
+                    if (typeof renderSetlist === 'function') renderSetlist();
+                    if (typeof updatePlaybackUI === 'function') updatePlaybackUI();
+                    if (typeof updateMidiStatusUI === 'function') updateMidiStatusUI();
+                    if (typeof renderMidiMappings === 'function') renderMidiMappings();
+                } catch (e) { /* a view not built yet must not block the switch */ }
+            }
+            _i18nWalk();
+        }
 
         // --- 2. STATE ---
         var g_regions = [];
@@ -6127,6 +6370,8 @@
         // avoids re-forcing the choice on every accidental refresh or restart,
         // which would otherwise strand a Director mid-show behind a modal.
         if (REASET_MODE_STORED) { applyModeUI(); } else { openModeSelector(true); }
+        // Runs after the UI exists so the first walk sees every static node.
+        applyLanguage(REASET_LANG, true);
         _dcWatchConflict();
         _refreshDeviceNameBtn();
 
@@ -7370,8 +7615,8 @@
             }
 
             listEl.scrollTop = scrollPos;
-            document.getElementById('song-count').innerText = "Active: " + activeCount;
-            document.getElementById('total-time').innerText = "Playtime: " + formatTotalTime(totalDur);
+            document.getElementById('song-count').innerText = t("Active:") + " " + activeCount;
+            document.getElementById('total-time').innerText = t("Playtime:") + " " + formatTotalTime(totalDur);
         }
 
         // --- 7. ACTIONS ---
@@ -9423,7 +9668,7 @@
                 loadMidiMappings();
                 updateMidiStatusUI();
             }, function(err) {
-                setMidiStatusUI('error', 'Acceso MIDI denegado: ' + err.message);
+                setMidiStatusUI('error', t('MIDI access denied: ') + err.message);
             });
         }
 
@@ -9472,7 +9717,7 @@
             var btn = document.getElementById('midi-learn-btn');
             if (btn) {
                 btn.classList.remove('listening');
-                btn.innerText = 'Escuchar siguiente nota / CC…';
+                btn.innerText = t('Listen for next note / CC…');
             }
         }
 
@@ -9488,7 +9733,7 @@
             var btn = document.getElementById('midi-learn-btn');
             if (btn) {
                 btn.classList.remove('listening');
-                btn.innerText = 'Escuchar siguiente nota / CC…';
+                btn.innerText = t('Listen for next note / CC…');
             }
 
             var typeNames = { 9: 'Note', 11: 'CC', 12: 'PC' };
