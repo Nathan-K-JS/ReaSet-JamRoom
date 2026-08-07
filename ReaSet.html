@@ -1789,61 +1789,56 @@
         /* Language picker — the segmented control, sized for two cells. */
         #lang-seg { max-width: 180px; }
 
-        /* ── Director rows on a phone ────────────────────────────────────
-           A Director needs every control, so unlike Player mode nothing here
-           can simply be removed: on a 375px screen the drag handle, ⋮ menu,
-           index, chevron, the three toggles and the duration add up to 317px
-           of a 347px row, leaving the song name 18px — about one letter.
-           Measured, same as the Player case.
-
-           So instead of dropping controls, the row wraps onto two lines:
-
-               [1.] [›] Song name ....................... 4:12
-               [⋮⋮] [⋮]                        [chain][loop][skip]
-
-           Identity and name get the full width on top; every control stays
-           exactly one tap away underneath. The break is forced by a
-           zero-height ::after pseudo-element, which counts as a flex item —
-           no extra markup, and the row collapses back to a single line on a
-           tablet with no JS involved. */
-        @media (max-width: 600px), (max-height: 520px) {
-            body:not(.reaset-player) .song-row {
-                flex-wrap: wrap;
-                row-gap: 2px;
-                padding: 8px 10px 8px 0;
-            }
-            body:not(.reaset-player) .song-row > .song-index    { order: 1; }
-            body:not(.reaset-player) .song-row > .song-chevron  { order: 2; }
-            body:not(.reaset-player) .song-row > .song-title-area {
-                order: 3;
-                flex: 1 1 0;
-                padding: 0 6px 0 0;
-            }
-            body:not(.reaset-player) .song-row > .song-duration { order: 4; }
-            /* The line break itself. */
-            body:not(.reaset-player) .song-row::after {
-                content: '';
-                order: 5;
-                flex-basis: 100%;
-                height: 0;
-            }
-            body:not(.reaset-player) .song-row > .drag-handle {
-                order: 6;
-                padding: 2px 0 2px 12px;
-            }
-            body:not(.reaset-player) .song-row > .song-dotmenu-btn { order: 7; height: 28px; }
-            body:not(.reaset-player) .song-row > .loop-counter-badge { order: 8; }
-            /* Pushed to the right edge of the second line. */
-            body:not(.reaset-player) .song-row > .song-actions {
-                order: 9;
-                margin-left: auto;
-            }
-            body:not(.reaset-player) .song-row > .song-actions .sa-btn {
-                width: 34px;
-                height: 34px;
-                font-size: 16px;
-            }
+        /* ── End-of-song button states ───────────────────────────────────
+           'auto' is deliberately dim: it means the song inherits the global
+           Auto-Stop, and the icon shows which way that currently resolves.
+           An explicit override is bright, so a glance down the column
+           separates "inherited" from "I set this on purpose". */
+        .sa-btn.is-auto {
+            color: rgba(255, 255, 255, 0.24);
+            background: rgba(255, 255, 255, 0.04);
         }
+        .sa-btn.stop-on {
+            color: var(--color-active);
+            background: rgba(252, 60, 68, 0.12);
+        }
+        .sa-btn.wait-on {
+            color: var(--color-timer);
+            background: rgba(255, 159, 10, 0.14);
+        }
+
+        /* ── Edit mode ───────────────────────────────────────────────────
+           The drag handle is a hazard during a show: one stray touch
+           reorders the setlist. It and the ⋮ editor now live behind an
+           explicit mode, which also hands their width back to the song name
+           — on a 375px phone that is 89px of a 347px row. Applied at every
+           width, because the accidental-drag risk is not a phone problem and
+           a control that changes meaning with viewport width is worse than
+           one that does not. */
+        .song-row .drag-handle,
+        .song-row .song-dotmenu-btn,
+        .section-row .sub-dotmenu-btn { display: none; }
+
+        body.reaset-editing .song-row .drag-handle,
+        body.reaset-editing .song-row .song-dotmenu-btn,
+        body.reaset-editing .section-row .sub-dotmenu-btn { display: flex; }
+
+        /* In edit mode the three live toggles step aside; their state moves
+           into the ⋮ panel, where it is labelled rather than glyph-only. */
+        body.reaset-editing .song-actions,
+        body.reaset-editing .section-actions { display: none; }
+
+        /* Show mode is the one you read on stage, so its buttons shrink to
+           give the name back another 18px. */
+        .song-row .song-actions .sa-btn { width: 28px; height: 28px; font-size: 14px; }
+
+        #editModeBtn.active {
+            background: rgba(255, 159, 10, 0.16);
+            border-color: rgba(255, 159, 10, 0.5);
+            color: var(--color-timer);
+        }
+        /* A Player has nothing to edit. */
+        body.reaset-player #editModeBtn { display: none; }
 
         .sidebar-action-btn {
             display: flex;
@@ -4130,6 +4125,7 @@
         <div class="app-setlist-row">
             <select id="setlistSelect" class="n-select" onchange="changeSetlist()"></select>
             <button class="n-btn-new" onclick="createSetlist()" title="New">+</button>
+            <button class="n-btn-new" id="editModeBtn" onclick="toggleEditMode()" title="Edit mode">&#9998;</button>
             <div class="dotmenu-wrap" id="dotMenuWrap" style="position:relative">
                 <button class="n-dotmenu-btn" onclick="toggleDotMenu(event)" title="Options">···</button>
                 <div class="dotmenu-dropdown" id="dotMenuDropdown">
@@ -4241,7 +4237,7 @@
             </div>
 
             <div class="toggle-row director-only">
-                <label class="n-switch"><input type="checkbox" id="autoStopToggle" checked>
+                <label class="n-switch"><input type="checkbox" id="autoStopToggle" checked onchange="lastRenderChecksum='';syncRegions()">
                     <div class="n-track">
                         <div class="n-thumb"></div>
                     </div>
@@ -5029,6 +5025,23 @@
         // language, so translation is symmetric, needs no markup changes at
         // all, and re-running it is idempotent.
         var I18N_ROWS = [
+            ["When this song ends", "Al terminar esta canción"],
+            ["Auto", "Auto"],
+            ["Continue", "Continuar"],
+            ["Stop", "Parar"],
+            ["Wait", "Esperar"],
+            ["seconds before the next song", "segundos antes de la siguiente"],
+            ["Auto follows the global Auto-Stop, currently:", "Auto sigue el Auto-Stop global, ahora:"],
+            ["stop", "parar"],
+            ["continue", "continuar"],
+            ["Loop", "Loop"],
+            ["Skip", "Omitir"],
+            ["Edit mode", "Modo edición"],
+            ["Always continue into the next song", "Siempre continuar a la siguiente"],
+            ["Always stop after this song", "Siempre parar después de esta"],
+            ["Stop, wait, then continue", "Parar, esperar y continuar"],
+            ["Follows Auto-Stop (global): stops", "Sigue Auto-Stop (global): para"],
+            ["Follows Auto-Stop (global): continues", "Sigue Auto-Stop (global): continúa"],
             ["Auto-Scroll keeps the active song visible.", "Auto-scroll mantiene visible la canción activa."],
             ["Queue ON = seamless transition.\nQueue OFF = immediate jump.", "Cola ACTIVADA = transición encadenada.\nCola DESACTIVADA = salto inmediato."],
             ["Smooth Seek ON lets REAPER apply its own smooth-seek preference while playing.\nOFF forces immediate jumps for manual song/section and MIDI navigation.\nSaved per project.", "Seek suave ACTIVADO deja que REAPER aplique su propia preferencia de seek suave mientras reproduce.\nDESACTIVADO fuerza saltos inmediatos en la navegación manual de canción/sección y por MIDI.\nSe guarda por proyecto."],
@@ -5785,8 +5798,17 @@
             _ctxBtnRef = btn;
 
             var ov = getOverride(songId);
-            var stopAfter  = !!ov.stopAfter;
             var delayAfter = ov.delayAfter || 0;
+            var _song = null;
+            for (var _i = 0; _i < displayList.length; _i++) if (displayList[_i].id == songId) { _song = displayList[_i]; break; }
+            var endState = _song ? getSongEnd(_song) : 'auto';
+            var isLoop = !!(_song && _song.loop);
+            var isSkip = !!(_song && _song.skipped);
+            // Spells out what "Auto" resolves to right now, so the global
+            // setting is legible from here instead of only in the sidebar.
+            var _asEl = document.getElementById('autoStopToggle');
+            var autoHint = t('Auto follows the global Auto-Stop, currently:') + ' '
+                         + ((!_asEl || _asEl.checked) ? t('stop') : t('continue'));
             var desc       = ov.description || '';
             var colorHex   = ov.colorHex || '';
             var colorOn    = !!colorHex;
@@ -5807,15 +5829,27 @@
             panel.className = 'song-ctx-panel';
             panel.innerHTML =
                 '<div class="song-ctx-header">' + (songName.length > 22 ? songName.slice(0,20) + '\u2026' : songName) + '</div>'
+                + '<div class="song-ctx-section">'
+                + '<div class="song-ctx-sublabel">' + t('When this song ends') + '</div>'
+                + '<div class="ap-seg ctx-end-seg">'
+                +   '<button' + (endState === 'auto'     ? ' class="active"' : '') + ' onclick="_ctxSetEnd(\'' + songId + '\',\'auto\')">'     + t('Auto')     + '</button>'
+                +   '<button' + (endState === 'continue' ? ' class="active"' : '') + ' onclick="_ctxSetEnd(\'' + songId + '\',\'continue\')">' + t('Continue') + '</button>'
+                +   '<button' + (endState === 'stop'     ? ' class="active"' : '') + ' onclick="_ctxSetEnd(\'' + songId + '\',\'stop\')">'     + t('Stop')     + '</button>'
+                +   '<button' + (endState === 'wait'     ? ' class="active"' : '') + ' onclick="_ctxSetEnd(\'' + songId + '\',\'wait\')">'     + t('Wait')     + '</button>'
+                + '</div>'
+                + '<div class="song-ctx-row" id="_ctx_waitrow_' + songId + '"' + (endState === 'wait' ? '' : ' style="display:none"') + '>'
+                +   '<input type="number" min="1" max="300" step="1" class="song-ctx-input num-input" id="_ctx_delay_' + songId + '" value="' + (delayAfter || 5) + '" onchange="_ctxSetEnd(\'' + songId + '\',\'wait\',this.value)">'
+                +   '<span class="song-ctx-label" style="font-size:11px;color:rgba(255,255,255,0.38)">' + t('seconds before the next song') + '</span></div>'
+                + '<div class="song-ctx-sublabel" style="margin-top:8px;opacity:.7">' + autoHint + '</div>'
+                + '</div>'
                 + '<div class="song-ctx-section"><div class="song-ctx-row">'
-                + '<span class="song-ctx-label"><svg width="13" height="13" viewBox="0 0 13 13" style="display:inline;vertical-align:-2px"><rect x="2.5" y="2.5" width="8" height="8" rx="1.5" fill="rgba(255,255,255,0.65)"/></svg> Stop after song</span>'
-                + '<label class="song-ctx-toggle"><input type="checkbox" id="_ctx_stop_' + songId + '"' + (stopAfter ? ' checked' : '') + ' onchange="_ctxSetStop(\'' + songId + '\',this.checked)"><span class="song-ctx-track"><span class="song-ctx-thumb"></span></span></label>'
+                + '<span class="song-ctx-label">&#8635; ' + t('Loop') + '</span>'
+                + '<label class="song-ctx-toggle"><input type="checkbox"' + (isLoop ? ' checked' : '') + ' onchange="toggleLoop(\'' + songId + '\');closeOpenCtxPanel()"><span class="song-ctx-track"><span class="song-ctx-thumb"></span></span></label>'
                 + '</div></div>'
                 + '<div class="song-ctx-section"><div class="song-ctx-row">'
-                + '<span class="song-ctx-label"><svg width="13" height="13" viewBox="0 0 13 13" style="display:inline;vertical-align:-2px"><circle cx="6.5" cy="7.5" r="4.5" stroke="rgba(255,255,255,0.65)" stroke-width="1.3" fill="none"/><line x1="6.5" y1="7.5" x2="8.5" y2="5.5" stroke="rgba(255,255,255,0.65)" stroke-width="1.3" stroke-linecap="round"/><path d="M5 1.5h3" stroke="rgba(255,255,255,0.65)" stroke-width="1.3" stroke-linecap="round"/><path d="M6.5 1.5v1.2" stroke="rgba(255,255,255,0.65)" stroke-width="1.3" stroke-linecap="round"/></svg> Delay after song</span></div>'
-                + '<div class="song-ctx-sublabel">Segundos antes del siguiente</div>'
-                + '<div class="song-ctx-row"><input type="number" min="0" max="300" step="1" class="song-ctx-input num-input" id="_ctx_delay_' + songId + '" value="' + delayAfter + '" ' + (stopAfter ? 'disabled' : '') + ' placeholder="0" onchange="_ctxSetDelay(\'' + songId + '\',this.value)">'
-                + '<span class="song-ctx-label" style="font-size:11px;color:rgba(255,255,255,0.38)">s</span></div></div>'
+                + '<span class="song-ctx-label">&#10005; ' + t('Skip') + '</span>'
+                + '<label class="song-ctx-toggle"><input type="checkbox"' + (isSkip ? ' checked' : '') + ' onchange="toggleSkip(\'' + songId + '\');closeOpenCtxPanel()"><span class="song-ctx-track"><span class="song-ctx-thumb"></span></span></label>'
+                + '</div></div>'
                 + '<div class="song-ctx-section">'
                 + '<div class="song-ctx-sublabel"><svg width="13" height="13" viewBox="0 0 13 13" style="display:inline;vertical-align:-2px"><rect x="2" y="1.5" width="9" height="10" rx="1.2" stroke="rgba(255,255,255,0.65)" stroke-width="1.2" fill="none"/><path d="M4.5 5h4M4.5 7h4M4.5 9h2.5" stroke="rgba(255,255,255,0.65)" stroke-width="1.1" stroke-linecap="round"/></svg> Nota / Descripci\u00f3n</div>'
                 + '<textarea class="song-ctx-input" rows="2" id="_ctx_desc_' + songId + '" placeholder="Nota sobre la canci\u00f3n\u2026" style="resize:none" onchange="_ctxSetDesc(\'' + songId + '\',this.value)">' + desc + '</textarea>'
@@ -5851,15 +5885,13 @@
             }, 10);
         }
 
-        function _ctxSetStop(id, val) {
-            setSongOverride(id, 'stopAfter', val);
-            var di = document.getElementById('_ctx_delay_' + id);
-            if (di) di.disabled = val;
-        }
-
-        function _ctxSetDelay(id, val) {
-            var n = parseInt(val, 10) || 0;
-            setSongOverride(id, 'delayAfter', Math.max(0, n));
+        function _ctxSetEnd(id, state, seconds) {
+            setSongEnd(id, state, seconds);
+            // Repaint in place so the segment highlight and the seconds row
+            // follow the new state without the panel closing under the user.
+            var btn = _ctxBtnRef;
+            closeOpenCtxPanel();
+            if (btn) openSongMenu({ stopPropagation: function () {}, currentTarget: btn }, id);
         }
 
         function _ctxSetDesc(id, val) {
@@ -7553,8 +7585,9 @@
                     var hasSubs = subs.length > 0;
                     var isExp = !!expandedSongs[r.id];
 
-                    var chainIcon = r.chain ? "&#8677;" : "&#9632;";
-                    var chainClass = r.chain ? "sa-btn chain-on" : "sa-btn";
+                    var _endVis = songEndVisual(r);
+                    var chainIcon = _endVis.icon;
+                    var chainClass = _endVis.cls;
                     var loopIcon = "&#8635;";
                     var loopClass = r.loop ? "sa-btn loop-on" : "sa-btn";
                     var skipIcon = "&#10005;";
@@ -7591,7 +7624,9 @@
                     // Overrides: description, stopAfter, delayAfter
                     var rov = getOverride(r.id);
                     var descHtml   = rov.description ? '<span class="song-name-info">— ' + rov.description + '</span>' : '';
-                    var stopHtml   = rov.stopAfter   ? '<span class="song-stop-tag">⏹</span>' : '';
+                    // The end-state now has its own button; only the delay's
+                    // seconds still need a separate tag to be readable.
+                    var stopHtml   = '';
                     var delayHtml  = (rov.delayAfter > 0 && !rov.stopAfter) ? '<span class="song-delay-tag">+' + rov.delayAfter + 's</span>' : '';
                     // Feature 3: song-level info text from marker at song start
                     var songNameHtml = rDisplayName
@@ -7609,7 +7644,7 @@
                         + '</div>'
                         + '<span id="loop-counter-' + r.id + '" class="loop-counter-badge"></span>'
                         + '<div class="song-actions">'
-                        + '  <button class="' + chainClass + '" onclick="event.stopPropagation(); toggleChain(\'' + r.id + '\')">' + chainIcon + '</button>'
+                        + '  <button class="' + chainClass + '" title="' + _endVis.title + '" onclick="event.stopPropagation(); cycleSongEnd(\'' + r.id + '\')">' + chainIcon + '</button>'
                         + '  <button class="' + loopClass + '" onclick="event.stopPropagation(); toggleLoop(\'' + r.id + '\')">' + loopIcon + '</button>'
                         + '  <button class="' + skipClass + '" onclick="event.stopPropagation(); toggleSkip(\'' + r.id + '\')">' + skipIcon + '</button>'
                         + '</div>'
@@ -7718,6 +7753,88 @@
             localStorage.setItem("reaper_hide_skipped", hideSkippedMode);
             lastRenderChecksum = ""; syncRegions();
         }
+        // ── Per-song end action ─────────────────────────────────────────
+        // "What happens when this song ends" was three independent fields —
+        // chain (row button), stopAfter and delayAfter (⋮ menu) — that could
+        // contradict each other: chain ON + stopAfter ON is reachable, and the
+        // transport checks stopAfter FIRST, so chain lost silently while its
+        // button still read as chained.
+        //
+        // They are not separate settings, they are one axis. This derives a
+        // single state from the SAME stored fields, in the same precedence the
+        // transport already uses, so nothing migrates and playback logic is
+        // untouched — the setter just refuses to write a contradictory pair.
+        //
+        //   auto      follow the global Auto-Stop  (the global↔per-song link)
+        //   continue  always run into the next song
+        //   stop      always stop here
+        //   wait      stop, hold N seconds, continue   (N comes from the menu)
+        function getSongEnd(song) {
+            var ov = getOverride(song.id);
+            if (ov.stopAfter) return 'stop';
+            if (ov.delayAfter > 0) return 'wait';
+            return song.chain ? 'continue' : 'auto';
+        }
+
+        function setSongEnd(id, state, seconds) {
+            var song = null;
+            for (var i = 0; i < displayList.length; i++) if (displayList[i].id == id) { song = displayList[i]; break; }
+            if (!song) return;
+            // Written as a set, never one flag at a time — this is what makes
+            // the contradictory combination unreachable from the UI.
+            song.chain = (state === 'continue');
+            if (!g_songOverrides[id]) g_songOverrides[id] = {};
+            g_songOverrides[id].stopAfter  = (state === 'stop');
+            g_songOverrides[id].delayAfter = (state === 'wait') ? Math.max(1, parseInt(seconds, 10) || 5) : 0;
+            saveSongOverrides();
+            saveCurrentState();
+            lastRenderChecksum = ''; syncRegions();
+        }
+
+        // Tap order for the row button. 'wait' needs a number, so it is set
+        // from the ⋮ panel only; tapping a song that is on 'wait' returns it
+        // to 'auto' rather than silently discarding the seconds elsewhere.
+        function cycleSongEnd(id) {
+            var song = null;
+            for (var i = 0; i < displayList.length; i++) if (displayList[i].id == id) { song = displayList[i]; break; }
+            if (!song) return;
+            var cur = getSongEnd(song);
+            var next = (cur === 'auto') ? 'continue' : (cur === 'continue') ? 'stop' : 'auto';
+            setSongEnd(id, next);
+        }
+
+        // How the button LOOKS. On 'auto' it shows a dimmed version of whatever
+        // the global currently resolves to, so scanning the setlist answers two
+        // questions at once: what will actually happen here, and is this song
+        // inheriting or overriding. The old button could answer neither — its
+        // "■" meant "not chained", which resolves to continue OR stop depending
+        // on a toggle living in another screen.
+        function songEndVisual(song) {
+            var st = getSongEnd(song);
+            if (st === 'continue') return { cls: 'sa-btn chain-on',  icon: '&#8677;', title: 'Always continue into the next song' };
+            if (st === 'stop')     return { cls: 'sa-btn stop-on',   icon: '&#9632;', title: 'Always stop after this song' };
+            if (st === 'wait')     return { cls: 'sa-btn wait-on',   icon: '&#9201;', title: 'Stop, wait, then continue' };
+            var el = document.getElementById('autoStopToggle');
+            var globalStops = !el || el.checked;
+            return {
+                cls: 'sa-btn is-auto',
+                icon: globalStops ? '&#9632;' : '&#8677;',
+                title: globalStops ? 'Follows Auto-Stop (global): stops' : 'Follows Auto-Stop (global): continues'
+            };
+        }
+
+        // Deliberately NOT persisted: coming back from a reload mid-show in
+        // edit mode, with drag handles live, is exactly the state you don't
+        // want to land in. Always starts in show mode.
+        var REASET_EDITING = false;
+        function toggleEditMode() {
+            REASET_EDITING = !REASET_EDITING;
+            document.body.classList.toggle('reaset-editing', REASET_EDITING);
+            var b = document.getElementById('editModeBtn');
+            if (b) b.classList.toggle('active', REASET_EDITING);
+            closeOpenCtxPanel();
+        }
+
         function toggleChain(id) {
             for (var i = 0; i < displayList.length; i++) { if (displayList[i].id == id) { displayList[i].chain = !displayList[i].chain; break; } }
             saveCurrentState(); lastRenderChecksum = ""; syncRegions();
