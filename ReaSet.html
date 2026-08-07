@@ -3265,13 +3265,38 @@
         body.reaset-player #cw-transport {
             pointer-events: none;
         }
-        /* Transport widgets are pure controls — there is nothing to READ in
-           them — so they stay clearly disclaimed at the original strength. */
-        body.reaset-player .app-transport,
+        /* The Live View / Canvas transport widgets are pure controls — nothing
+           to READ in them — so they stay clearly disclaimed at full strength. */
         body.reaset-player #live-transport-bar,
         body.reaset-player #cw-transport {
             opacity: 0.62;
             filter: grayscale(0.35);
+        }
+
+        /* ── Player-mode footer transport ────────────────────────────────
+           PLAY / STOP / Loop are dead for a Player, and PLAY is actively
+           misleading: its label is the ACTION not the state, so while REAPER
+           plays it reads "PAUSE" on a screen where nothing can be paused.
+           The transport state they'd convey is already on screen, and better:
+           the active row's progress fill moves and its duration counts down.
+           So they go, and the bar keeps only what genuinely works here. */
+        body.reaset-player #main-play-btn,
+        body.reaset-player #main-stop-btn,
+        body.reaset-player #footer-loop-btn { display: none; }
+
+        /* SYNC restarts the polling connection (wwr_start) — a READ, and the
+           one recovery a musician has when a venue's wifi drops mid-show and
+           auto-reconnect doesn't catch it. It was being blocked by the bar's
+           own pointer-events:none, so a Player's only working button here was
+           unreachable (verified with a hit test); re-enabled, and the bar is
+           no longer dimmed since everything left in it now actually works. */
+        body.reaset-player .t-btn-sync {
+            pointer-events: auto;
+            cursor: pointer;
+        }
+        body.reaset-player .app-transport {
+            opacity: 1;
+            filter: none;
         }
         /* Content rows are the opposite case: they carry the song name, time
            and progress a Player is here to read. Dimming them to 0.62 taxed

@@ -514,6 +514,15 @@ chains into the next. Skipped songs stay clearly greyed out, the currently-playi
 renders at full strength, and the rest of the rows are only lightly dimmed so the names,
 times and progress stay easy to read on stage.
 
+The footer transport follows the same rule. PLAY / STOP / Loop are gone in Player mode —
+they do nothing, and PLAY was the worst of them, since its label is the *action* rather
+than the state, so it read "PAUSE" while playing on a screen where nothing can be paused.
+Transport state is already on screen and clearer: the active row's progress fill moves and
+its time counts down. **SYNC stays** — it restarts the polling connection, which is a read,
+and it's the one recovery a musician has if a venue's wifi drops mid-show and auto-reconnect
+doesn't catch it. (It used to be blocked by the bar's own click-through guard, so a Player's
+only working button down there was unreachable; it works now.)
+
 > **Not a security boundary.** REAPER's own Web Interface has no authentication — anyone on
 > the same network who knows the endpoint can already control it directly, with or without
 > ReaSet. Player mode stops *ReaSet* from being a way in; it does not lock the network down.
@@ -1163,6 +1172,16 @@ activo: un Player no puede presionarlos, pero *sí* necesita saber que una canci
 engancha con la siguiente. Las canciones skipeadas quedan claramente grises, la fila que
 está sonando se muestra a intensidad plena, y el resto se atenúa apenas para que los
 nombres, tiempos y progreso se lean bien en escena.
+
+La barra de transporte inferior sigue la misma regla. PLAY / STOP / Loop desaparecen en
+modo Player — no hacen nada, y PLAY era el peor de los tres, porque su etiqueta es la
+*acción* y no el estado: mientras REAPER reproducía decía "PAUSE" en una pantalla donde
+nada se puede pausar. El estado del transporte ya está en pantalla y más claro: la fila
+activa tiene el relleno de progreso avanzando y su tiempo en cuenta regresiva. **SYNC se
+queda** — reinicia la conexión de sondeo, que es una lectura, y es la única recuperación
+que tiene un músico si el wifi del lugar se cae en medio del show y la reconexión
+automática no alcanza. (Antes quedaba bloqueado por el propio guard de clicks de la barra,
+así que el único botón que le servía a un Player ahí abajo era inalcanzable; ahora funciona.)
 
 > **No es un límite de seguridad.** El propio Web Interface de REAPER no tiene autenticación
 > — cualquiera en la misma red que conozca el endpoint ya puede controlarlo directamente, con
