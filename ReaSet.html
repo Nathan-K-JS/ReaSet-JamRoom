@@ -1789,6 +1789,62 @@
         /* Language picker — the segmented control, sized for two cells. */
         #lang-seg { max-width: 180px; }
 
+        /* ── Director rows on a phone ────────────────────────────────────
+           A Director needs every control, so unlike Player mode nothing here
+           can simply be removed: on a 375px screen the drag handle, ⋮ menu,
+           index, chevron, the three toggles and the duration add up to 317px
+           of a 347px row, leaving the song name 18px — about one letter.
+           Measured, same as the Player case.
+
+           So instead of dropping controls, the row wraps onto two lines:
+
+               [1.] [›] Song name ....................... 4:12
+               [⋮⋮] [⋮]                        [chain][loop][skip]
+
+           Identity and name get the full width on top; every control stays
+           exactly one tap away underneath. The break is forced by a
+           zero-height ::after pseudo-element, which counts as a flex item —
+           no extra markup, and the row collapses back to a single line on a
+           tablet with no JS involved. */
+        @media (max-width: 600px), (max-height: 520px) {
+            body:not(.reaset-player) .song-row {
+                flex-wrap: wrap;
+                row-gap: 2px;
+                padding: 8px 10px 8px 0;
+            }
+            body:not(.reaset-player) .song-row > .song-index    { order: 1; }
+            body:not(.reaset-player) .song-row > .song-chevron  { order: 2; }
+            body:not(.reaset-player) .song-row > .song-title-area {
+                order: 3;
+                flex: 1 1 0;
+                padding: 0 6px 0 0;
+            }
+            body:not(.reaset-player) .song-row > .song-duration { order: 4; }
+            /* The line break itself. */
+            body:not(.reaset-player) .song-row::after {
+                content: '';
+                order: 5;
+                flex-basis: 100%;
+                height: 0;
+            }
+            body:not(.reaset-player) .song-row > .drag-handle {
+                order: 6;
+                padding: 2px 0 2px 12px;
+            }
+            body:not(.reaset-player) .song-row > .song-dotmenu-btn { order: 7; height: 28px; }
+            body:not(.reaset-player) .song-row > .loop-counter-badge { order: 8; }
+            /* Pushed to the right edge of the second line. */
+            body:not(.reaset-player) .song-row > .song-actions {
+                order: 9;
+                margin-left: auto;
+            }
+            body:not(.reaset-player) .song-row > .song-actions .sa-btn {
+                width: 34px;
+                height: 34px;
+                font-size: 16px;
+            }
+        }
+
         .sidebar-action-btn {
             display: flex;
             align-items: center;
@@ -2248,7 +2304,14 @@
             color: var(--text-secondary);
             margin-bottom: 20px;
             line-height: 1.55;
+            /* Help texts are written as several short lines; keep the breaks. */
+            white-space: pre-line;
         }
+
+        /* These overlays are inline-styled display:none and were only ever
+           given an .open class by JS — with no rule to act on it, every
+           showAppAlert()/showAppConfirm() in the app was a silent no-op. */
+        .app-modal-overlay.open { display: flex !important; }
 
         .modal-input {
             width: 100%;
@@ -4105,10 +4168,6 @@
                 STOP</button>
             <button id="footer-loop-btn" class="t-btn t-btn-loop" onclick="toggleCurrentLoop()">↻ Loop</button>
             <button class="t-btn t-btn-sync" onclick="wwr_start()">SYNC</button>
-            <span id="native-loop-indicator" title="ReaSet NativeLoop conectado"
-                  style="display:none; color:#34c759; font-size:10px; font-weight:700;
-                         letter-spacing:0.5px; align-self:center; padding:0 4px;
-                         opacity:0.8;">⬡ NL</span>
         </div>
     </div>
 
@@ -4505,6 +4564,7 @@
                         <span class="ls-swatch" data-color="#30D158" style="background:#30D158" title="Teal" onclick="applyChordsColor('#30D158')"></span>
                     </div>
                 </div>
+            </div>
         </div>
     </div>
 
@@ -4969,6 +5029,20 @@
         // language, so translation is symmetric, needs no markup changes at
         // all, and re-running it is idempotent.
         var I18N_ROWS = [
+            ["Auto-Scroll keeps the active song visible.", "Auto-scroll mantiene visible la canción activa."],
+            ["Queue ON = seamless transition.\nQueue OFF = immediate jump.", "Cola ACTIVADA = transición encadenada.\nCola DESACTIVADA = salto inmediato."],
+            ["Smooth Seek ON lets REAPER apply its own smooth-seek preference while playing.\nOFF forces immediate jumps for manual song/section and MIDI navigation.\nSaved per project.", "Seek suave ACTIVADO deja que REAPER aplique su propia preferencia de seek suave mientras reproduce.\nDESACTIVADO fuerza saltos inmediatos en la navegación manual de canción/sección y por MIDI.\nSe guarda por proyecto."],
+            ["Auto-Stop ON = stops at the end of the region.\n(Use Chain to override per song).", "Auto-stop ACTIVADO = detiene al final de la región.\n(Usá Chain para anularlo por canción)."],
+            ["Hide Skips = removes inactive songs from the view.", "Ocultar omitidas = saca de la vista las canciones inactivas."],
+            ["Briefly fires play/stop at the start of each region to initialize MIDI.\nOnly works with Auto-Stop enabled.", "Dispara brevemente play/stop al inicio de cada región para inicializar MIDI.\nSolo funciona con Auto-stop activado."],
+            ["Requires holding STOP for 3 seconds before it takes effect.\nGuards against an accidental tap stopping the show.", "Requiere mantener STOP presionado 3 segundos para que tenga efecto.\nProtege de que un toque accidental detenga el show."],
+            ["The Default setlist cannot be deleted.", "El setlist Default no se puede eliminar."],
+            ["Import successful.", "Importación exitosa."],
+            ["Invalid file format.", "Formato de archivo inválido."],
+            ["Error reading file.", "Error al leer el archivo."],
+            ["Done ✓", "Listo ✓"],
+            ["Settings imported. The app will reload.", "Ajustes importados. La app se recargará."],
+            ["Error reading JSON file.", "Error al leer el archivo JSON."],
             ["SHOW", "SHOW"],
             ["LYRICS", "LETRAS"],
             ["CHORDS", "ACORDES"],
@@ -6492,14 +6566,15 @@
                         }
                         break;
                     case "EXTSTATE":
-                        // Auto-detection: ReaSet_NativeLoop.lua writes "ReaSet/nativeLoopReady=1"
+                        // Reaset.lua sets "ReaSet/nativeLoopReady=1"; the flag gates
+                        // whether looping is handed to Lua or run in JS. It is NOT a
+                        // health signal — SetExtState keeps it set until REAPER quits,
+                        // so it stays 1 even if the defer loop dies. The transport bar
+                        // used to show it as a "⬡ NL" lamp, which therefore stayed lit
+                        // on a crashed script; the ReaSet/tick heartbeat below is what
+                        // actually detects that, and reports it in the panel status.
                         if (tok[1] === "ReaSet" && tok[2] === "nativeLoopReady") {
-                            var nlReady = (tok[3] === "1");
-                            if (nlReady !== window.REASET_NATIVE_LOOP) {
-                                window.REASET_NATIVE_LOOP = nlReady;
-                                var nlInd = document.getElementById("native-loop-indicator");
-                                if (nlInd) nlInd.style.display = nlReady ? "inline" : "none";
-                            }
+                            window.REASET_NATIVE_LOOP = (tok[3] === "1");
                         }
                         // Lyrics/Chords bridge diagnostics published by Reaset.lua.
                         // "" (or key absent) = script not running; "!NOTRACK" = no
@@ -8996,9 +9071,9 @@
                 try {
                     var data = JSON.parse(e.target.result);
                     for (var key in data) { if (data.hasOwnProperty(key)) localStorage.setItem(key, data[key]); }
-                    alert('Settings imported. The app will reload.');
+                    showAppAlert(t('Settings imported. The app will reload.'));
                     location.reload();
-                } catch (err) { alert('Error reading JSON file.'); }
+                } catch (err) { showAppAlert(t('Error reading JSON file.')); }
             };
             reader.readAsText(file); input.value = '';
         }
@@ -9365,7 +9440,7 @@
         // --- SETLIST FILE I/O ---
         function deleteSetlist() {
             if (currentSetlistName === "Default") {
-                showAppAlert("The Default setlist cannot be deleted.");
+                showAppAlert(t("The Default setlist cannot be deleted."));
                 return;
             }
             showAppConfirm(
@@ -9406,12 +9481,12 @@
                                 setlists = data; if (!setlists[currentSetlistName]) currentSetlistName = "Default";
                                 localStorage.setItem(STORAGE_KEY, JSON.stringify(setlists)); localStorage.setItem(CURRENT_KEY, currentSetlistName);
                                 updateSetlistDropdown(); displayList = []; initialized = false; syncRegions();
-                                showAppAlert("Import successful.", "Done ✓");
+                                showAppAlert(t("Import successful."), t("Done ✓"));
                             },
                             "Import"
                         );
-                    } else { showAppAlert("Invalid file format."); }
-                } catch (err) { showAppAlert("Error reading file."); }
+                    } else { showAppAlert(t("Invalid file format.")); }
+                } catch (err) { showAppAlert(t("Error reading file.")); }
             };
             reader.readAsText(file); input.value = '';
         }
@@ -10153,16 +10228,23 @@
         // ══════════════════════════════════════════════════════════
 
         // --- 18. HELP ---
+        // Help now uses the app's own modal rather than a native alert(): a
+        // system dialog blocks the page, ignores the theme, and on iOS shows
+        // the page's URL above the text. Bodies are stored as English source
+        // strings and run through t(), so they follow the language switch.
+        var HELP = {
+            scroll:       ["Auto-Scroll", "Auto-Scroll keeps the active song visible."],
+            queue:        ["Queue Mode", "Queue ON = seamless transition.\nQueue OFF = immediate jump."],
+            smoothseek:   ["Smooth Seek", "Smooth Seek ON lets REAPER apply its own smooth-seek preference while playing.\nOFF forces immediate jumps for manual song/section and MIDI navigation.\nSaved per project."],
+            stop:         ["Auto-Stop", "Auto-Stop ON = stops at the end of the region.\n(Use Chain to override per song)."],
+            hide:         ["Hide Skips", "Hide Skips = removes inactive songs from the view."],
+            initsongmidi: ["MIDI Init", "Briefly fires play/stop at the start of each region to initialize MIDI.\nOnly works with Auto-Stop enabled."],
+            stophold:     ["Stop Hold (3s)", "Requires holding STOP for 3 seconds before it takes effect.\nGuards against an accidental tap stopping the show."]
+        };
         function showHelp(topic) {
-            var msgs = {
-                scroll: "Auto-Scroll keeps the active song visible.",
-                queue: "Queue ON = seamless transition.\nQueue OFF = immediate jump.",
-                smoothseek: "Smooth Seek ON lets REAPER apply its own smooth-seek preference while playing.\nOFF forces immediate jumps for manual song/section and MIDI navigation.\nSaved per project.",
-                stop: "Auto-Stop ON = stops at the end of the region.\n(Use Chain to override per song).",
-                hide: "Hide Skips = removes inactive songs from the view.",
-                initsongmidi: "Briefly fires play/stop at the start of each region to initialize MIDI.\nOnly works with Auto-Stop enabled."
-            };
-            alert(msgs[topic] || "");
+            var h = HELP[topic];
+            if (!h) return;
+            showAppAlert(t(h[1]), t(h[0]));
         }
     </script>
 </body>
