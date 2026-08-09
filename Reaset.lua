@@ -195,6 +195,13 @@ end
 --   • trailing symbols ignored    → "Lyrics*", "Chords --", "[Lyrics]"
 -- Anything that leaves extra WORDS behind does NOT match, on purpose:
 -- "Backing Lyrics" or "Lyrics Bus" stay ordinary audio tracks.
+--
+-- This is the canonical implementation. Tools/Lyrics_Tapper.lua has its own
+-- copy (normalize_track_name there too, ported to match this one exactly) —
+-- ReaScripts don't share a module loader across files without a fragile
+-- relative dofile(), so the two are kept as intentionally duplicated,
+-- byte-identical algorithms rather than one unverified cross-file include.
+-- If you change the rules here, port the same change there.
 local function normalize_track_name(name)
     local s = name:lower()
     -- Strip leading decoration repeatedly so mixed prefixes like "* 01 - " unwind

@@ -531,7 +531,9 @@
             border: 1px solid rgba(255, 255, 255, 0.11);
             border-radius: var(--radius-card);
             min-height: 70px;
-            padding: 0 10px 0 0;
+            /* Symmetric: the left used to be 0, which pinned the song number
+               against the edge while the time had 10px + its own 8px. */
+            padding: 0 10px;
             cursor: pointer;
             transition: background 0.2s, box-shadow 0.2s;
             user-select: none;
@@ -859,14 +861,20 @@
         }
 
         /* Number */
+        /* Mirrors .song-duration at the other end of the row: same 8px inner
+           padding, so the number sits the same distance from the left edge as
+           the time does from the right. The row's own padding is symmetric
+           for the same reason. min-width rather than a fixed width so a
+           two-digit number still fits, while text-align keeps every number
+           in a column regardless of digit count. */
         .song-index {
-            width: 22px;
+            min-width: 22px;
             text-align: right;
             color: var(--text-subdued);
-            font-size: 11px;
-            font-family: var(--font-mono);
+            font-size: 13px;
+            font-variant-numeric: tabular-nums;
             flex-shrink: 0;
-            margin-right: 4px;
+            padding: 0 8px;
             cursor: pointer;
         }
 
@@ -944,9 +952,13 @@
         }
 
         /* Duration */
+        /* The UI font rather than the mono one — mono was there to stop the
+           digits jittering as the countdown ticks, and tabular-nums gives
+           exactly that (every digit the same advance width) without the
+           typewriter look. */
         .song-duration {
-            font-family: var(--font-mono);
-            font-size: 11px;
+            font-variant-numeric: tabular-nums;
+            font-size: 12px;
             color: rgba(255, 255, 255, 0.26);
             padding: 0 8px;
             flex-shrink: 0;
@@ -1293,8 +1305,8 @@
         }
 
         .grid-card-index {
-            font-size: 10px;
-            font-family: var(--font-mono);
+            font-size: 12px;
+            font-variant-numeric: tabular-nums;
             color: var(--text-subdued);
         }
 
@@ -1330,9 +1342,28 @@
         }
 
         .grid-card-dur {
-            font-family: var(--font-mono);
-            font-size: 10px;
+            font-variant-numeric: tabular-nums;
+            font-size: 11px;
             color: var(--text-subdued);
+        }
+
+        /* THE grid-irregularity fix. When a song goes active, updatePlaybackUI
+           adds .live-time to its duration element to show the countdown. That
+           class was written for the Live view: font-size 18px and
+           margin-bottom 28px. The list has an override that neutralises both
+           (.song-duration.live-time), but the GRID never got one — so the
+           active card alone grew ~40px taller and every neighbour shifted.
+           Active is now expressed only through weight and colour, and the
+           clock keeps its size. */
+        .grid-card-dur.live-time {
+            font-family: inherit;
+            font-size: 11px;
+            margin-bottom: 0;
+        }
+
+        .grid-card.active .grid-card-dur {
+            color: var(--color-live);
+            font-weight: 700;
         }
 
         /* TRANSPORT FOOTER */
@@ -1857,12 +1888,13 @@
             top: 12px;
             right: 50px;
         }
-        /* The canvas header already wraps to two lines on a phone; adding a
-           worded button would make it three. There it keeps the glyph only,
-           matching how Lyrics and Chords carry the same control. */
-        @media (max-width: 600px), (max-height: 520px) {
-            #canvas-fs-btn span { display: none; }
-        }
+        /* Glyph only, everywhere. It used to carry a worded label on anything
+           bigger than a phone, which made it the odd one out — Lyrics and
+           Chords have always shown this same control as a bare glyph. The
+           span stays in the DOM (setViewFullscreen still writes the current
+           state into it) so the accessible/hover text keeps updating; only
+           its display is dropped. */
+        #canvas-fs-btn span { display: none; }
         #canvas-fs-btn.is-on {
             background: rgba(30, 215, 96, 0.16);
             border-color: rgba(30, 215, 96, 0.45);
@@ -2361,9 +2393,17 @@
             margin-bottom: 28px;
         }
 
+        /* .live-time was written for the Live view's big clock and carries the
+           mono family plus its own size. Both have to be undone here, or the
+           ACTIVE row's countdown ends up in a different typeface and size
+           from every other row in the same list. Active now reads through
+           colour and weight only, so the number never changes shape as it
+           ticks. */
         .song-duration.live-time {
             margin-bottom: 0;
-            font-size: 14px;
+            font-family: inherit;
+            font-size: 12px;
+            font-weight: 700;
         }
 
         .live-next {
@@ -4798,18 +4838,26 @@
     </div>
 
     <!-- MIDI LEARN MODAL -->
-    <!-- MIDI Learn modal — DISABLED, see the MIDI MODULE note in the script
+    <!-- MIDI Learn modal — DISABLED, see the MIDI MODULE note in the script.
+
+         The section labels below were originally `<!- - Status row - ->` style
+         comments. HTML comments DO NOT NEST: the first `- ->` inside this
+         block terminated THIS comment early, so everything after it — the
+         status row, the action selector, the learn button, the mappings list —
+         was live DOM rendering at the bottom of the page, pushing the whole
+         app up and off the top of the viewport. Rewritten as plain text so
+         this block is one single, actually-closed comment.
 <div id="midi-modal-overlay" onclick="if(event.target===this)closeMidiModal()">
         <div class="midi-modal">
             <div class="midi-modal-title">MIDI Learn</div>
 
-            <!-- Status row -->
+            [ Status row ]
             <div class="midi-status-row">
                 <span class="midi-dot" id="midi-status-dot"></span>
                 <span id="midi-status-text">Inicializando…</span>
             </div>
 
-            <!-- Learn section -->
+            [ Learn section ]
             <div class="midi-learn-box">
                 <div class="midi-section-label">Acción a asignar</div>
                 <select id="midi-action-select" class="midi-action-select">
@@ -4832,7 +4880,7 @@
 
             <hr class="midi-hr">
 
-            <!-- Current mappings -->
+            [ Current mappings ]
             <div class="midi-section-label" style="margin-bottom:8px">Asignaciones activas</div>
             <div id="midi-mappings-list" class="midi-mappings-list">
                 <div style="font-size:12px;color:rgba(255,255,255,0.3);text-align:center;padding:12px 0">
@@ -6385,6 +6433,24 @@
         var LYR_LINE_HEIGHT_MULT = 1.6;
         var LYR_WRAP_PUSH_FACTOR = 0.5;   // half a line's height per extra wrapped line
         var _lyrExtraPushPx = 0;
+
+        // The three verses as of the last render, used to tell a one-slot step
+        // around the drum from a jump that should crossfade instead.
+        //
+        // This declaration was MISSING: _renderLyrics only ever assigned
+        // `_lyrLast = {...}` (creating an implicit global) while READING
+        // `_lyrLast.n` earlier in the same function. Reading it before the
+        // first assignment throws ReferenceError, not undefined.
+        //
+        // It only bites when the lyrics panel is already open before the first
+        // verse arrives: normally the panel starts closed, so the first
+        // renders have animate === false, skip the read, and reach the
+        // assignment — after which the global exists and everything works.
+        //
+        // The throw happens inside wwr_onreply, so it killed the ENTIRE rest
+        // of that handler on every reply: the symptom is "lyrics never
+        // populate", not "animation glitches once".
+        var _lyrLast = { p: "", t: "", n: "" };
 
         function _lyrOneLineHeightPx() {
             var host = document.getElementById("lyrics-content");
@@ -10825,6 +10891,36 @@
             if (!h) return;
             showAppAlert(t(h[1]), t(h[0]));
         }
+
+        // ── Reply-handler safety net ────────────────────────────────────────
+        // wwr_onreply is one long function that parses a reply and then drives
+        // every display in the app. A throw anywhere inside it skips everything
+        // after that point — and because REAPER calls it again on the very next
+        // reply, a bug that throws every time leaves the UI permanently frozen
+        // with NO error visible anywhere.
+        //
+        // This does not fix bugs, it makes them loud and survivable: the reply
+        // that threw is lost, the next one is processed normally, and the cause
+        // is printed instead of swallowed. Rate-limited so a persistent fault
+        // reports a few times rather than flooding the console every 33ms.
+        (function () {
+            var _realOnReply = window.wwr_onreply;
+            if (typeof _realOnReply !== 'function') return;
+            var _thrown = 0;
+            window.wwr_onreply = function (results, ts) {
+                try {
+                    return _realOnReply.call(this, results, ts);
+                } catch (e) {
+                    if (_thrown < 5) {
+                        _thrown++;
+                        try {
+                            console.error('ReaSet: reply handler threw — this reply was dropped, '
+                                + 'updates continue with the next one.', e);
+                        } catch (e2) { /* console unavailable */ }
+                    }
+                }
+            };
+        })();
     </script>
 </body>
 

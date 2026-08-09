@@ -97,32 +97,55 @@ local function get_current_pos()
 end
 
 -- ─── Flexible track name matching ──────────────────────────────────────────
--- Strips decorative chars ([], *, etc.) and compares case-insensitively.
--- "*LYRICS", "[Chords]", "notes", "(NuTs)" → all match their canonical name.
-
-local function clean_track_name(name)
-    -- Remove leading special chars: *, -, #, ~, .
-    -- Remove surrounding brackets/parens: [], (), {}
-    -- Trim whitespace
-    return name:lower()
-        :gsub("^[%*%-%#~%.]+", "")
-        :gsub("[%[%{%(]+", "")
-        :gsub("[%]%}%)]+", "")
-        :gsub("^%s+", "")
-        :gsub("%s+$", "")
+-- This MUST stay byte-identical to normalize_track_name() in Reaset.lua.
+-- If the two diverge, the web bridge and this tapper can disagree on which
+-- track is "the lyrics track" — the tapper writes to one, the bridge reads
+-- from another, and it doesn't surface until a show. Confirmed concretely:
+-- the previous version of this function only stripped a fixed set of leading
+-- symbols (`*-#~.`) and never stripped leading digits, so a track literally
+-- named "3 - Chords" matched in Reaset.lua's bridge (which strips leading
+-- numbering) but NOT here — the tapper would have silently created a
+-- duplicate "Chords" track next to it.
+--
+-- The track must still BE the keyword, not just contain it — decoration
+-- around it is stripped, extra words are not:
+--   • case is ignored             → "LYRICS", "Lyrics", "lyrics"
+--   • leading symbols ignored     → "*Lyrics", "##Chords", "_Lyrics", ">Lyrics"
+--   • leading numbering ignored   → "01 Lyrics", "3 - Chords"
+--   • trailing symbols ignored    → "Lyrics*", "Chords --", "[Lyrics]"
+-- "Backing Lyrics" or "Lyrics Bus" stay ordinary tracks, on purpose.
+local function normalize_track_name(name)
+    local s = (name or ""):lower()
+    local prev
+    repeat
+        prev = s
+        s = s:gsub("^[^%w]+", "")   -- leading symbols / spaces
+        s = s:gsub("^%d+", "")      -- leading numbering: 01, 3, 12
+    until s == prev
+    s = s:gsub("[^%w]+$", "")       -- trailing symbols / spaces
+    return s
 end
 
+-- Returns every track whose normalized name matches, and separately which
+-- one wins if the caller needs exactly one. Mirrors bridge_find_track() in
+-- Reaset.lua: a track WITH items wins over one that has none, even if the
+-- empty one comes first — otherwise a divider/folder track like "*LYRICS*"
+-- sitting above the real lyrics track silently shadows it forever, because
+-- it matches the keyword and simply has no items to place.
 local function find_matching_track(canonical)
     local n = reaper.CountTracks(0)
-    local matches = {}
+    local matches, with_items = {}, nil
     for i = 0, n - 1 do
         local tr = reaper.GetTrack(0, i)
         local _, name = reaper.GetTrackName(tr)
-        if clean_track_name(name) == canonical:lower() then
+        if normalize_track_name(name) == canonical:lower() then
             matches[#matches + 1] = tr
+            if not with_items and reaper.GetTrackNumMediaItems(tr) > 0 then
+                with_items = tr
+            end
         end
     end
-    return matches
+    return matches, (with_items or matches[1])
 end
 
 local function ensure_target_track()
@@ -131,16 +154,16 @@ local function ensure_target_track()
     -- Check cached track still valid
     if target_track and reaper.ValidatePtr(target_track, 'MediaTrack*') then
         local _, name = reaper.GetTrackName(target_track)
-        if clean_track_name(name) == canonical:lower() then
+        if normalize_track_name(name) == canonical:lower() then
             return target_track
         end
     end
     target_track = nil
 
     -- Search for existing matching track
-    local matches = find_matching_track(canonical)
+    local matches, preferred = find_matching_track(canonical)
     if #matches > 0 then
-        target_track = matches[1]
+        target_track = preferred
         return target_track
     end
 
