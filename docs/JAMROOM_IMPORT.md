@@ -32,12 +32,24 @@ ReaSet's Lyrics/Chords views. One command per song, then a short review pass.
 
 ## Getting it onto the jam room PC / updating it
 
-First time (PowerShell, two lines — after this everything is double-click):
+First time (PowerShell — after this everything is double-click):
 
 ```
 winget install --id Git.Git -e
+```
+
+**Now close PowerShell and open a new window.** Installing Git changes the
+PATH, and an already-open window won't see it (`git : the term 'git' is not
+recognized`). Check with `git --version`, then:
+
+```
 git clone -b feature/jamroom-claude https://github.com/Nathan-K-JS/ReaSet-JamRoom.git C:\JamRoom
 ```
+
+*No-Git fallback:* on the GitHub page for this repo, switch to the
+`feature/jamroom-claude` branch → **Code ▾ → Download ZIP** → extract to
+`C:\JamRoom`. Everything works the same except `JamRoom Update.bat`, which
+needs Git — without it, updating means downloading a fresh ZIP each time.
 
 Then run `C:\JamRoom\JamRoom Setup.bat` once (tools + config), and use the
 importer as below. **Every update after that**: on the dev machine, push the
