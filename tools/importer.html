@@ -209,7 +209,7 @@ function showReview(rv){
     row.innerHTML = '<div class="stemname">' + st.name + '</div>' + sel +
       '<input class="lbl" type="text" data-file="' + st.file + '" value="' +
         defLbl.replace(/"/g,'&quot;') + '" placeholder="name shown in ReaSet">' +
-      '<div class="lblhint">Name shown on ReaSet’s mute screen — edit it if the guess is wrong.</div>' +
+      '<div class="lblhint">Display name on ReaSet’s mute screen only — the group above decides the routing and muting.</div>' +
       '<audio controls preload="none" src="' + st.audio + '"></audio>';
     list.appendChild(row);
     var selEl = row.querySelector('select'), lblEl = row.querySelector('input.lbl');
