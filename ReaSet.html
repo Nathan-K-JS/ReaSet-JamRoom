@@ -3577,6 +3577,9 @@
             <div class="dotmenu-wrap" id="dotMenuWrap" style="position:relative">
                 <button class="n-dotmenu-btn" onclick="toggleDotMenu(event)" title="Options">···</button>
                 <div class="dotmenu-dropdown" id="dotMenuDropdown">
+                    <button class="dotmenu-item" onclick="toggleAutoSort();closeDotMenu()">
+                        <span class="dm-icon">⇅</span> <span id="autoSortLabel">Sort: Band A–Z</span>
+                    </button>
                     <button class="dotmenu-item" onclick="exportSetlists();closeDotMenu()">
                         <span class="dm-icon">↓</span> Export
                     </button>
@@ -4241,6 +4244,7 @@
 
         function _pkSuffix() { return g_projectKey ? '_' + g_projectKey : ''; }
         function _overridesKey() { return 'reaset_song_overrides' + _pkSuffix(); }
+        function _autoSortKey() { return 'reaset_autosort' + _pkSuffix(); }
 
         function _initProjectStorage(newKey) {
             // Called on first load and whenever the REAPER project changes.
@@ -4255,6 +4259,8 @@
             if (!setlists["Default"]) setlists["Default"] = [];
             currentSetlistName = localStorage.getItem(CURRENT_KEY) || "Default";
             if (!setlists[currentSetlistName]) currentSetlistName = "Default";
+            try { autoSortSetlists = JSON.parse(localStorage.getItem(_autoSortKey()) || '{}'); }
+            catch(e) { autoSortSetlists = {}; }
             displayList = []; initialized = false;
             updateSetlistDropdown();
         }
@@ -4557,6 +4563,40 @@
         var CURRENT_KEY = "reaper_current_setlist";
         var setlists = JSON.parse(localStorage.getItem(STORAGE_KEY)) || { "Default": [] };
         var currentSetlistName = localStorage.getItem(CURRENT_KEY) || "Default";
+
+        // --- Auto-sort (Band A–Z) — per-setlist opt-in, project-scoped ---
+        var autoSortSetlists = (function () {
+            try { return JSON.parse(localStorage.getItem('reaset_autosort') || '{}'); }
+            catch (e) { return {}; }
+        })();
+        function autoSortActive() { return autoSortSetlists[currentSetlistName] === true; }
+        function saveAutoSort() { localStorage.setItem(_autoSortKey(), JSON.stringify(autoSortSetlists)); }
+        // Sort key from "Band - Song"; songs without " - " sort after all bands,
+        // by full name. Case-insensitive; ties broken by timeline position.
+        function _bandSongKey(r) {
+            var n = (r.displayName || r.name || '');
+            var i = n.indexOf(' - ');
+            if (i < 0) return ['￿', n.trim().toLowerCase()];
+            return [n.slice(0, i).trim().toLowerCase(), n.slice(i + 3).trim().toLowerCase()];
+        }
+        function applyAutoSort(list) {
+            list.sort(function (a, b) {
+                var ka = _bandSongKey(a), kb = _bandSongKey(b);
+                if (ka[0] !== kb[0]) return ka[0] < kb[0] ? -1 : 1;
+                if (ka[1] !== kb[1]) return ka[1] < kb[1] ? -1 : 1;
+                return a.start - b.start;
+            });
+        }
+        function toggleAutoSort() {
+            autoSortSetlists[currentSetlistName] = !autoSortActive();
+            saveAutoSort();
+            if (autoSortActive() && displayList.length > 0) {
+                applyAutoSort(displayList);
+                saveCurrentState();
+                lastRenderChecksum = null;  // force re-render
+                renderSetlist(); updatePlaybackUI();
+            }
+        }
         if (!setlists["Default"]) setlists["Default"] = [];
         if (!setlists[currentSetlistName]) currentSetlistName = "Default";
 
@@ -5226,6 +5266,7 @@
                 for (var k in mainMap) { if (mainMap.hasOwnProperty(k)) newItems.push(mainMap[k]); }
                 newItems.sort(function (a, b) { return a.start - b.start; });
                 for (var n = 0; n < newItems.length; n++) { newItems[n].chain = false; newItems[n].skipped = !!newItems[n].defaultSkip; newItems[n].loop = false; displayList.push(newItems[n]); }
+                if (autoSortActive()) applyAutoSort(displayList);
                 if (displayList.length > 0 && !isPlaying) wwr_req("SET/POS/" + displayList[0].start);
                 initialized = true;
             } else {
@@ -5245,6 +5286,7 @@
                 for (var k2 in mainMap) { if (mainMap.hasOwnProperty(k2)) newItems2.push(mainMap[k2]); }
                 newItems2.sort(function (a, b) { return a.start - b.start; });
                 for (var n2 = 0; n2 < newItems2.length; n2++) { newItems2[n2].chain = false; newItems2[n2].skipped = false; newItems2[n2].loop = false; displayList.push(newItems2[n2]); }
+                if (autoSortActive()) applyAutoSort(displayList);
             }
             saveCurrentState();
             var cs = JSON.stringify(displayList.map(function (r) { return { id: r.id, chain: r.chain, skipped: r.skipped, loop: r.loop, name: r.name, color: r.color }; })) + (hideSkippedMode ? 1 : 0) + JSON.stringify(g_subRegionMap) + JSON.stringify(g_songOverrides);
@@ -7142,6 +7184,8 @@
         // --- 3-DOT MENU ---
         function toggleDotMenu(e) {
             e.stopPropagation();
+            var asl = document.getElementById('autoSortLabel');
+            if (asl) asl.textContent = 'Sort: Band A–Z' + (autoSortActive() ? ' ✓' : '');
             document.getElementById('dotMenuDropdown').classList.toggle('open');
         }
         function closeDotMenu() {
@@ -7250,6 +7294,12 @@
                 }
                 setlists[currentSetlistName] = newOrder; saveCurrentState(); displayList = sortedDisplay;
                 lastRenderChecksum = JSON.stringify(displayList.map(function (r) { return { id: r.id, chain: r.chain, skipped: r.skipped, loop: r.loop, name: r.name, color: r.color }; }));
+                if (autoSortActive()) {
+                    // Manual reorder would be silently undone on the next region
+                    // sync — turn the auto-sort off instead, and say so.
+                    autoSortSetlists[currentSetlistName] = false; saveAutoSort();
+                    showAppAlert("Auto-sort (Band A–Z) is now OFF for this setlist because you reordered it manually.", "Auto-sort off");
+                }
             }
         });
 
