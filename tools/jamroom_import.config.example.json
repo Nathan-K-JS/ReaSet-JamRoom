@@ -7,14 +7,14 @@
     "drums": "DRUMS",
     "bass": "BASS",
     "vocals": "LEAD_VOX",
-    "melodies": "KEYS",
-    "lead vocals": "LEAD_VOX",
-    "background vocals": "BVS",
-    "electric guitar": "GTR1",
-    "acoustic guitar": "GTR2",
+    "other": "KEYS",
+    "vocals lead": "LEAD_VOX",
+    "vocals background": "BVS",
+    "electric": "GTR1",
+    "acoustic": "GTR2",
     "piano": "KEYS",
     "strings": "EXTRA",
     "wind": "EXTRA",
-    "other melodies": "EXTRA"
+    "melodics other": "EXTRA"
   }
 }

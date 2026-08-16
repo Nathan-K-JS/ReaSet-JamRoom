@@ -23,6 +23,11 @@ ReaSet's Lyrics/Chords views. One command per song, then a short review pass.
 4. REAPER must have the **SWS extension** (already required by ReaSet's
    lyrics/chords setup) and the project should contain the ten permanent
    **PB buses** (see `docs/JAMROOM_SETUP.md`).
+5. The REAPER **web interface** must be enabled (it already is for ReaSet).
+   On the first import the tool registers `jamroom_import_apply.lua` as a
+   REAPER action (persisted), then triggers every apply through the web API
+   of the running instance — if auto-registration fails, run
+   `tools/jamroom_register_apply.lua` once from the Action list.
 
 ## Importing a song
 
@@ -60,10 +65,20 @@ double-imports).
 
 ## Fadr mapping (defaults, editable in the config)
 
-drums→DRUMS, bass→BASS, electric gtr→GTR1, acoustic gtr→GTR2, piano→KEYS,
-strings/wind/other→EXTRA (summed), lead vocals→LEAD VOX, backing→BVs.
+Verified live stem names: drums→DRUMS, bass→BASS, electric→GTR1,
+acoustic→GTR2, piano→KEYS, strings/wind/"melodics other"→EXTRA (summed),
+"vocals lead"→LEAD VOX, "vocals background"→BVs.
 Sub-splits (`vocal_split`, `melodic_split`) can be turned off for a cheaper,
-simpler 4-stem import (vocals/bass/drums/melodies).
+simpler 4-stem import (vocals/bass/drums/other).
+
+**Chords** come from Fadr's own analysis of the uploaded audio
+(`chord,start,end` CSV in seconds), so their timing is measured from the
+actual recording; notation is converted to musician form (F:maj→F, A:min→Am).
+**Lyric timing** is auto-checked: the tool cross-correlates singing activity
+in the separated vocal stem against the lyric-line timeline and applies a
+global shift if (and only if) they clearly disagree; a flat/ambiguous match
+is reported for manual review instead of guessed at. `--lyrics-offset N.N`
+overrides manually.
 
 Cost: US$0.05 per input minute per separation task; Fadr Plus includes
 $10/month of credit (≈15–50 songs/month depending on sub-splits).
@@ -86,8 +101,9 @@ it off again, with a notice.
 ## Troubleshooting
 
 - *"no confirmation from REAPER after 90s"* — is REAPER running with the
-  right project? Check REAPER's ReaScript console; the apply script can also
-  be run manually from the Action list (the job pointer stays set).
+  right project **tab active**? Check REAPER's ReaScript console; the apply
+  script can also be run manually from the Action list (the job pointer
+  stays set). Dismiss any modal dialog REAPER is showing first.
 - *HTTP 403 from YouTube* — update yt-dlp (`yt-dlp -U`).
 - *"SWS extension missing"* — install SWS on that REAPER.
 - *"region already exists"* — the song was imported before; delete the old

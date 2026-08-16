@@ -32,24 +32,31 @@ FADR_API = "https://api.fadr.com"
 LRCLIB_API = "https://lrclib.net/api"
 USER_AGENT = "ReaSet-JamRoom-Import/0.1 (https://github.com/; rehearsal tooling)"
 
-# Default Fadr stem name -> Jam Room slot mapping. Overridable in config.
+# Default Fadr stemType -> Jam Room slot mapping (keys normalized: lowercase,
+# '-'/'_' become spaces). Verified against real API responses 2026-08-16:
+# main split yields stemTypes vocals/drums/bass/other (+instrumental).
 # Slots: DRUMS PERC_FX BASS GTR1 GTR2 KEYS BVS LEAD_VOX CLICK EXTRA
 DEFAULT_SLOT_MAP = {
     "drums": "DRUMS",
     "bass": "BASS",
     "vocals": "LEAD_VOX",          # used when vocal sub-split is off
-    "melodies": "KEYS",            # used when melodic sub-split is off
-    "lead vocals": "LEAD_VOX",
-    "background vocals": "BVS",
-    "electric guitar": "GTR1",
-    "acoustic guitar": "GTR2",
+    "other": "KEYS",               # melodic remainder, when melodic split off
+    # sub-split outputs (real stemTypes verified live 2026-08-16):
+    "vocals lead": "LEAD_VOX",
+    "vocals background": "BVS",
+    "electric": "GTR1",
+    "acoustic": "GTR2",
     "piano": "KEYS",
     "strings": "EXTRA",
     "wind": "EXTRA",
-    "other melodies": "EXTRA",
+    "melodics other": "EXTRA",
     # never imported: "instrumental" (it's just the sum of the others)
 }
 IGNORED_STEMS = {"instrumental"}
+
+
+def norm_stem_type(s):
+    return re.sub(r"\s+", " ", str(s).lower().replace("-", " ").replace("_", " ")).strip()
 
 # Label musicians see on auto-created "[JR:SLOT] Label" buses. Overridable.
 DEFAULT_SLOT_LABELS = {
@@ -85,6 +92,7 @@ def load_config(path):
     cfg.setdefault("melodic_split", True)
     cfg.setdefault("jobs_dir", str(REPO_ROOT / "imports"))
     cfg.setdefault("reaper_exe", "C:/Program Files/REAPER (x64)/reaper.exe")
+    cfg.setdefault("reaper_web", "http://localhost:8080")
     cfg.setdefault("auto_apply", True)
     return cfg
 
@@ -267,6 +275,19 @@ class Fadr:
                 die(f"Fadr task '{label}' timed out after 30 minutes.")
             time.sleep(5)
 
+    def wait_asset_midi(self, asset_id, extra=240):
+        """Stems appear before the MIDI/chord analysis finishes — keep
+        re-fetching the asset until .midi is populated (or give up quietly)."""
+        t0 = time.time()
+        while time.time() - t0 < extra:
+            a = self.asset(asset_id)
+            if a.get("midi"):
+                return a
+            time.sleep(5)
+        log("WARNING: Fadr midi/chords did not appear in time — continuing "
+            "without them.")
+        return self.asset(asset_id)
+
     def asset(self, asset_id):
         return self._check(self.s.get(f"{FADR_API}/assets/{asset_id}", timeout=60),
                            "get asset")["asset"]
@@ -284,14 +305,14 @@ class Fadr:
 
 
 def stem_display_name(asset):
-    """Fadr's name for what instrument a stem asset is. Field name may vary;
-    check the likely spots and fall back to the file name."""
-    md = asset.get("metadata") or {}
-    for key in ("stemType", "stem", "type", "instrument"):
-        v = md.get(key) or asset.get(key)
-        if isinstance(v, str) and v and v not in ("stem",):
-            return v.lower()
-    return (asset.get("name") or "unknown").rsplit(".", 1)[0].lower()
+    """What instrument a stem asset is: metaData.stemType (verified real field),
+    falling back to the name suffix Fadr appends ('source.wav-vocals')."""
+    md = asset.get("metaData") or {}
+    v = md.get("stemType")
+    if isinstance(v, str) and v:
+        return norm_stem_type(v)
+    name = asset.get("name") or "unknown"
+    return norm_stem_type(name.rsplit("-", 1)[-1]) if "-" in name else name.lower()
 
 
 def stage_fadr(job, job_dir, cfg, force):
@@ -307,25 +328,44 @@ def stage_fadr(job, job_dir, cfg, force):
     stems_dir.mkdir(exist_ok=True)
     raw_dump = {}
 
-    src_asset = fadr.upload(job_dir / "source.wav")
-    task = fadr.wait_task(fadr.stem_task(src_asset["_id"])["_id"], "main stem split")
-    main_asset = fadr.asset(task["asset"]["_id"]) if task.get("asset") else None
-    raw_dump["main_task"] = task
+    # Reuse an already-processed upload when we have one (protects credit:
+    # re-runs after a tool fix never pay for upload + main split again).
+    main_asset = None
+    prev_id = (job.get("fadr") or {}).get("asset_id")
+    if prev_id:
+        try:
+            a = fadr.asset(prev_id)
+            if a.get("stems"):
+                log(f"Reusing existing Fadr asset {prev_id} (no re-upload).")
+                main_asset = a
+        except SystemExit:
+            raise
+    if main_asset is None:
+        src_asset = fadr.upload(job_dir / "source.wav")
+        task = fadr.wait_task(fadr.stem_task(src_asset["_id"])["_id"],
+                              "main stem split")
+        main_asset = fadr.asset(task["asset"]["_id"])
+    # Stems arrive first; the MIDI/chords/key/tempo analysis lands a little
+    # later on the same asset (verified live) — wait for it.
+    if not main_asset.get("midi"):
+        log("Stems ready; waiting for Fadr's chords/MIDI analysis...")
+        main_asset = fadr.wait_asset_midi(main_asset["_id"])
     raw_dump["main_asset"] = main_asset
 
-    # Key / tempo / chords metadata lives on the analyzed asset.
-    md = (main_asset or {}).get("metadata") or {}
-    job["fadr"] = {"key": md.get("key"), "tempo": md.get("tempo"),
-                   "asset_id": (main_asset or {}).get("_id")}
+    md = main_asset.get("metaData") or {}
+    job["fadr"] = {
+        "key": md.get("key"), "tempo": md.get("tempo"),
+        "sample_rate": md.get("sampleRate"),
+        "beat_length_samples": md.get("beatLength"),
+        "beat_offset_samples": md.get("offset"),
+        "asset_id": main_asset.get("_id"),
+    }
 
     # Collect first-level stems.
-    stem_assets = []
-    for sid in (main_asset or {}).get("stems", []):
-        a = fadr.asset(sid)
-        stem_assets.append(a)
+    stem_assets = [fadr.asset(sid) for sid in main_asset.get("stems", [])]
     raw_dump["stem_assets"] = stem_assets
 
-    # Optional sub-splits: vocals -> lead/bg, melodies -> instruments.
+    # Optional sub-splits: vocals -> lead/bg, "other" (melodic) -> instruments.
     final_stems = []
     for a in stem_assets:
         name = stem_display_name(a)
@@ -334,31 +374,34 @@ def stage_fadr(job, job_dir, cfg, force):
         split_type = None
         if name == "vocals" and cfg["vocal_split"]:
             split_type = "vocal-stem"
-        elif name == "melodies" and cfg["melodic_split"]:
+        elif name == "other" and cfg["melodic_split"]:
             split_type = "melodic-stem"
         if split_type:
             t = fadr.wait_task(fadr.stem_task(a["_id"], split_type)["_id"],
                                f"{name} sub-split")
             parent = fadr.asset(t["asset"]["_id"])
             raw_dump[f"{name}_split_asset"] = parent
-            for sid in parent.get("stems", []):
-                final_stems.append(fadr.asset(sid))
+            children = [fadr.asset(sid) for sid in parent.get("stems", [])]
+            raw_dump[f"{name}_split_children"] = children
+            final_stems.extend(children)
         else:
             final_stems.append(a)
 
     # Download stems and map to slots.
-    slot_map = {k.lower(): v for k, v in cfg["slot_map"].items()}
-    job["stems"], unmapped = [], []
+    slot_map = {norm_stem_type(k): v for k, v in cfg["slot_map"].items()}
+    job["stems"], unmapped, seen = [], [], {}
     for a in final_stems:
         name = stem_display_name(a)
         if name in IGNORED_STEMS:
             continue
-        fname = sanitize_filename(f"{name}.wav")
-        log(f"Downloading stem: {name}")
+        seen[name] = seen.get(name, 0) + 1
+        base = name if seen[name] == 1 else f"{name}-{seen[name]}"
+        fname = sanitize_filename(f"{base}.wav")
+        log(f"Downloading stem: {base}")
         fadr.download(a["_id"], stems_dir / fname)
         slot = slot_map.get(name)
-        entry = {"fadr_name": name, "file": f"stems/{fname}", "slot": slot}
-        job["stems"].append(entry)
+        job["stems"].append({"fadr_name": name, "file": f"stems/{fname}",
+                             "slot": slot})
         if not slot:
             unmapped.append(name)
     if unmapped:
@@ -366,16 +409,24 @@ def stage_fadr(job, job_dir, cfg, force):
             f"downloaded but will be skipped by the apply step until you add "
             f"them to slot_map in the config or job.json.")
 
-    # Chords / MIDI: download everything the asset offers; parsing happens in
-    # stage_chords once we know the real format (dumped to fadr_raw.json).
+    # Chords + MIDI assets, typed by assetType (verified live):
+    #   chord-csv -> chords.csv, chord-midi -> chords.mid,
+    #   stem-midi -> <stemtype>.mid
     midi_dir = job_dir / "fadr_midi"
     midi_dir.mkdir(exist_ok=True)
-    for mid_id in (main_asset or {}).get("midi", []):
+    for mid_id in main_asset.get("midi", []):
         try:
             a = fadr.asset(mid_id)
-            fname = sanitize_filename(a.get("name") or f"{mid_id}.mid")
+            at = a.get("assetType") or ""
+            if at == "chord-csv":
+                fname = "chords.csv"
+            elif at == "chord-midi":
+                fname = "chords.mid"
+            else:
+                suffix = (a.get("name") or mid_id).rsplit("-", 1)[-1]
+                fname = sanitize_filename(f"{suffix}.mid")
             fadr.download(mid_id, midi_dir / fname)
-            log(f"Downloaded Fadr extra: {fname}")
+            log(f"Downloaded Fadr analysis: {fname}")
         except SystemExit:
             raise
         except Exception as e:  # non-fatal: chords/midi are best-effort
@@ -389,29 +440,56 @@ def stage_fadr(job, job_dir, cfg, force):
         f"key={job['fadr']['key']} tempo={job['fadr']['tempo']}")
 
 
+# Fadr chord qualities ("F:maj", "A:min", ...) -> musician-friendly names.
+CHORD_QUALITY = {
+    "maj": "", "min": "m", "7": "7", "maj7": "maj7", "min7": "m7",
+    "dim": "dim", "dim7": "dim7", "aug": "aug", "sus2": "sus2", "sus4": "sus4",
+    "min6": "m6", "maj6": "6", "hdim7": "m7b5", "minmaj7": "mMaj7",
+}
+
+
+def pretty_chord(raw):
+    if ":" not in raw:
+        return raw
+    root, qual = raw.split(":", 1)
+    return root + CHORD_QUALITY.get(qual, qual)
+
+
 def stage_chords(job, job_dir, force):
-    """Parse whatever chord data Fadr returned into job['chords'].
-    Format is undocumented; we look for a chords .txt/.csv in fadr_midi/ and
-    parse `start,end,chord`-ish lines. If nothing parses, leave empty and warn
-    (fadr_raw.json + downloaded files remain for manual inspection)."""
+    """Parse Fadr's chords.csv (verified live format: header `chord,start,end`,
+    times in seconds). Small inter-chord gaps are healed to the next chord's
+    start (no flicker to blank) and consecutive identical chords merged."""
     if job["stages"].get("chords") and not force:
         return
+    import csv as csvmod
     chords = []
-    for f in sorted((job_dir / "fadr_midi").glob("*")) if (job_dir / "fadr_midi").exists() else []:
-        if "chord" not in f.name.lower() or f.suffix.lower() not in (".txt", ".csv"):
-            continue
-        for line in f.read_text(encoding="utf-8", errors="replace").splitlines():
-            m = re.match(r"\s*([\d.]+)\s*[,;\t]\s*([\d.]+)\s*[,;\t]\s*(\S+)", line)
-            if m:
-                chords.append({"start": float(m.group(1)), "end": float(m.group(2)),
-                               "chord": m.group(3)})
-        if chords:
-            log(f"Parsed {len(chords)} chords from {f.name}")
-            break
-    if not chords:
-        log("NOTE: no parseable chord file found from Fadr — check fadr_midi/ and "
-            "fadr_raw.json; the chords track will be skipped by apply.")
-    job["chords"] = chords
+    f = job_dir / "fadr_midi" / "chords.csv"
+    if f.exists():
+        with open(f, encoding="utf-8", errors="replace", newline="") as fh:
+            for row in csvmod.DictReader(fh):
+                try:
+                    chords.append({"start": float(row["start"]),
+                                   "end": float(row["end"]),
+                                   "chord": pretty_chord(row["chord"].strip())})
+                except (KeyError, ValueError):
+                    continue
+    chords.sort(key=lambda c: c["start"])
+    merged = []
+    for c in chords:
+        if merged and merged[-1]["chord"] == c["chord"] and \
+                c["start"] - merged[-1]["end"] <= 1.0:
+            merged[-1]["end"] = c["end"]
+        else:
+            if merged and 0 < c["start"] - merged[-1]["end"] <= 1.0:
+                merged[-1]["end"] = c["start"]     # heal the gap
+            merged.append(dict(c))
+    if merged:
+        log(f"Parsed {len(chords)} chord segments -> {len(merged)} items "
+            f"(gaps healed, repeats merged).")
+    else:
+        log("NOTE: no parseable chords.csv from Fadr — the chords track will "
+            "be skipped by apply.")
+    job["chords"] = merged
     job["stages"]["chords"] = True
     save_job(job_dir, job)
 
@@ -485,6 +563,105 @@ def stage_lyrics(job, job_dir, force):
     save_job(job_dir, job)
 
 
+# ------------------------------------------------------- lyric timing check
+
+# If lyric lines and sung audio best align at an offset beyond this, correct.
+CORRECT_ABOVE = 0.35   # seconds
+ALIGN_SEARCH = 6.0     # +/- seconds of offset searched
+
+
+def _activity(wav_path):
+    """(bool activity array, hop seconds) for an isolated-vocal stem:
+    ffmpeg -> mono 22.05k -> smoothed RMS envelope -> threshold."""
+    import numpy as np
+    ff = shutil.which("ffmpeg") or die("ffmpeg not found on PATH")
+    r = subprocess.run([ff, "-v", "error", "-i", str(wav_path), "-ac", "1",
+                        "-ar", "22050", "-f", "s16le", "-"],
+                       capture_output=True)
+    if r.returncode != 0:
+        return None, None
+    x = np.frombuffer(r.stdout, dtype=np.int16).astype(np.float32) / 32768.0
+    hop, win = 512, 2048
+    n = max(0, (len(x) - win) // hop)
+    if n < 100:
+        return None, None
+    idx = np.arange(n)[:, None] * hop + np.arange(win)[None, :]
+    env = np.sqrt((x[idx] ** 2).mean(axis=1))
+    env = np.convolve(env, np.ones(5) / 5, mode="same")
+    thr = max(np.percentile(env, 95) * 0.10, 1e-4)
+    return env > thr, hop / 22050.0
+
+
+def stage_lyrics_align(job, job_dir, force):
+    """Cross-correlate sung-vocal activity (from the separated vocal stem)
+    against the lyric-line activity timeline (from the LRC timestamps) to find
+    the offset at which they line up best. A clear off-zero peak means the
+    lyric timing is shifted relative to OUR audio — store a correction.
+    A weak/flat correlation is reported, never 'fixed' by guessing."""
+    ly = job.get("lyrics") or {}
+    if not ly.get("synced") or not ly.get("lines"):
+        return
+    if ly.get("align") and not force:
+        return
+    vocal = None
+    for s in job.get("stems", []):
+        if s.get("slot") == "LEAD_VOX" or s.get("fadr_name") in ("vocals lead", "vocals"):
+            vocal = job_dir / s["file"]
+            break
+    if not vocal or not vocal.exists():
+        log("Lyric-align: no vocal stem available — skipping check.")
+        return
+    import numpy as np
+    log("Lyric-align: cross-correlating sung vocals vs lyric-line timing...")
+    act, hop_s = _activity(vocal)
+    if act is None:
+        log("Lyric-align: could not analyze vocal stem — skipping.")
+        return
+    n = len(act)
+    lrc = np.zeros(n, dtype=np.float32)
+    lines = ly["lines"]
+    for i, lnn in enumerate(lines):
+        if not lnn["text"]:
+            continue
+        s = lnn["time"]
+        e = lines[i + 1]["time"] if i + 1 < len(lines) else s + 10.0
+        e = min(e, s + 15.0)
+        a, b = int(s / hop_s), min(int(e / hop_s), n)
+        if a < n:
+            lrc[a:b] = 1.0
+    au = act.astype(np.float32)
+    au -= au.mean(); lrc -= lrc.mean()
+    max_lag = int(ALIGN_SEARCH / hop_s)
+    lags = np.arange(-max_lag, max_lag + 1)
+    scores = np.array([np.dot(au[max(0, -l):n - max(0, l)],
+                              lrc[max(0, l):n - max(0, -l)]) for l in lags])
+    best_i = int(np.argmax(scores))
+    offset = round(int(lags[best_i]) * hop_s, 3)   # +ve: lines should move later
+    peak = float(scores[best_i])
+    # Sharpness: how much the fit worsens 2s either side of the peak. Applying
+    # a big shift needs a real peak; concluding "already aligned" does not.
+    two = int(2.0 / hop_s)
+    side = float(max(scores[max(0, best_i - two)],
+                     scores[min(len(scores) - 1, best_i + two)]))
+    drop = float(1.0 - (side / peak if peak > 0 else 1.0))
+    shift = 0.0
+    if abs(offset) <= CORRECT_ABOVE:
+        log(f"Lyric-align: OK — lyric timing matches the sung vocals "
+            f"(best offset {offset:+.2f}s); no correction needed.")
+    elif drop >= 0.10:
+        shift = offset
+        log(f"Lyric-align: lyric lines best match the sung vocals when moved "
+            f"{offset:+.2f}s (fit worsens {drop * 100:.0f}% by ±2s) — applying.")
+    else:
+        log(f"Lyric-align: WARNING — best offset {offset:+.2f}s but the "
+            f"correlation is too flat (only {drop * 100:.0f}% drop by ±2s) to "
+            f"apply safely; lyrics may be for a different version. Review "
+            f"timing manually.")
+    ly["align"] = {"offset": offset, "peak_drop_2s": round(drop, 3),
+                   "shift": shift}
+    save_job(job_dir, job)
+
+
 # ---------------------------------------------------------------- mixdown
 
 def stage_mixdown(job, job_dir, cfg, force):
@@ -493,10 +670,16 @@ def stage_mixdown(job, job_dir, cfg, force):
     separation). Single-stem slots reference their stem file directly."""
     if job["stages"].get("mixdown") and not force:
         return
+    # Slot assignment happens HERE (not in stage_fadr) so a mapping fix only
+    # needs --force-mixdown, never a re-download.
+    slot_map = {norm_stem_type(k): v for k, v in cfg["slot_map"].items()}
     by_slot = {}
     for s in job.get("stems", []):
-        if s.get("slot"):
+        s["slot"] = slot_map.get(norm_stem_type(s["fadr_name"]))
+        if s["slot"]:
             by_slot.setdefault(s["slot"], []).append(s["file"])
+        else:
+            log(f"NOTE: stem '{s['fadr_name']}' has no slot mapping — skipped.")
     slots_dir = job_dir / "slots"
     labels = cfg["slot_labels"]
     job["slots"] = []
@@ -550,9 +733,13 @@ def write_reaper_job(job, job_dir):
                  f"name = {lua_quote(c['chord'])} }},")
     L.append("  },")
     ly = job.get("lyrics", {})
+    shift = ((ly.get("align") or {}).get("shift")) or 0.0
+    if ly.get("offset_override") is not None:
+        shift = ly["offset_override"]
     L.append("  lyrics_lines = {")
     for ln in ly.get("lines", []):
-        L.append(f"    {{ t = {ln['time']}, text = {lua_quote(ln['text'])} }},")
+        L.append(f"    {{ t = {max(0.0, round(ln['time'] + shift, 3))}, "
+                 f"text = {lua_quote(ln['text'])} }},")
     L.append("  },")
     if ly.get("plain"):
         L.append(f"  lyrics_plain = {lua_quote(ly['plain'])},")
@@ -570,16 +757,63 @@ def stage_apply(job, job_dir, cfg, force):
             f"Use --force-apply to re-run.")
         return
     applied.unlink(missing_ok=True)
-    apply_lua = Path(__file__).resolve().parent / "jamroom_import_apply.lua"
-    pointer = Path(__file__).resolve().parent / "jamroom_pending_job.txt"
+    tooldir = Path(__file__).resolve().parent
+    apply_lua = tooldir / "jamroom_import_apply.lua"
+    pointer = tooldir / "jamroom_pending_job.txt"
     pointer.write_text(str(job_dir.resolve()), encoding="utf-8")
-    reaper = Path(cfg["reaper_exe"])
-    if not cfg["auto_apply"] or not reaper.exists():
-        log(f"REAPER auto-apply off/unavailable. To apply: run "
-            f"{apply_lua.name} from REAPER's action list (job pointer is set).")
+    if not cfg["auto_apply"]:
+        log(f"REAPER auto-apply off. To apply: run {apply_lua.name} from "
+            f"REAPER's action list (job pointer is set).")
         return
-    log("Triggering apply script in REAPER (-nonewinst)...")
-    subprocess.Popen([str(reaper), "-nonewinst", str(apply_lua)])
+
+    # Preferred trigger: web API action call into the RUNNING instance.
+    # (`reaper.exe -nonewinst` can silently spawn a second instance if a modal
+    # dialog blocks the handoff — the action route cannot misfire like that.)
+    web = cfg["reaper_web"].rstrip("/")
+
+    def web_get(path, timeout=5):
+        try:
+            r = requests.get(f"{web}/_/{path}", timeout=timeout)
+            return r.text if r.status_code == 200 else None
+        except requests.RequestException:
+            return None
+
+    def stored_cmd():
+        t = web_get("GET/EXTSTATE/ReaSetJR/import_cmd")
+        if t:
+            parts = t.strip().split("\t")
+            if len(parts) >= 4 and parts[3].strip():
+                return parts[3].strip()
+        return None
+
+    if web_get("TRANSPORT") is None:
+        log(f"REAPER web interface not reachable at {web} — start REAPER "
+            f"(with the web interface enabled) and re-run, or run "
+            f"{apply_lua.name} from the Action list manually.")
+        return
+    cmd = stored_cmd()
+    if not cmd:
+        # One-time bootstrap: register the apply script as an action.
+        reaper = Path(cfg["reaper_exe"])
+        if not reaper.exists():
+            log("Apply action not registered and reaper_exe not found — run "
+                "tools/jamroom_register_apply.lua once from REAPER's Action "
+                "list, then re-run this tool.")
+            return
+        log("Registering apply script as a REAPER action (one-time)...")
+        subprocess.Popen([str(reaper), "-nonewinst",
+                          str(tooldir / "jamroom_register_apply.lua")])
+        t0 = time.time()
+        while time.time() - t0 < 30 and not cmd:
+            time.sleep(2)
+            cmd = stored_cmd()
+        if not cmd:
+            log("Could not register the apply action automatically — run "
+                "tools/jamroom_register_apply.lua from REAPER's Action list "
+                "once, then re-run this tool.")
+            return
+    log(f"Triggering apply in running REAPER (action {cmd})...")
+    web_get(cmd, timeout=10)
     t0 = time.time()
     while time.time() - t0 < 90:
         if applied.exists():
@@ -587,7 +821,7 @@ def stage_apply(job, job_dir, cfg, force):
             return
         time.sleep(1)
     log("WARNING: no confirmation from REAPER after 90s — check the ReaScript "
-        "console in REAPER. (Is REAPER running with the right project open?)")
+        "console in REAPER. (Is the right project tab active?)")
 
 
 # ---------------------------------------------------------------- main
@@ -606,7 +840,9 @@ def main():
                     help="Skip lyrics lookup (testing)")
     ap.add_argument("--no-apply", action="store_true",
                     help="Prepare the job but don't touch REAPER")
-    for st in ("download", "fadr", "chords", "lyrics", "mixdown", "apply"):
+    ap.add_argument("--lyrics-offset", type=float, default=None,
+                    help="Manual lyric shift in seconds (overrides auto-align)")
+    for st in ("download", "fadr", "chords", "lyrics", "align", "mixdown", "apply"):
         ap.add_argument(f"--force-{st}", action="store_true")
     args = ap.parse_args()
 
@@ -638,6 +874,11 @@ def main():
         stage_chords(job, job_dir, args.force_chords)
     if not args.skip_lyrics:
         stage_lyrics(job, job_dir, args.force_lyrics)
+        stage_lyrics_align(job, job_dir, args.force_align)
+    if args.lyrics_offset is not None:
+        job.setdefault("lyrics", {})["offset_override"] = args.lyrics_offset
+        save_job(job_dir, job)
+        log(f"Lyric offset manually set to {args.lyrics_offset:+.2f}s")
     stage_mixdown(job, job_dir, cfg, args.force_mixdown)
     write_reaper_job(job, job_dir)
     if not args.no_apply:

@@ -244,8 +244,11 @@ if job.lyrics_lines and #job.lyrics_lines > 0 then
     for i, ln in ipairs(job.lyrics_lines) do
         if ln.text and ln.text ~= "" then
             local s = ln.t
+            -- until the next line, but never linger more than 15s (a stale
+            -- line during an instrumental break reads as wrong, not helpful)
             local e = job.lyrics_lines[i + 1] and job.lyrics_lines[i + 1].t
-                      or math.min(s + 15, song_len)
+                      or song_len
+            e = math.min(e, s + 15, song_len)
             if e > s then
                 note_item(tr, song_pos + s, e - s, ln.text)
                 nlyr = nlyr + 1
