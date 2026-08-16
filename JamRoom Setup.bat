@@ -7,6 +7,7 @@ echo This installs the free programs the importer needs.
 echo (Python, yt-dlp, ffmpeg - all via Windows' winget)
 echo.
 pause
+winget install --id Git.Git -e --accept-package-agreements --accept-source-agreements
 winget install --id Python.Python.3.12 -e --accept-package-agreements --accept-source-agreements
 winget install --id yt-dlp.yt-dlp -e --accept-package-agreements --accept-source-agreements
 winget install --id Gyan.FFmpeg -e --accept-package-agreements --accept-source-agreements

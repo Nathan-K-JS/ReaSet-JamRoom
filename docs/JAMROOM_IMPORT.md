@@ -30,6 +30,23 @@ ReaSet's Lyrics/Chords views. One command per song, then a short review pass.
    of the running instance — if auto-registration fails, run
    `tools/jamroom_register_apply.lua` once from the Action list.
 
+## Getting it onto the jam room PC / updating it
+
+First time (PowerShell, two lines — after this everything is double-click):
+
+```
+winget install --id Git.Git -e
+git clone -b feature/jamroom-claude https://github.com/Nathan-K-JS/ReaSet-JamRoom.git C:\JamRoom
+```
+
+Then run `C:\JamRoom\JamRoom Setup.bat` once (tools + config), and use the
+importer as below. **Every update after that**: on the dev machine, push the
+finished work to GitHub; on the jam room PC, double-click
+**`JamRoom Update.bat`** — it pulls the latest version and re-deploys
+`ReaSet.html` into REAPER's web folder automatically (then hard-reload
+ReaSet on the tablets with Ctrl+F5). Local files that matter — the Fadr key
+config and downloaded songs in `imports/` — are never touched by updates.
+
 ## Importing a song
 
 With the target project open in REAPER, **double-click `JamRoom
