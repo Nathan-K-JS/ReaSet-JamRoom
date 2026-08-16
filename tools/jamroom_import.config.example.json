@@ -1,0 +1,20 @@
+{
+  "fadr_api_key": "PASTE-YOUR-FADR-API-KEY-HERE",
+  "vocal_split": true,
+  "melodic_split": true,
+  "jobs_dir": "c:/JamRoomDev/ReaSet-JamRoom/imports",
+  "slot_map": {
+    "drums": "DRUMS",
+    "bass": "BASS",
+    "vocals": "LEAD_VOX",
+    "melodies": "KEYS",
+    "lead vocals": "LEAD_VOX",
+    "background vocals": "BVS",
+    "electric guitar": "GTR1",
+    "acoustic guitar": "GTR2",
+    "piano": "KEYS",
+    "strings": "EXTRA",
+    "wind": "EXTRA",
+    "other melodies": "EXTRA"
+  }
+}

@@ -1,0 +1,4 @@
+# Jam Room import tool: local secrets and per-song job folders (audio, stems)
+tools/jamroom_import.config.json
+imports/
+__pycache__/
