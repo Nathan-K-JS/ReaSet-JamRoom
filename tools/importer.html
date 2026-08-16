@@ -1,0 +1,174 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Jam Room Importer</title>
+<style>
+  * { box-sizing: border-box; margin: 0; }
+  body { background: #14161a; color: #e8eaed; font-family: system-ui, sans-serif;
+         max-width: 640px; margin: 0 auto; padding: 16px; }
+  h1 { font-size: 1.3rem; margin: 8px 0 2px; }
+  .sub { color: #9aa0a6; font-size: .85rem; margin-bottom: 14px; }
+  .card { background: #1d2026; border: 1px solid #2c3038;
+          border-radius: 12px; padding: 14px; margin-bottom: 14px; }
+  label { display: block; font-size: .8rem; color: #9aa0a6; margin: 8px 0 4px; }
+  input[type=text] { width: 100%; font-size: 1.05rem; padding: 12px;
+          border-radius: 10px; border: 1px solid #3a3f47; background: #12141a;
+          color: #e8eaed; }
+  button { font-size: 1.05rem; padding: 12px 18px; border-radius: 10px;
+           border: 0; background: #2f6fed; color: #fff; cursor: pointer;
+           margin-top: 10px; width: 100%; }
+  button:disabled { background: #3a3f47; color: #777; }
+  button.small { width: auto; font-size: .85rem; padding: 8px 12px;
+                 background: #2c3038; }
+  .result { display: block; width: 100%; text-align: left; background: #12141a;
+            border: 1px solid #3a3f47; color: #e8eaed; margin-top: 8px; }
+  .result.sel { border-color: #2f6fed; background: #182338; }
+  .result small { color: #9aa0a6; }
+  .check { font-size: .9rem; margin: 3px 0; }
+  .ok::before   { content: "✔ "; color: #4caf50; }
+  .bad::before  { content: "✘ "; color: #ef5350; }
+  #log { background: #0d0f12; border-radius: 10px; padding: 10px;
+         font-family: Consolas, monospace; font-size: .78rem; max-height: 260px;
+         overflow-y: auto; white-space: pre-wrap; margin-top: 10px; }
+  .done { color: #4caf50; font-weight: 600; }
+  .failed { color: #ef5350; font-weight: 600; }
+  .cost { color: #f0b429; font-size: .85rem; margin-top: 6px; }
+  .hide { display: none; }
+</style>
+</head>
+<body>
+  <h1>🎸 Jam Room Importer</h1>
+  <div class="sub">Add a song to the jam room project: search → pick → import.</div>
+
+  <div class="card" id="checksCard">
+    <div id="checksList">Checking setup…</div>
+    <div id="keyBox" class="hide">
+      <label>Paste your Fadr API key (one time)</label>
+      <input type="text" id="keyInput" placeholder="Fadr API key">
+      <button class="small" onclick="saveKey()">Save key</button>
+    </div>
+  </div>
+
+  <div class="card" id="searchCard">
+    <label>Song name (or a YouTube link)</label>
+    <input type="text" id="q" placeholder="e.g. toto africa"
+           onkeydown="if(event.key==='Enter')doSearch()">
+    <button id="searchBtn" onclick="doSearch()">Search</button>
+    <div id="results"></div>
+  </div>
+
+  <div class="card hide" id="confirmCard">
+    <label>Band</label><input type="text" id="band">
+    <label>Song title</label><input type="text" id="title">
+    <div class="cost" id="cost"></div>
+    <button id="importBtn" onclick="doImport()">Import this song</button>
+  </div>
+
+  <div class="card hide" id="progressCard">
+    <div id="progTitle">Importing…</div>
+    <div id="log"></div>
+    <div id="finalNote" class="hide" style="margin-top:10px">
+      Review the song in REAPER (chords &amp; lyrics especially), then
+      <b>save the project</b>. Undo in REAPER removes the whole import if needed.
+    </div>
+  </div>
+
+<script>
+var picked = null, poller = null;
+
+function $(id){ return document.getElementById(id); }
+
+function refreshChecks(){
+  fetch('/api/checks').then(r=>r.json()).then(function(c){
+    var rows = [
+      [c.ytdlp,  'yt-dlp installed', 'yt-dlp missing — run JamRoom Setup.bat'],
+      [c.ffmpeg, 'ffmpeg installed', 'ffmpeg missing — run JamRoom Setup.bat'],
+      [c.key,    'Fadr API key saved', 'Fadr API key missing'],
+      [c.reaper, 'REAPER is running (web interface reachable)',
+                 'REAPER not reachable — open REAPER with the jam room project']
+    ];
+    $('checksList').innerHTML = rows.map(function(r){
+      return '<div class="check ' + (r[0]?'ok':'bad') + '">' + (r[0]?r[1]:r[2]) + '</div>';
+    }).join('') + (c.lan ? '<div class="check" style="color:#9aa0a6">Tablet URL: ' + c.lan + '</div>' : '');
+    $('keyBox').classList.toggle('hide', c.key);
+    window._splits = c.splits;
+  });
+}
+
+function saveKey(){
+  fetch('/api/setkey', {method:'POST', headers:{'Content-Type':'application/json'},
+    body: JSON.stringify({key: $('keyInput').value})})
+    .then(function(){ refreshChecks(); });
+}
+
+function doSearch(){
+  var q = $('q').value.trim();
+  if(!q) return;
+  $('searchBtn').disabled = true; $('searchBtn').textContent = 'Searching…';
+  $('results').innerHTML = ''; $('confirmCard').classList.add('hide');
+  fetch('/api/search', {method:'POST', headers:{'Content-Type':'application/json'},
+    body: JSON.stringify({query:q})})
+  .then(r=>r.json()).then(function(d){
+    $('searchBtn').disabled = false; $('searchBtn').textContent = 'Search';
+    if(d.error){ $('results').innerHTML = '<div class="check bad">'+d.error+'</div>'; return; }
+    d.results.forEach(function(row){
+      var b = document.createElement('button');
+      b.className = 'result';
+      var m = Math.floor(row.duration/60), s = ('0'+row.duration%60).slice(-2);
+      b.innerHTML = row.title + '<br><small>' + row.channel + ' · ' + m + ':' + s + '</small>';
+      b.onclick = function(){ pick(row, b); };
+      $('results').appendChild(b);
+    });
+  }).catch(function(e){
+    $('searchBtn').disabled = false; $('searchBtn').textContent = 'Search';
+    $('results').innerHTML = '<div class="check bad">'+e+'</div>';
+  });
+}
+
+function pick(row, btn){
+  picked = row;
+  document.querySelectorAll('.result').forEach(function(x){ x.classList.remove('sel'); });
+  btn.classList.add('sel');
+  $('band').value = row.band; $('title').value = row.song;
+  var mins = Math.max(1, Math.ceil(row.duration/60));
+  var tasks = window._splits === false ? 1 : 3;
+  $('cost').textContent = 'Estimated Fadr cost: about $' + (mins*0.05*tasks).toFixed(2);
+  $('confirmCard').classList.remove('hide');
+}
+
+function doImport(){
+  if(!picked) return;
+  $('importBtn').disabled = true;
+  fetch('/api/import', {method:'POST', headers:{'Content-Type':'application/json'},
+    body: JSON.stringify({url:picked.url, band:$('band').value, title:$('title').value})})
+  .then(r=>r.json()).then(function(d){
+    if(d.error){ alert(d.error); $('importBtn').disabled = false; return; }
+    $('progressCard').classList.remove('hide');
+    $('finalNote').classList.add('hide');
+    $('progTitle').textContent = 'Importing ' + $('band').value + ' - ' + $('title').value + ' …';
+    poller = setInterval(pollStatus, 1000);
+  });
+}
+
+function pollStatus(){
+  fetch('/api/status').then(r=>r.json()).then(function(s){
+    $('log').textContent = s.log.join('\n');
+    $('log').scrollTop = $('log').scrollHeight;
+    if(s.state === 'done' || s.state === 'failed'){
+      clearInterval(poller);
+      $('progTitle').innerHTML = s.state === 'done'
+        ? '<span class="done">✔ Imported: ' + s.song + '</span>'
+        : '<span class="failed">✘ Import failed: ' + s.summary + '</span>';
+      if(s.state === 'done') $('finalNote').classList.remove('hide');
+      $('importBtn').disabled = false;
+    }
+  });
+}
+
+refreshChecks();
+setInterval(refreshChecks, 10000);
+</script>
+</body>
+</html>

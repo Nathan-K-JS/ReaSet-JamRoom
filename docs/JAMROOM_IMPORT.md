@@ -13,18 +13,14 @@ ReaSet's Lyrics/Chords views. One command per song, then a short review pass.
    into REAPER's web root (`%APPDATA%\REAPER\reaper_www_root`). Everything
    the importer needs lives in `tools/`; songs it downloads land in
    `imports/` next to it.
-1. **Install the free tools** (PowerShell, then close & reopen the terminal):
-   ```
-   winget install Python.Python.3.12
-   winget install yt-dlp.yt-dlp
-   winget install Gyan.FFmpeg
-   pip install requests numpy
-   ```
+1. **Double-click `JamRoom Setup.bat`** (repo root). It installs the free
+   tools (Python, yt-dlp, ffmpeg) and prepares the config. (Equivalent
+   manual route: `winget install Python.Python.3.12 yt-dlp.yt-dlp
+   Gyan.FFmpeg`, then `pip install requests numpy`.)
 2. **Fadr API key** (needs the Fadr Plus subscription, $10/mo):
    log in at fadr.com → account page → **API tab** → *Create New API Key*.
-3. **Config**: copy `tools/jamroom_import.config.example.json` to
-   `tools/jamroom_import.config.json` (this file is gitignored — the key
-   stays local) and paste the API key into `fadr_api_key`.
+   The importer page asks for it on first launch and stores it locally
+   (gitignored `tools/jamroom_import.config.json`).
 4. REAPER must have the **SWS extension** (already required by ReaSet's
    lyrics/chords setup) and the project should contain the ten permanent
    **PB buses** (see `docs/JAMROOM_SETUP.md`).
@@ -36,20 +32,23 @@ ReaSet's Lyrics/Chords views. One command per song, then a short review pass.
 
 ## Importing a song
 
-With the target project open in REAPER:
+With the target project open in REAPER, **double-click `JamRoom
+Importer.bat`** (repo root). A browser page opens at
+`http://localhost:8765` — it also works from the tablet at the LAN address
+shown on the page (same trusted-LAN model as REAPER's own web interface):
 
-```
-python tools\jamroom_import.py "https://www.youtube.com/watch?v=..." 
-python tools\jamroom_import.py "fleetwood mac dreams"        # search mode
-```
+1. Type a song name (or paste a YouTube link) → **Search**.
+2. Tap the right match (title, channel, and duration are shown).
+3. Confirm/correct the guessed **Band** and **Song title** — these become
+   the region name — and check the estimated Fadr cost shown.
+4. **Import this song**, watch the progress log, wait for the green ✔.
+   Nothing is reported as done unless REAPER confirmed it.
+5. Setup problems (missing key, REAPER not running, missing tools) show as
+   red ✘ checks at the top of the page with what to do.
 
-- Search mode lists the top five YouTube matches; you pick one.
-- The tool guesses `Band` / `Title` from the video title and asks you to
-  confirm or correct them (`--band`/`--title` to pre-set, `--yes` for fully
-  non-interactive with a direct URL).
-- It then runs unattended: download → Fadr stems (≈2–5 min) → lyrics →
-  hand-off to REAPER → **waits for REAPER's confirmation receipt** and prints
-  the result. Nothing is reported as done unless REAPER confirmed it.
+Command-line equivalent (same pipeline, for scripting/debugging):
+`python tools\jamroom_import.py "<url or search terms>"` with `--band`,
+`--title`, `--yes`, `--no-apply`, `--lyrics-offset`, `--force-<stage>`.
 
 Each song lives in `imports/Band - Title/` (audio, stems, `job.json`) —
 re-running the command resumes/skips completed steps, and a song that's
