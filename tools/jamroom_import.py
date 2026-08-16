@@ -399,8 +399,9 @@ def stage_fadr(job, job_dir, cfg, force):
         fname = sanitize_filename(f"{base}.wav")
         log(f"Downloading stem: {base}")
         fadr.download(a["_id"], stems_dir / fname)
+        wav = ensure_riff_wav(stems_dir / fname)
         slot = slot_map.get(name)
-        job["stems"].append({"fadr_name": name, "file": f"stems/{fname}",
+        job["stems"].append({"fadr_name": name, "file": f"stems/{wav.name}",
                              "slot": slot})
         if not slot:
             unmapped.append(name)
@@ -561,6 +562,33 @@ def stage_lyrics(job, job_dir, force):
     job["lyrics"] = lyr
     job["stages"]["lyrics"] = True
     save_job(job_dir, job)
+
+
+def ensure_riff_wav(path):
+    """Return a path to a REAL RIFF WAV for `path`. Fadr serves stem downloads
+    as MP3 data regardless of our .wav naming (verified live — every endpoint
+    variant returns ID3-tagged MP3), and REAPER trusts the extension, yielding
+    zero-length items. Converts to a SIBLING `<name>.riff.wav` (never in place:
+    REAPER may hold the original open, which blocks replacement on Windows)."""
+    def is_riff(p):
+        try:
+            with open(p, "rb") as f:
+                return f.read(4) == b"RIFF"
+        except OSError:
+            return False
+    path = Path(path)
+    if is_riff(path):
+        return path
+    out = path.with_name(path.stem + ".riff.wav")
+    if is_riff(out):
+        return out
+    ff = shutil.which("ffmpeg") or die("ffmpeg not found on PATH")
+    r = subprocess.run([ff, "-y", "-v", "error", "-i", str(path), str(out)],
+                       capture_output=True, text=True)
+    if r.returncode != 0:
+        die(f"Could not convert {path.name} to WAV:\n{r.stderr[-500:]}")
+    log(f"Converted {path.name} -> {out.name} (Fadr serves stems as MP3).")
+    return out
 
 
 # ------------------------------------------------------- lyric timing check

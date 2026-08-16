@@ -207,14 +207,18 @@ for _, s in ipairs(job.slots or {}) do
         skipped[#skipped + 1] = s.slot .. " (" .. why .. ")"
     else
         local src = reaper.PCM_Source_CreateFromFile(s.file)
-        if not src then
-            skipped[#skipped + 1] = s.slot .. " (unreadable: " .. s.file .. ")"
+        local srclen = src and reaper.GetMediaSourceLength(src) or 0
+        if not src or srclen < 0.1 then
+            -- refuse to place an invisible zero-length item (this happens
+            -- when the file isn't really the format its extension claims)
+            skipped[#skipped + 1] = s.slot .. " (unreadable/zero-length: " ..
+                                    s.file .. ")"
         else
             local it = reaper.AddMediaItemToTrack(tr)
             reaper.SetMediaItemInfo_Value(it, "D_POSITION", song_pos)
             local take = reaper.AddTakeToMediaItem(it)
             reaper.SetMediaItemTake_Source(take, src)
-            local len = reaper.GetMediaSourceLength(src)
+            local len = srclen
             reaper.SetMediaItemInfo_Value(it, "D_LENGTH", len)
             reaper.GetSetMediaItemTakeInfo_String(take, "P_NAME",
                 job.region_name .. " — " .. s.label, true)
