@@ -41,9 +41,20 @@ shown on the page (same trusted-LAN model as REAPER's own web interface):
 2. Tap the right match (title, channel, and duration are shown).
 3. Confirm/correct the guessed **Band** and **Song title** — these become
    the region name — and check the estimated Fadr cost shown.
-4. **Import this song**, watch the progress log, wait for the green ✔.
-   Nothing is reported as done unless REAPER confirmed it.
-5. Setup problems (missing key, REAPER not running, missing tools) show as
+4. **Download & split** (a few minutes), then the page shows the
+   **review screen**: every separated stem with a play button and a
+   dropdown for which Jam Room group it goes to (pre-filled with the
+   guess — listen and move e.g. a synth from Extras to Keys, or skip a
+   stem entirely; stems sharing a group are mixed together). Below that,
+   the **lyric timing check**: "first lyric line appears at m:ss" with the
+   line quoted, a lead-vocal play button to verify by ear, and a shift
+   box (seconds; positive = later) pre-filled with the audio analysis's
+   suggestion.
+5. **Add to REAPER**, wait for the green ✔. Nothing is reported as done
+   unless REAPER confirmed it — and the apply refuses to run if the
+   active REAPER project tab isn't the Jam Room project (no PB buses),
+   telling you to switch tabs and try again.
+6. Setup problems (missing key, REAPER not running, missing tools) show as
    red ✘ checks at the top of the page with what to do.
 
 Command-line equivalent (same pipeline, for scripting/debugging):

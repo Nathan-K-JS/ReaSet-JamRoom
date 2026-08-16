@@ -699,11 +699,19 @@ def stage_mixdown(job, job_dir, cfg, force):
     if job["stages"].get("mixdown") and not force:
         return
     # Slot assignment happens HERE (not in stage_fadr) so a mapping fix only
-    # needs --force-mixdown, never a re-download.
+    # needs --force-mixdown, never a re-download. Per-job overrides (from the
+    # web UI's review step, keyed by stem file) beat the config guesses;
+    # "SKIP" excludes a stem entirely.
     slot_map = {norm_stem_type(k): v for k, v in cfg["slot_map"].items()}
+    overrides = job.get("slot_overrides") or {}
     by_slot = {}
     for s in job.get("stems", []):
-        s["slot"] = slot_map.get(norm_stem_type(s["fadr_name"]))
+        ov = overrides.get(s["file"])
+        if ov == "SKIP":
+            s["slot"] = None
+            log(f"Stem '{s['fadr_name']}' skipped by your choice.")
+            continue
+        s["slot"] = ov or slot_map.get(norm_stem_type(s["fadr_name"]))
         if s["slot"]:
             by_slot.setdefault(s["slot"], []).append(s["file"])
         else:

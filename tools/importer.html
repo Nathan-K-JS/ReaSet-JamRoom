@@ -7,21 +7,27 @@
 <style>
   * { box-sizing: border-box; margin: 0; }
   body { background: #14161a; color: #e8eaed; font-family: system-ui, sans-serif;
-         max-width: 640px; margin: 0 auto; padding: 16px; }
+         max-width: 680px; margin: 0 auto; padding: 16px; }
   h1 { font-size: 1.3rem; margin: 8px 0 2px; }
+  h2 { font-size: 1.05rem; margin-bottom: 6px; }
   .sub { color: #9aa0a6; font-size: .85rem; margin-bottom: 14px; }
   .card { background: #1d2026; border: 1px solid #2c3038;
           border-radius: 12px; padding: 14px; margin-bottom: 14px; }
   label { display: block; font-size: .8rem; color: #9aa0a6; margin: 8px 0 4px; }
-  input[type=text] { width: 100%; font-size: 1.05rem; padding: 12px;
+  input[type=text], input[type=number] {
+          width: 100%; font-size: 1.05rem; padding: 12px;
           border-radius: 10px; border: 1px solid #3a3f47; background: #12141a;
           color: #e8eaed; }
+  input[type=number] { width: 120px; }
+  select { font-size: 1rem; padding: 10px; border-radius: 10px;
+           border: 1px solid #3a3f47; background: #12141a; color: #e8eaed; }
   button { font-size: 1.05rem; padding: 12px 18px; border-radius: 10px;
            border: 0; background: #2f6fed; color: #fff; cursor: pointer;
            margin-top: 10px; width: 100%; }
   button:disabled { background: #3a3f47; color: #777; }
   button.small { width: auto; font-size: .85rem; padding: 8px 12px;
                  background: #2c3038; }
+  button.ghost { background: #2c3038; }
   .result { display: block; width: 100%; text-align: left; background: #12141a;
             border: 1px solid #3a3f47; color: #e8eaed; margin-top: 8px; }
   .result.sel { border-color: #2f6fed; background: #182338; }
@@ -29,18 +35,26 @@
   .check { font-size: .9rem; margin: 3px 0; }
   .ok::before   { content: "✔ "; color: #4caf50; }
   .bad::before  { content: "✘ "; color: #ef5350; }
+  .stemrow { display: grid; grid-template-columns: 1fr auto; gap: 8px 10px;
+             align-items: center; padding: 10px 0; border-bottom: 1px solid #2c3038; }
+  .stemrow:last-child { border-bottom: 0; }
+  .stemname { font-weight: 600; text-transform: capitalize; }
+  .stemrow audio { grid-column: 1 / -1; width: 100%; height: 34px; }
   #log { background: #0d0f12; border-radius: 10px; padding: 10px;
-         font-family: Consolas, monospace; font-size: .78rem; max-height: 260px;
+         font-family: Consolas, monospace; font-size: .78rem; max-height: 240px;
          overflow-y: auto; white-space: pre-wrap; margin-top: 10px; }
   .done { color: #4caf50; font-weight: 600; }
   .failed { color: #ef5350; font-weight: 600; }
   .cost { color: #f0b429; font-size: .85rem; margin-top: 6px; }
+  .note { color: #9aa0a6; font-size: .82rem; margin-top: 6px; }
+  .firstline { background: #12141a; border-radius: 8px; padding: 10px;
+               margin-top: 6px; font-style: italic; }
   .hide { display: none; }
 </style>
 </head>
 <body>
   <h1>🎸 Jam Room Importer</h1>
-  <div class="sub">Add a song to the jam room project: search → pick → import.</div>
+  <div class="sub">Search → pick → listen &amp; assign → apply.</div>
 
   <div class="card" id="checksCard">
     <div id="checksList">Checking setup…</div>
@@ -63,11 +77,30 @@
     <label>Band</label><input type="text" id="band">
     <label>Song title</label><input type="text" id="title">
     <div class="cost" id="cost"></div>
-    <button id="importBtn" onclick="doImport()">Import this song</button>
+    <button id="importBtn" onclick="doImport()">Download &amp; split this song</button>
+  </div>
+
+  <div class="card hide" id="reviewCard">
+    <h2>Listen &amp; assign the stems</h2>
+    <div class="note">Play each stem and choose which Jam Room group it
+      belongs in. Multiple stems on one group get mixed together.</div>
+    <div id="stemList"></div>
+    <h2 style="margin-top:16px">Lyric timing</h2>
+    <div id="lyricInfo"></div>
+    <div id="firstLine" class="firstline hide"></div>
+    <div id="vocalCheck" class="hide">
+      <div class="note">Play the lead vocal and check when that line is
+        actually sung:</div>
+      <audio controls preload="none" id="vocalAudio" style="width:100%;height:34px"></audio>
+    </div>
+    <label>Shift all lyrics by (seconds — positive = show later)</label>
+    <input type="number" id="lyrOffset" step="0.1" value="0">
+    <button id="applyBtn" onclick="doApply()">Looks right — add to REAPER</button>
+    <button class="ghost" onclick="doCancel()">Cancel this import</button>
   </div>
 
   <div class="card hide" id="progressCard">
-    <div id="progTitle">Importing…</div>
+    <div id="progTitle">Working…</div>
     <div id="log"></div>
     <div id="finalNote" class="hide" style="margin-top:10px">
       Review the song in REAPER (chords &amp; lyrics especially), then
@@ -76,9 +109,14 @@
   </div>
 
 <script>
-var picked = null, poller = null;
+var picked = null, poller = null, reviewShown = false;
 
 function $(id){ return document.getElementById(id); }
+function fmtTime(t){
+  if(t == null) return '?';
+  var m = Math.floor(t/60), s = (t - m*60).toFixed(1);
+  return m + ':' + (s < 10 ? '0' : '') + s;
+}
 
 function refreshChecks(){
   fetch('/api/checks').then(r=>r.json()).then(function(c){
@@ -141,14 +179,79 @@ function pick(row, btn){
 function doImport(){
   if(!picked) return;
   $('importBtn').disabled = true;
+  reviewShown = false;
   fetch('/api/import', {method:'POST', headers:{'Content-Type':'application/json'},
     body: JSON.stringify({url:picked.url, band:$('band').value, title:$('title').value})})
   .then(r=>r.json()).then(function(d){
     if(d.error){ alert(d.error); $('importBtn').disabled = false; return; }
     $('progressCard').classList.remove('hide');
     $('finalNote').classList.add('hide');
-    $('progTitle').textContent = 'Importing ' + $('band').value + ' - ' + $('title').value + ' …';
+    $('progTitle').textContent = 'Downloading & splitting ' + $('band').value + ' - ' + $('title').value + ' …';
     poller = setInterval(pollStatus, 1000);
+  });
+}
+
+function showReview(rv){
+  reviewShown = true;
+  $('reviewCard').classList.remove('hide');
+  var list = $('stemList'); list.innerHTML = '';
+  rv.stems.forEach(function(st, i){
+    var row = document.createElement('div');
+    row.className = 'stemrow';
+    var sel = '<select data-file="' + st.file + '">' +
+      rv.slot_choices.map(function(c){
+        return '<option value="' + c[0] + '"' + (c[0]===st.slot?' selected':'') + '>' + c[1] + '</option>';
+      }).join('') + '</select>';
+    row.innerHTML = '<div class="stemname">' + st.name + '</div>' + sel +
+      '<audio controls preload="none" src="' + st.audio + '"></audio>';
+    list.appendChild(row);
+  });
+  var ly = rv.lyrics;
+  if(ly.synced && ly.first_time != null){
+    $('lyricInfo').innerHTML = '<div class="note">First lyric line appears at <b>' +
+      fmtTime(ly.first_time) + '</b> into the song. ' + ly.align_note + '.</div>';
+    $('firstLine').textContent = '“' + ly.first_text + '”';
+    $('firstLine').classList.remove('hide');
+    $('lyrOffset').value = ly.suggested_offset || 0;
+    if(rv.vocal_audio){
+      $('vocalAudio').src = rv.vocal_audio;
+      $('vocalCheck').classList.remove('hide');
+    }
+  } else if (ly.plain) {
+    $('lyricInfo').innerHTML = '<div class="note">Only unsynced lyrics were found — they import as one block; the offset below is ignored.</div>';
+  } else {
+    $('lyricInfo').innerHTML = '<div class="note">No lyrics found for this song.</div>';
+  }
+  // pause background music players when one starts
+  document.querySelectorAll('audio').forEach(function(a){
+    a.addEventListener('play', function(){
+      document.querySelectorAll('audio').forEach(function(b){ if(b!==a) b.pause(); });
+    });
+  });
+}
+
+function doApply(){
+  var slots = {};
+  document.querySelectorAll('#stemList select').forEach(function(s){
+    slots[s.getAttribute('data-file')] = s.value;
+  });
+  var off = parseFloat($('lyrOffset').value);
+  $('applyBtn').disabled = true;
+  fetch('/api/apply', {method:'POST', headers:{'Content-Type':'application/json'},
+    body: JSON.stringify({slots: slots, lyrics_offset: isNaN(off) ? null : off})})
+  .then(r=>r.json()).then(function(d){
+    if(d.error){ alert(d.error); $('applyBtn').disabled = false; return; }
+    $('progTitle').textContent = 'Adding to REAPER…';
+    poller = setInterval(pollStatus, 1000);
+  });
+}
+
+function doCancel(){
+  fetch('/api/cancel', {method:'POST'}).then(function(){
+    $('reviewCard').classList.add('hide');
+    $('progressCard').classList.add('hide');
+    $('importBtn').disabled = false;
+    reviewShown = false;
   });
 }
 
@@ -156,19 +259,36 @@ function pollStatus(){
   fetch('/api/status').then(r=>r.json()).then(function(s){
     $('log').textContent = s.log.join('\n');
     $('log').scrollTop = $('log').scrollHeight;
-    if(s.state === 'done' || s.state === 'failed'){
+    if(s.state === 'review' && !reviewShown){
+      clearInterval(poller);
+      $('progTitle').textContent = 'Ready for review ↓';
+      showReview(s.review);
+      window.scrollTo(0, $('reviewCard').offsetTop - 10);
+    } else if(s.state === 'done' || s.state === 'failed'){
       clearInterval(poller);
       $('progTitle').innerHTML = s.state === 'done'
         ? '<span class="done">✔ Imported: ' + s.song + '</span>'
-        : '<span class="failed">✘ Import failed: ' + s.summary + '</span>';
-      if(s.state === 'done') $('finalNote').classList.remove('hide');
+        : '<span class="failed">✘ Failed: ' + s.summary + '</span>';
+      if(s.state === 'done'){
+        $('finalNote').classList.remove('hide');
+        $('reviewCard').classList.add('hide');
+      }
       $('importBtn').disabled = false;
+      $('applyBtn').disabled = false;
     }
   });
 }
 
 refreshChecks();
 setInterval(refreshChecks, 10000);
+// If the server is mid-import (page reopened), catch up.
+fetch('/api/status').then(r=>r.json()).then(function(s){
+  if(s.state === 'review'){ $('progressCard').classList.remove('hide'); showReview(s.review); }
+  else if(s.state === 'preparing' || s.state === 'applying'){
+    $('progressCard').classList.remove('hide');
+    poller = setInterval(pollStatus, 1000);
+  }
+});
 </script>
 </body>
 </html>

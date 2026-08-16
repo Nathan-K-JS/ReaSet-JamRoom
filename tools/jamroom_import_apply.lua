@@ -156,6 +156,20 @@ if not job.region_name or job.region_name == "" then
     return fail("job has no region_name")
 end
 
+-- The ACTIVE project tab must actually be the Jam Room project. Without this
+-- check a wrong/empty active tab silently swallows the whole import.
+do
+    local found = false
+    local tracks = scan_tracks()
+    for _, pb in pairs(PB_BY_SLOT) do
+        if find_track_named(tracks, pb) then found = true break end
+    end
+    if not found then
+        return fail("the active project tab has no PB buses - switch REAPER " ..
+                    "to the Jam Room project tab, then apply again")
+    end
+end
+
 -- Refuse a duplicate import: a region with this exact name already exists.
 do
     local i = 0
