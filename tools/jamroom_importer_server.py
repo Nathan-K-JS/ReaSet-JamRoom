@@ -147,6 +147,8 @@ def build_review(job, job_dir, cfg):
     first = next((l for l in ly.get("lines", []) if l["text"]), None)
     align = ly.get("align") or {}
     return {"stems": stems, "slot_choices": SLOT_CHOICES,
+            "slot_labels": {sid: cfg["slot_labels"].get(sid, name)
+                            for sid, name in SLOT_CHOICES if sid != "SKIP"},
             "lyrics": {
                 "synced": bool(ly.get("synced")),
                 "plain": bool(ly.get("plain")),
@@ -193,12 +195,21 @@ def run_prepare(url, band, title):
         BUSY.release()
 
 
-def run_apply(slots, lyrics_offset):
+def run_apply(slots, labels, lyrics_offset):
     try:
         cfg = ji.load_config(None)
         job_dir = CURRENT["job_dir"]
         job = ji.load_job(job_dir)
         job["slot_overrides"] = slots or {}
+        # Per-stem labels from the UI -> one label per slot (first stem
+        # assigned to a slot names its bus; labels ride the "[JR:SLOT] Label"
+        # track name into ReaSet's mute screen).
+        label_overrides = {}
+        for file, slot in (slots or {}).items():
+            lbl = ji.sanitize_region_name((labels or {}).get(file, ""))
+            if slot != "SKIP" and lbl and slot not in label_overrides:
+                label_overrides[slot] = lbl
+        job["label_overrides"] = label_overrides
         ly = job.setdefault("lyrics", {})
         if lyrics_offset is not None:
             ly["offset_override"] = float(lyrics_offset)
@@ -343,6 +354,7 @@ class Handler(BaseHTTPRequestHandler):
                 STATE["state"] = "applying"
                 threading.Thread(target=run_apply,
                                  args=(body.get("slots") or {},
+                                       body.get("labels") or {},
                                        body.get("lyrics_offset")),
                                  daemon=True).start()
                 self._send(200, {"ok": True})

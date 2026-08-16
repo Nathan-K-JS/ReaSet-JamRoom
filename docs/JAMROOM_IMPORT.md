@@ -45,7 +45,9 @@ shown on the page (same trusted-LAN model as REAPER's own web interface):
    **review screen**: every separated stem with a play button and a
    dropdown for which Jam Room group it goes to (pre-filled with the
    guess — listen and move e.g. a synth from Extras to Keys, or skip a
-   stem entirely; stems sharing a group are mixed together). Below that,
+   stem entirely; stems sharing a group are mixed together), plus an
+   editable **name field** — that name is what ReaSet's mute screen shows
+   for the group (e.g. rename "Guitar 1" to "Lead Guitar"). Below that,
    the **lyric timing check**: "first lyric line appears at m:ss" with the
    line quoted, a lead-vocal play button to verify by ear, and a shift
    box (seconds; positive = later) pre-filled with the audio analysis's

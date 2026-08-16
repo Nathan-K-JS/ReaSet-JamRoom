@@ -718,6 +718,9 @@ def stage_mixdown(job, job_dir, cfg, force):
             log(f"NOTE: stem '{s['fadr_name']}' has no slot mapping — skipped.")
     slots_dir = job_dir / "slots"
     labels = cfg["slot_labels"]
+    # Musician-facing names chosen in the review UI beat the generic defaults;
+    # they become the "[JR:SLOT] Label" bus name ReaSet's mute screen shows.
+    label_overrides = job.get("label_overrides") or {}
     job["slots"] = []
     for slot, files in by_slot.items():
         if len(files) == 1:
@@ -735,7 +738,9 @@ def stage_mixdown(job, job_dir, cfg, force):
             r = subprocess.run(cmd, capture_output=True, text=True)
             if r.returncode != 0:
                 die(f"ffmpeg mix failed for {slot}:\n{r.stderr[-800:]}")
-        job["slots"].append({"slot": slot, "label": labels.get(slot, slot.title()),
+        job["slots"].append({"slot": slot,
+                             "label": label_overrides.get(slot) or
+                                      labels.get(slot, slot.title()),
                              "file": out})
     job["stages"]["mixdown"] = True
     save_job(job_dir, job)

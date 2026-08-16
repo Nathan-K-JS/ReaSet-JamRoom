@@ -40,6 +40,9 @@
   .stemrow:last-child { border-bottom: 0; }
   .stemname { font-weight: 600; text-transform: capitalize; }
   .stemrow audio { grid-column: 1 / -1; width: 100%; height: 34px; }
+  .stemrow input.lbl { grid-column: 1 / -1; font-size: .95rem; padding: 8px 10px; }
+  .lblhint { grid-column: 1 / -1; color: #9aa0a6; font-size: .75rem;
+             margin-top: -4px; }
   #log { background: #0d0f12; border-radius: 10px; padding: 10px;
          font-family: Consolas, monospace; font-size: .78rem; max-height: 240px;
          overflow-y: auto; white-space: pre-wrap; margin-top: 10px; }
@@ -202,9 +205,21 @@ function showReview(rv){
       rv.slot_choices.map(function(c){
         return '<option value="' + c[0] + '"' + (c[0]===st.slot?' selected':'') + '>' + c[1] + '</option>';
       }).join('') + '</select>';
+    var defLbl = rv.slot_labels[st.slot] || '';
     row.innerHTML = '<div class="stemname">' + st.name + '</div>' + sel +
+      '<input class="lbl" type="text" data-file="' + st.file + '" value="' +
+        defLbl.replace(/"/g,'&quot;') + '" placeholder="name shown in ReaSet">' +
+      '<div class="lblhint">Name shown on ReaSet’s mute screen — edit it if the guess is wrong.</div>' +
       '<audio controls preload="none" src="' + st.audio + '"></audio>';
     list.appendChild(row);
+    var selEl = row.querySelector('select'), lblEl = row.querySelector('input.lbl');
+    lblEl.addEventListener('input', function(){ lblEl.dataset.touched = '1'; });
+    selEl.addEventListener('change', function(){
+      var d = rv.slot_labels[selEl.value] || '';
+      lblEl.classList.toggle('hide', selEl.value === 'SKIP');
+      if(!lblEl.dataset.touched) lblEl.value = d;
+    });
+    if(st.slot === 'SKIP') lblEl.classList.add('hide');
   });
   var ly = rv.lyrics;
   if(ly.synced && ly.first_time != null){
@@ -231,14 +246,18 @@ function showReview(rv){
 }
 
 function doApply(){
-  var slots = {};
+  var slots = {}, labels = {};
   document.querySelectorAll('#stemList select').forEach(function(s){
     slots[s.getAttribute('data-file')] = s.value;
+  });
+  document.querySelectorAll('#stemList input.lbl').forEach(function(s){
+    labels[s.getAttribute('data-file')] = s.value.trim();
   });
   var off = parseFloat($('lyrOffset').value);
   $('applyBtn').disabled = true;
   fetch('/api/apply', {method:'POST', headers:{'Content-Type':'application/json'},
-    body: JSON.stringify({slots: slots, lyrics_offset: isNaN(off) ? null : off})})
+    body: JSON.stringify({slots: slots, labels: labels,
+                          lyrics_offset: isNaN(off) ? null : off})})
   .then(r=>r.json()).then(function(d){
     if(d.error){ alert(d.error); $('applyBtn').disabled = false; return; }
     $('progTitle').textContent = 'Adding to REAPER…';
