@@ -8,12 +8,17 @@ ReaSet's Lyrics/Chords views. One command per song, then a short review pass.
 
 ## One-time setup (on whichever PC runs imports)
 
-1. **Install the free tools** (PowerShell):
+0. **Get this repo onto the PC** (copy the whole folder or `git clone`,
+   e.g. to `C:\JamRoom\ReaSet-JamRoom`) and deploy the current `ReaSet.html`
+   into REAPER's web root (`%APPDATA%\REAPER\reaper_www_root`). Everything
+   the importer needs lives in `tools/`; songs it downloads land in
+   `imports/` next to it.
+1. **Install the free tools** (PowerShell, then close & reopen the terminal):
    ```
    winget install Python.Python.3.12
    winget install yt-dlp.yt-dlp
    winget install Gyan.FFmpeg
-   pip install requests
+   pip install requests numpy
    ```
 2. **Fadr API key** (needs the Fadr Plus subscription, $10/mo):
    log in at fadr.com → account page → **API tab** → *Create New API Key*.
@@ -50,6 +55,13 @@ Each song lives in `imports/Band - Title/` (audio, stems, `job.json`) —
 re-running the command resumes/skips completed steps, and a song that's
 already applied is refused until you delete its region (protects against
 double-imports).
+
+**Keep the `imports/` folder.** The REAPER items reference the stem files
+inside it — deleting or moving a song's folder silences that song's tracks.
+(Alternatively, after importing use REAPER's *File → Save project* with
+"Copy all media into project directory" to make the project self-contained.)
+And **save the project** after a successful import — the importer edits the
+open project; nothing is saved to disk until you save.
 
 ## What lands in the project
 
