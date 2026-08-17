@@ -16,7 +16,10 @@ echo Installing Python libraries...
 set PYEXE=%LocalAppData%\Programs\Python\Python312\python.exe
 if exist "%PYEXE%" ( "%PYEXE%" -m pip install requests numpy ) else ( python -m pip install requests numpy || py -3 -m pip install requests numpy )
 echo.
-if not exist "%~dp0tools\jamroom_import.config.json" copy "%~dp0tools\jamroom_import.config.example.json" "%~dp0tools\jamroom_import.config.json"
+if not exist "%~dp0tools\jamroom_import.config.json" copy "%~dp0tools\jamroom_import.config.example.json" "%~dp0tools\jamroom_import.config.json" >nul
+echo Deploying ReaSet to REAPER's web interface...
+call "%~dp0tools\deploy_reaset.bat"
+echo.
 echo ============================================
 echo  Setup finished.
 echo  Next: double-click "JamRoom Importer.bat".
