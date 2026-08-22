@@ -9,6 +9,10 @@
   body { background: #14161a; color: #e8eaed; font-family: system-ui, sans-serif;
          max-width: 680px; margin: 0 auto; padding: 16px; }
   h1 { font-size: 1.3rem; margin: 8px 0 2px; }
+  #staleWarn { background: #4a2320; border: 1px solid #b3261e; color: #ffd7d3;
+               border-radius: 12px; padding: 14px; margin-bottom: 14px;
+               font-size: .9rem; line-height: 1.45; }
+  #staleWarn b { color: #fff; }
   .vbadge { font-size: .78rem; font-weight: 600; color: #9fd0ff;
             background: #17304d; border: 1px solid #2f6fed; border-radius: 999px;
             padding: 3px 10px; vertical-align: middle; margin-left: 6px;
@@ -88,6 +92,11 @@
 <body>
   <h1>🎸 Jam Room Importer <span class="vbadge" id="verBadge">…</span></h1>
   <div class="sub">Search → pick → listen &amp; assign → apply.</div>
+
+  <!-- The page is re-read from disk on every request, but the server holds its
+       code in memory: after an update they can disagree until it is restarted,
+       which looks like features silently doing nothing. -->
+  <div id="staleWarn" class="hide"></div>
 
   <div class="card" id="checksCard">
     <div id="checksList">Checking setup…</div>
@@ -202,6 +211,10 @@
   </div>
 
 <script>
+// Version of THIS page (served fresh from disk). Compared against the version
+// of the running server; a mismatch means the importer needs restarting.
+var UI_BUILD = "v1.6";
+
 var picked = null, poller = null, reviewShown = false;
 
 function $(id){ return document.getElementById(id); }
@@ -224,6 +237,22 @@ function refreshChecks(){
       return '<div class="check ' + (r[0]?'ok':'bad') + '">' + (r[0]?r[1]:r[2]) + '</div>';
     }).join('')
       + (c.lan ? '<div class="check" style="color:#9aa0a6">Tablet URL: ' + c.lan + '</div>' : '');
+    // Page and server out of step? Say so loudly — this looks exactly like
+    // "the new feature is broken" when it is really "restart the importer".
+    var warn = $('staleWarn');
+    if (warn) {
+      if (c.build && c.build !== UI_BUILD) {
+        warn.innerHTML = '<b>Restart the importer.</b> This page is <b>'
+          + UI_BUILD + '</b> but the running importer is <b>' + c.build
+          + '</b>. The page reloads from disk after an update; the importer '
+          + 'does not, so newer features have no server to talk to and appear '
+          + 'blank or do nothing.<br><br>Close the <b>Jam Room Importer</b> '
+          + 'window, then double-click <b>JamRoom Importer.bat</b> again.';
+        warn.classList.remove('hide');
+      } else {
+        warn.classList.add('hide');
+      }
+    }
     var badge = $('verBadge');
     if (badge) {
       badge.textContent = (c.build || '?') + (c.build_date ? ' · ' + c.build_date : '');
@@ -422,10 +451,26 @@ function doDelete(){
 function loadLibrary(force){
   if(force) g_library = null;
   $('libList').innerHTML = '<div class="note">Loading your Fadr library…</div>';
-  fetch('/api/library').then(r=>r.json()).then(function(d){
+  fetch('/api/library').then(function(r){
+    // An old server has no such endpoint; say what to do rather than "not found".
+    if(r.status === 404){
+      throw new Error('This importer is running an older version that has no '
+        + 'Fadr library support. Close the Jam Room Importer window and start '
+        + 'JamRoom Importer.bat again.');
+    }
+    return r.json();
+  }).then(function(d){
     if(d.error){ $('libList').innerHTML = '<div class="check bad">'+d.error+'</div>'; return; }
     g_library = d.songs || [];
+    if(!g_library.length){
+      $('libList').innerHTML = '<div class="note">Your Fadr account has no '
+        + 'split songs yet. Import one from YouTube first.</div>';
+      return;
+    }
     renderLibrary();
+  }).catch(function(e){
+    g_library = null;   // let a retry actually retry
+    $('libList').innerHTML = '<div class="check bad">' + e.message + '</div>';
   });
 }
 
