@@ -682,10 +682,35 @@ class Handler(BaseHTTPRequestHandler):
             self._send(500, {"error": str(e)})
 
 
+class ImporterServer(ThreadingHTTPServer):
+    # Python defaults this to True, which on Windows lets a SECOND server bind
+    # a port the first one already holds. Requests then go to whichever socket
+    # Windows picks, so "close it and start it again" can silently leave the
+    # OLD server answering — an updated page talking to stale code.
+    allow_reuse_address = False
+
+
 def main():
-    srv = ThreadingHTTPServer(("0.0.0.0", PORT), Handler)
+    try:
+        srv = ImporterServer(("0.0.0.0", PORT), Handler)
+    except OSError:
+        print("=" * 62)
+        print(f" A Jam Room Importer is ALREADY RUNNING on port {PORT}.")
+        print()
+        print(" Close that window first. If there is no window, end any stray")
+        print(" python.exe in Task Manager, or run this in PowerShell:")
+        print(f"   Get-NetTCPConnection -LocalPort {PORT} -State Listen |")
+        print("     ForEach-Object { Stop-Process -Id $_.OwningProcess -Force }")
+        print()
+        print(" Then start JamRoom Importer.bat again.")
+        print("=" * 62)
+        try:
+            input("Press Enter to close...")
+        except EOFError:
+            pass
+        return
     url = f"http://localhost:{PORT}"
-    print(f"Jam Room Importer running at {url}")
+    print(f"Jam Room Importer {getattr(ji, 'BUILD', '?')} running at {url}")
     if lan_url():
         print(f"  (from the tablet: {lan_url()})")
     try:

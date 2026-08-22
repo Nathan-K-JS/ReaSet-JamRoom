@@ -241,13 +241,23 @@ function refreshChecks(){
     // "the new feature is broken" when it is really "restart the importer".
     var warn = $('staleWarn');
     if (warn) {
-      if (c.build && c.build !== UI_BUILD) {
-        warn.innerHTML = '<b>Restart the importer.</b> This page is <b>'
-          + UI_BUILD + '</b> but the running importer is <b>' + c.build
-          + '</b>. The page reloads from disk after an update; the importer '
-          + 'does not, so newer features have no server to talk to and appear '
-          + 'blank or do nothing.<br><br>Close the <b>Jam Room Importer</b> '
-          + 'window, then double-click <b>JamRoom Importer.bat</b> again.';
+      // A server old enough to report NO build at all is the most stale case
+      // there is, so treat missing exactly like mismatched.
+      var srvBuild = c.build || null;
+      if (srvBuild !== UI_BUILD) {
+        warn.innerHTML = '<b>Restart the importer — it is running old code.</b>'
+          + '<br>This page is <b>' + UI_BUILD + '</b>; the running importer is <b>'
+          + (srvBuild || 'older than v1.1 (reports no version)') + '</b>.'
+          + '<br><br>The page is re-read from disk after an update, but the '
+          + 'importer keeps its code in memory — so newer features have no '
+          + 'server to talk to and look blank or dead.'
+          + '<br><br><b>1.</b> Close the <b>Jam Room Importer</b> window.'
+          + '<br><b>2.</b> Double-click <b>JamRoom Importer.bat</b> again.'
+          + '<br><br>If it still says this, a stray importer is holding the '
+          + 'port. In PowerShell run:<br>'
+          + '<code>Get-NetTCPConnection -LocalPort 8765 -State Listen | '
+          + 'ForEach-Object { Stop-Process -Id $_.OwningProcess -Force }</code>'
+          + '<br>then start it again.';
         warn.classList.remove('hide');
       } else {
         warn.classList.add('hide');
