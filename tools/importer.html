@@ -35,6 +35,13 @@
   .result { display: block; width: 100%; text-align: left; background: #12141a;
             border: 1px solid #3a3f47; color: #e8eaed; margin-top: 8px; }
   .result.sel { border-color: #2f6fed; background: #182338; }
+  .srctabs { display: flex; gap: 8px; }
+  .srctab { flex: 1; margin-top: 0; font-size: .9rem; background: #23262d;
+            color: #c9ced8; border: 1px solid #363b45; padding: 10px 8px; }
+  .srctab.on { background: #2f6fed; color: #fff; border-color: #2f6fed; }
+  .libpill { font-size: .7rem; padding: 2px 7px; border-radius: 999px;
+             background: #24303f; color: #9fd0ff; margin-left: 6px; }
+  .libpill.warn { background: #3a2f1c; color: #f0b429; }
   .result small { color: #9aa0a6; }
   .check { font-size: .9rem; margin: 3px 0; }
   .ok::before   { content: "✔ "; color: #4caf50; }
@@ -72,6 +79,13 @@
     </div>
   </div>
 
+  <div class="card">
+    <div class="srctabs">
+      <button class="srctab on" id="srcYt"  onclick="setSource('yt')">New song from YouTube</button>
+      <button class="srctab"    id="srcLib" onclick="setSource('lib')">Already split on Fadr — free</button>
+    </div>
+  </div>
+
   <div class="card" id="searchCard">
     <label>Song name (or a YouTube link)</label>
     <input type="text" id="q" placeholder="e.g. toto africa"
@@ -80,10 +94,27 @@
     <div id="results"></div>
   </div>
 
+  <div class="card hide" id="libCard">
+    <label>Your Fadr library — these are already paid for, so re-importing
+      one costs nothing</label>
+    <input type="text" id="libFilter" placeholder="Filter by name…"
+           oninput="renderLibrary()">
+    <button class="small" onclick="loadLibrary(true)">Refresh list</button>
+    <div id="libList"><div class="note">Loading…</div></div>
+  </div>
+
   <div class="card hide" id="confirmCard">
     <label>Band</label><input type="text" id="band">
     <label>Song title</label><input type="text" id="title">
     <div class="cost" id="cost"></div>
+    <div id="libExtra" class="hide" style="margin-top:8px">
+      <label style="display:flex;align-items:center;gap:8px;margin:0">
+        <input type="checkbox" id="allowSplits" checked style="width:auto">
+        <span>Pay for the extra splits (separate vocals and guitars/keys)</span>
+      </label>
+      <div class="note">Untick to import just drums, bass, vocals and melodies
+        for free — you can always add the extra splits later.</div>
+    </div>
     <button id="importBtn" onclick="doImport()">Download &amp; split this song</button>
   </div>
 
@@ -191,7 +222,82 @@ function pick(row, btn){
   $('confirmCard').classList.remove('hide');
 }
 
+// ── Fadr library (already split, no charge) ───────────────────────────────
+var g_library = null, g_libPicked = null, g_source = 'yt';
+
+function setSource(s){
+  g_source = s;
+  $('srcYt').classList.toggle('on', s === 'yt');
+  $('srcLib').classList.toggle('on', s === 'lib');
+  $('searchCard').classList.toggle('hide', s !== 'yt');
+  $('libCard').classList.toggle('hide', s !== 'lib');
+  $('confirmCard').classList.add('hide');
+  picked = null; g_libPicked = null;
+  if(s === 'lib' && !g_library) loadLibrary();
+}
+
+function loadLibrary(force){
+  if(force) g_library = null;
+  $('libList').innerHTML = '<div class="note">Loading your Fadr library…</div>';
+  fetch('/api/library').then(r=>r.json()).then(function(d){
+    if(d.error){ $('libList').innerHTML = '<div class="check bad">'+d.error+'</div>'; return; }
+    g_library = d.songs || [];
+    renderLibrary();
+  });
+}
+
+function renderLibrary(){
+  if(!g_library) return;
+  var f = ($('libFilter').value || '').toLowerCase();
+  var rows = g_library.filter(function(s){ return s.name.toLowerCase().indexOf(f) >= 0; });
+  if(!rows.length){ $('libList').innerHTML = '<div class="note">Nothing matches.</div>'; return; }
+  $('libList').innerHTML = '';
+  rows.forEach(function(s){
+    var b = document.createElement('button');
+    b.className = 'result';
+    var m = Math.floor(s.duration/60), sec = ('0'+Math.round(s.duration%60)).slice(-2);
+    var free = (s.subsplits_done >= 2);
+    b.innerHTML = s.name
+      + (s.named_locally ? '' : '<span class="libpill warn">name unknown</span>')
+      + (s.has_chords ? '<span class="libpill">chords</span>'
+                      : '<span class="libpill warn">no chords</span>')
+      + (free ? '<span class="libpill">fully split · free</span>'
+              : '<span class="libpill warn">extra splits not done</span>')
+      + '<br><small>' + m + ':' + sec + ' · ' + s.stems + ' stems · '
+      + (s.key || 'key ?') + ' · ' + (s.tempo || '?') + ' bpm · added ' + s.created
+      + '</small>';
+    b.onclick = function(){ pickLibrary(s, b); };
+    $('libList').appendChild(b);
+  });
+}
+
+function pickLibrary(s, btn){
+  g_libPicked = s; picked = null;
+  document.querySelectorAll('.result').forEach(function(x){ x.classList.remove('sel'); });
+  btn.classList.add('sel');
+  // Split "Band - Song" when we know it; otherwise the operator names it now.
+  var i = s.name.indexOf(' - ');
+  $('band').value  = i > 0 ? s.name.slice(0, i) : '';
+  $('title').value = i > 0 ? s.name.slice(i + 3) : (s.named_locally ? s.name : '');
+  var extra = $('libExtra');
+  if (s.subsplits_done >= 2) {
+    $('cost').textContent = 'Already fully split on Fadr — this import is free.';
+    $('importBtn').textContent = 'Import this song (no charge)';
+    extra.classList.add('hide');
+  } else {
+    // Honest about cost: the main split is paid for, the sub-splits are not.
+    var mins = Math.max(1, Math.ceil(s.duration/60));
+    $('cost').textContent = 'Main split already paid for. Splitting vocals into '
+      + 'lead/backing and melodies into guitars/keys has NOT been done for this '
+      + 'song yet — doing it now costs about $' + (mins*0.05*2).toFixed(2) + '.';
+    $('importBtn').textContent = 'Import this song';
+    extra.classList.remove('hide');
+  }
+  $('confirmCard').classList.remove('hide');
+}
+
 function doImport(){
+  if(g_source === 'lib'){ return doImportLibrary(); }
   if(!picked) return;
   $('importBtn').disabled = true;
   reviewShown = false;
@@ -202,6 +308,28 @@ function doImport(){
     $('progressCard').classList.remove('hide');
     $('finalNote').classList.add('hide');
     $('progTitle').textContent = 'Downloading & splitting ' + $('band').value + ' - ' + $('title').value + ' …';
+    poller = setInterval(pollStatus, 1000);
+  });
+}
+
+function doImportLibrary(){
+  if(!g_libPicked) return;
+  if(!$('band').value.trim() || !$('title').value.trim()){
+    alert('Please give this song a Band and a Song title — that becomes the region name in REAPER.');
+    return;
+  }
+  $('importBtn').disabled = true;
+  reviewShown = false;
+  fetch('/api/import_library', {method:'POST', headers:{'Content-Type':'application/json'},
+    body: JSON.stringify({id: g_libPicked.id, band: $('band').value,
+                          title: $('title').value, duration: g_libPicked.duration,
+                          allow_new_splits: (g_libPicked.subsplits_done >= 2)
+                              || $('allowSplits').checked})})
+  .then(r=>r.json()).then(function(d){
+    if(d.error){ alert(d.error); $('importBtn').disabled = false; return; }
+    $('progressCard').classList.remove('hide');
+    $('finalNote').classList.add('hide');
+    $('progTitle').textContent = 'Fetching ' + $('band').value + ' - ' + $('title').value + ' from Fadr…';
     poller = setInterval(pollStatus, 1000);
   });
 }

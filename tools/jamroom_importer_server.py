@@ -199,6 +199,41 @@ def run_prepare(url, band, title):
         BUSY.release()
 
 
+def run_prepare_library(asset_id, band, title, duration, allow_new_splits=True):
+    """Same as run_prepare, but the song is already split on Fadr: skip the
+    download, the upload and the main split.
+
+    Sub-splits (lead/backing vocals, guitars/keys) are only free if they were
+    already done on that asset. When they were not and the operator declined to
+    pay, fall back to the four main stems rather than silently billing them."""
+    try:
+        cfg = ji.load_config(None)
+        if not allow_new_splits:
+            cfg = dict(cfg)
+            cfg["vocal_split"] = False
+            cfg["melodic_split"] = False
+            _ui_log("Extra splits declined — importing the main stems only, "
+                    "so nothing is charged.")
+        job_dir, job = ji.job_from_existing_asset(cfg, asset_id, band, title, duration)
+        CURRENT["job_dir"] = job_dir
+        _ui_log(f"Job folder: {job_dir}")
+        _ui_log("Using an already-split song from your Fadr library — "
+                "no upload, no split, no charge.")
+        ji.stage_fadr(job, job_dir, cfg, True)
+        ji.stage_chords(job, job_dir, True)
+        ji.stage_lyrics(job, job_dir, False)
+        ji.stage_lyrics_align(job, job_dir, False)
+        STATE["review"] = build_review(job, job_dir, cfg)
+        STATE["state"] = "review"
+        _ui_log("Ready for review.")
+    except Exception as e:  # noqa: BLE001
+        STATE["summary"] = str(e)
+        STATE["state"] = "failed"
+        _ui_log(f"FAILED: {e}")
+    finally:
+        BUSY.release()
+
+
 def run_apply(slots, labels, lyrics_offset):
     try:
         cfg = ji.load_config(None)
@@ -322,6 +357,11 @@ class Handler(BaseHTTPRequestHandler):
             self._send(200, checks())
         elif self.path == "/api/status":
             self._send(200, STATE)
+        elif self.path == "/api/library":
+            try:
+                self._send(200, {"songs": ji.fadr_library(ji.load_config(None))})
+            except Exception as e:  # noqa: BLE001
+                self._send(500, {"error": str(e)})
         elif self.path.startswith("/api/audio"):
             self._serve_audio()
         else:
@@ -348,6 +388,22 @@ class Handler(BaseHTTPRequestHandler):
                                  args=(body.get("url", ""),
                                        body.get("band", ""),
                                        body.get("title", "")),
+                                 daemon=True).start()
+                self._send(200, {"ok": True})
+            elif self.path == "/api/import_library":
+                if STATE["state"] in ("preparing", "applying", "review"):
+                    self._send(409, {"error": "An import is already in "
+                                     "progress — finish or cancel it first."})
+                    return
+                BUSY.acquire()
+                STATE.update({"state": "preparing", "log": [], "summary": "",
+                              "review": None,
+                              "song": f"{body.get('band')} - {body.get('title')}"})
+                threading.Thread(target=run_prepare_library,
+                                 args=(body.get("id", ""), body.get("band", ""),
+                                       body.get("title", ""),
+                                       body.get("duration", 0),
+                                       bool(body.get("allow_new_splits", True))),
                                  daemon=True).start()
                 self._send(200, {"ok": True})
             elif self.path == "/api/apply":

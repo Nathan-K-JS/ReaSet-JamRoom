@@ -232,6 +232,26 @@ def _download_any_client(out, url, wav):
     return False, last
 
 
+def job_from_existing_asset(cfg, asset_id, band, title, duration):
+    """Prepare a job that reuses an already-split Fadr asset: no YouTube
+    download, no upload, no split task — and therefore no charge."""
+    band = sanitize_region_name(band)
+    title = sanitize_region_name(title)
+    if not band or not title:
+        die("Band and song title are both required.")
+    job_dir = Path(cfg["jobs_dir"]) / sanitize_filename(f"{band} - {title}")
+    job = load_job(job_dir)
+    job.update({"band": band, "title": title,
+                "region_name": f"{band} - {title}",
+                "duration": float(duration or 0)})
+    job.setdefault("source", {})["from_fadr_library"] = asset_id
+    job.setdefault("fadr", {})["asset_id"] = asset_id
+    job["stages"]["download"] = True          # there is nothing to download
+    job["stages"].pop("fadr", None)           # re-collect stems from the asset
+    save_job(job_dir, job)
+    return job_dir, job
+
+
 def stage_download(job, job_dir, url, force):
     if job["stages"].get("download") and not force:
         log("Download stage already done — skipping.")
@@ -282,8 +302,13 @@ class Fadr:
             die(f"Fadr {what} failed (HTTP {r.status_code}): {r.text[:800]}")
         return r.json()
 
-    def upload(self, path):
-        name = path.name
+    def upload(self, path, display_name=None):
+        # Name the upload after the song, not "source.wav" — this is what shows
+        # in the Fadr library, and it is how an already-paid-for split is found
+        # again later instead of being re-uploaded and re-charged.
+        name = sanitize_filename(display_name or path.name)
+        if not name.lower().endswith(".wav"):
+            name += ".wav"
         j = self._check(self.s.post(f"{FADR_API}/assets/upload2",
                                     json={"name": name, "extension": "wav"},
                                     timeout=60), "create upload URL")
@@ -432,6 +457,77 @@ class Fadr:
         return dest
 
 
+def known_asset_names(cfg):
+    """asset_id -> "Band - Song", learned from jobs imported on this machine.
+    Older uploads were all called "source.wav" on Fadr, so this is what makes
+    them identifiable in the library list."""
+    out = {}
+    jobs = Path(cfg.get("jobs_dir") or (REPO_ROOT / "imports"))
+    if not jobs.is_dir():
+        return out
+    for jf in jobs.glob("*/job.json"):
+        try:
+            j = json.loads(jf.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError):
+            continue
+        aid = (j.get("fadr") or {}).get("asset_id")
+        if aid and j.get("region_name"):
+            out[aid] = j["region_name"]
+    return out
+
+
+def fadr_library(cfg):
+    """Every already-split song on the Fadr account, newest first.
+
+    Uses GET /assets — undocumented, but it is the only way to find work you
+    have already paid to split. Only 'upload' assets are songs; the rest are
+    the stems and analysis hanging off them.
+    """
+    key = cfg.get("fadr_api_key", "")
+    if not key or key.startswith("PASTE"):
+        die("No Fadr API key in config.")
+    fadr = Fadr(key)
+    r = fadr._check(fadr.s.get(f"{FADR_API}/assets", timeout=60), "list assets")
+    all_assets = r.get("assets") or []
+    by_id = {a.get("_id"): a for a in all_assets}
+    known = known_asset_names(cfg)
+    out = []
+    for a in all_assets:
+        if a.get("assetType") != "upload" or a.get("deleted"):
+            continue
+        md = a.get("metaData") or {}
+        rate = md.get("sampleRate") or 44100
+        length = md.get("length") or 0
+        aid = a.get("_id")
+        raw = (a.get("name") or "").rsplit(".", 1)[0]
+        # Are the vocal/melodic sub-splits already done? If not, importing with
+        # splits enabled creates them, and THAT is billable — so the UI must not
+        # promise "free". The stem children are in this same listing, so this
+        # costs no extra API calls.
+        subs_done = 0
+        for sid in a.get("stems") or []:
+            child = by_id.get(sid) or {}
+            st = norm_stem_type((child.get("metaData") or {}).get("stemType") or "")
+            if st in ("vocals", "other") and (child.get("stems") or []):
+                subs_done += 1
+        out.append({
+            "id": aid,
+            # Prefer the name we recorded locally: early uploads are all
+            # called "source.wav" on Fadr and cannot be told apart otherwise.
+            "name": known.get(aid) or raw,
+            "fadr_name": raw,
+            "named_locally": aid in known,
+            "stems": len(a.get("stems") or []),
+            "subsplits_done": subs_done,       # 2 == nothing left to pay for
+            "has_chords": bool(a.get("midi")),
+            "key": md.get("key"), "tempo": md.get("tempo"),
+            "duration": round(length / rate, 1) if rate else 0,
+            "created": (a.get("createdTimestamp") or "")[:10],
+        })
+    out.sort(key=lambda x: x["created"], reverse=True)
+    return out
+
+
 def stem_display_name(asset):
     """What instrument a stem asset is: metaData.stemType (verified real field),
     falling back to the name suffix Fadr appends ('source.wav-vocals')."""
@@ -469,7 +565,8 @@ def stage_fadr(job, job_dir, cfg, force):
         except SystemExit:
             raise
     if main_asset is None:
-        src_asset = fadr.upload(job_dir / "source.wav")
+        src_asset = fadr.upload(job_dir / "source.wav",
+                                display_name=job.get("region_name"))
         task = fadr.wait_task(fadr.stem_task(src_asset["_id"])["_id"],
                               "main stem split")
         main_asset = fadr.asset(task["asset"]["_id"])
