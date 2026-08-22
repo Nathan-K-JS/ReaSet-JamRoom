@@ -91,26 +91,44 @@ Final functional validation was performed in REAPER with real setlist usage test
 ---
 
 ## 4) Requirements
+
+> **Installing from scratch? Follow [docs/FRESH_INSTALL.md](docs/FRESH_INSTALL.md)**
+> — a complete, ordered walkthrough. This section is the summary.
+
 ### Software
 1. **REAPER** (v5+ recommended; latest preferred).
-2. A web browser (desktop/tablet/mobile).
-3. A REAPER project with regions (typically one region per song).
+2. **SWS extension** — <https://www.sws-extension.org>. Required, not optional:
+   the lyrics/chords scripts read item notes via `ULT_GetMediaItemNote` and the
+   song importer writes them via `ULT_SetMediaItemNote`. Without SWS, lyrics and
+   chords silently never appear.
+3. REAPER's **Web browser interface** enabled (Options → Preferences →
+   Control/OSC/web → Add), default port 8080.
+4. A web browser (desktop/tablet/mobile).
+5. A REAPER project with regions (typically one region per song).
 
 ### Minimum files
 - `ReaSet.html`
 - `Sortable.min.js`
-- Scripts in `Requirements/`:
-  - `X-Raym_Convert Lyrics track items notes for dedicated web browser interface.lua`
-  - `X-Raym_Convert Chords track items notes for dedicated web browser interface.lua`
+- (`main.js` is served by REAPER itself — do not copy it.)
+
+### Background scripts in `Requirements/` — all must be *running*
+- `ReaSet_NativeLoop.lua` — REAPER-native looping. Absent, ReaSet silently falls
+  back to a JavaScript timer loop.
+- `ReaSet_JamRoom.lua` — the TRACKS tab (per-song backing-group mutes).
+- `X-Raym_Convert Lyrics track items notes for dedicated web browser interface.lua`
+- `X-Raym_Convert Chords track items notes for dedicated web browser interface.lua`
+
+They stop when REAPER closes. **`ReaSet_Startup.lua` starts all four in one
+action** — set it as REAPER's startup action, or install it as
+`%APPDATA%\REAPER\Scripts\__startup.lua`. (REAPER's startup slot only holds one
+action, which is why that wrapper exists.)
 
 ### Required tracks for lyrics/chords
 - Track named exactly: `lyrics`
 - Track named exactly: `chords`
 - Each item must contain text in **Item Notes**.
-
-### Script compatibility
-Scripts use `reaper.ULT_GetMediaItemNote`.
-- If your REAPER build does not recognize it, install a compatible scripting/API environment (e.g., Ultraschall API) or adapt note reading.
+- Create these **before** running the X-Raym scripts — they abort with a modal
+  error box if the tracks are missing, and a modal freezes REAPER.
 
 ---
 
@@ -299,11 +317,24 @@ ReaSet inherently supports the following global keyboard bindings to streamline 
 - Check if Chords script is running.
 
 ### ❌ `ULT_GetMediaItemNote` error
-- Missing compatible scripting/API environment; install dependency or adapt script.
+- The **SWS extension** is not installed. Get it from <https://www.sws-extension.org>
+  and restart REAPER.
 
 ### ❌ No interface data/control
 - Verify Web Interface is enabled and reachable.
-- Verify `main.js` loads from the same folder.
+- `main.js` is served by REAPER itself; it should NOT be a file you copied.
+
+### ❌ Everything worked yesterday, nothing works today
+- The background scripts stop when REAPER closes. Run `ReaSet_Startup.lua`, and
+  set it as the startup action so this stops happening.
+
+### ❌ TRACKS tab says the bridge is not running
+- Run `ReaSet_JamRoom.lua` (or `ReaSet_Startup.lua`).
+
+### ❌ REAPER seems frozen / the importer gets no response
+- Look for a modal dialog waiting for a click — a REAScript error box, or
+  REAPER's own evaluation-licence nag. Modals block everything, including the
+  web interface.
 
 ---
 

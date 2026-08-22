@@ -8,27 +8,30 @@ ReaSet's Lyrics/Chords views. One command per song, then a short review pass.
 
 ## One-time setup (on whichever PC runs imports)
 
-0. **Get this repo onto the PC** (copy the whole folder or `git clone`,
-   e.g. to `C:\JamRoom\ReaSet-JamRoom`) and deploy the current `ReaSet.html`
-   into REAPER's web root (`%APPDATA%\REAPER\reaper_www_root`). Everything
-   the importer needs lives in `tools/`; songs it downloads land in
-   `imports/` next to it.
-1. **Double-click `JamRoom Setup.bat`** (repo root). It installs the free
-   tools (Python, yt-dlp, ffmpeg) and prepares the config. (Equivalent
-   manual route: `winget install Python.Python.3.12 yt-dlp.yt-dlp
-   Gyan.FFmpeg`, then `pip install requests numpy`.)
-2. **Fadr API key** (needs the Fadr Plus subscription, $10/mo):
+> Setting up a machine from scratch? Do [FRESH_INSTALL.md](FRESH_INSTALL.md)
+> first — it covers REAPER, SWS, the web interface, the scripts and the project
+> layout. This section is only the importer's own requirements.
+
+1. **Get this repo onto the PC** — `git clone` to `C:\JamRoom` (see the next
+   section). Everything the importer needs lives in `tools/`; songs it
+   downloads land in `imports/` beside it.
+2. **Double-click `JamRoom Setup.bat`** (repo root). It installs the free
+   tools (Python, yt-dlp, ffmpeg), prepares the config, and deploys
+   `ReaSet.html` into REAPER's web root. (Equivalent manual route:
+   `winget install Python.Python.3.12 yt-dlp.yt-dlp Gyan.FFmpeg`, then
+   `pip install requests numpy`.)
+3. **Fadr API key** (needs the Fadr Plus subscription, $10/mo):
    log in at fadr.com → account page → **API tab** → *Create New API Key*.
    The importer page asks for it on first launch and stores it locally
    (gitignored `tools/jamroom_import.config.json`).
-4. REAPER must have the **SWS extension** (already required by ReaSet's
-   lyrics/chords setup) and the project should contain the ten permanent
-   **PB buses** (see `docs/JAMROOM_SETUP.md`).
-5. The REAPER **web interface** must be enabled (it already is for ReaSet).
-   On the first import the tool registers `jamroom_import_apply.lua` as a
-   REAPER action (persisted), then triggers every apply through the web API
-   of the running instance — if auto-registration fails, run
-   `tools/jamroom_register_apply.lua` once from the Action list.
+4. REAPER needs the **SWS extension** and the project needs the ten permanent
+   **PB buses** plus tracks named `lyrics` and `chords`
+   (see [JAMROOM_SETUP.md](JAMROOM_SETUP.md)).
+5. The REAPER **web interface** must be enabled. On the first import the tool
+   registers `jamroom_import_apply.lua` as a REAPER action (persisted), then
+   triggers every apply through the web API of the running instance — if
+   auto-registration fails, run `tools/jamroom_register_apply.lua` once from
+   the Action list.
 
 ## Getting it onto the jam room PC / updating it
 
