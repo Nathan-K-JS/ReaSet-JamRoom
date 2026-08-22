@@ -80,7 +80,9 @@
   .note { color: #9aa0a6; font-size: .82rem; margin-top: 6px; }
   .firstline { background: #12141a; border-radius: 8px; padding: 10px;
                margin-top: 6px; font-style: italic; }
-  .hide { display: none; }
+  /* Must out-specify any id rule that sets display (e.g. #delOverlay's flex),
+     or .hide silently does nothing and the element is stuck visible. */
+  .hide, #delOverlay.hide { display: none !important; }
 </style>
 </head>
 <body>
