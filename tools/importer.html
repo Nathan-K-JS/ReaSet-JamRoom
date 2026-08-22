@@ -9,6 +9,10 @@
   body { background: #14161a; color: #e8eaed; font-family: system-ui, sans-serif;
          max-width: 680px; margin: 0 auto; padding: 16px; }
   h1 { font-size: 1.3rem; margin: 8px 0 2px; }
+  .vbadge { font-size: .78rem; font-weight: 600; color: #9fd0ff;
+            background: #17304d; border: 1px solid #2f6fed; border-radius: 999px;
+            padding: 3px 10px; vertical-align: middle; margin-left: 6px;
+            white-space: nowrap; }
   h2 { font-size: 1.05rem; margin-bottom: 6px; }
   .sub { color: #9aa0a6; font-size: .85rem; margin-bottom: 14px; }
   .card { background: #1d2026; border: 1px solid #2c3038;
@@ -56,7 +60,7 @@
 </style>
 </head>
 <body>
-  <h1>🎸 Jam Room Importer</h1>
+  <h1>🎸 Jam Room Importer <span class="vbadge" id="verBadge">…</span></h1>
   <div class="sub">Search → pick → listen &amp; assign → apply.</div>
 
   <div class="card" id="checksCard">
@@ -133,9 +137,14 @@ function refreshChecks(){
     $('checksList').innerHTML = rows.map(function(r){
       return '<div class="check ' + (r[0]?'ok':'bad') + '">' + (r[0]?r[1]:r[2]) + '</div>';
     }).join('')
-      + (c.lan ? '<div class="check" style="color:#9aa0a6">Tablet URL: ' + c.lan + '</div>' : '')
-      + '<div class="check" style="color:#9aa0a6">Running build: ' + (c.build || '?')
-      + '</div>';
+      + (c.lan ? '<div class="check" style="color:#9aa0a6">Tablet URL: ' + c.lan + '</div>' : '');
+    var badge = $('verBadge');
+    if (badge) {
+      badge.textContent = (c.build || '?') + (c.build_date ? ' · ' + c.build_date : '');
+      badge.title = 'Version of the importer actually running. If this is not '
+                  + 'the version you expect, close this window and restart '
+                  + 'JamRoom Importer.bat.';
+    }
     $('keyBox').classList.toggle('hide', c.key);
     window._splits = c.splits;
   });

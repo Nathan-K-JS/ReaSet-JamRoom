@@ -165,6 +165,15 @@ it off again, with a notice.
   right project **tab active**? Check REAPER's ReaScript console; the apply
   script can also be run manually from the Action list (the job pointer
   stays set). Dismiss any modal dialog REAPER is showing first.
+- *Checking which version you are running* — the importer page shows a version
+  badge next to its title (e.g. `v1.1 · 2026-08-22`). It reports the code
+  actually running, not the files on disk, so if it is not the version you
+  expect after an update, close the importer window and start it again.
+- *Stem downloads slow or repeatedly reconnecting* — Fadr's storage throttles
+  individual connections unpredictably. Stems download four at a time, each
+  with resume and a watchdog that drops a connection stuck below 150 KB/s;
+  "reconnecting..." lines are it working, not failing. Set `download_workers`
+  in the config to change how many run at once.
 - *YouTube download errors* (HTTP 403, "SABR-only streaming experiment",
   "formats have been skipped as they are missing a URL") — YouTube changes
   something every few weeks and yt-dlp ships a fix within days. The importer

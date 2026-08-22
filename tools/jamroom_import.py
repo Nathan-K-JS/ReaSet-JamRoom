@@ -21,7 +21,9 @@ import re
 import shutil
 import subprocess
 import sys
+import threading
 import time
+from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 
 import requests
@@ -29,7 +31,13 @@ import requests
 # Stamped into the CODE, so it reports what is actually running rather than
 # what is on disk — the importer server holds its modules in memory, so this is
 # how you tell "did the update take effect?" from "is the old process still up?"
-BUILD = "2026-08-22 download-watchdog"
+# BUMP THIS whenever the importer changes, and quote it when handing over.
+BUILD = "v1.1"
+BUILD_DATE = "2026-08-22"
+
+# Fadr's S3 throttles each connection independently, so several transfers at
+# once finish far sooner than one at a time. Overridable via config.
+DOWNLOAD_WORKERS = 4
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 DEFAULT_CONFIG = Path(__file__).resolve().parent / "jamroom_import.config.json"
@@ -264,6 +272,10 @@ class Fadr:
         self.s = requests.Session()
         self.s.headers.update({"Authorization": f"Bearer {api_key}",
                                "User-Agent": USER_AGENT})
+        # requests.Session is not guaranteed thread-safe; downloads run in
+        # parallel, so guard the shared session. The bulk transfer itself uses
+        # a standalone request and needs no lock.
+        self._lock = threading.Lock()
 
     def _check(self, r, what):
         if r.status_code >= 400:
@@ -361,9 +373,10 @@ class Fadr:
         for attempt in range(1, attempts + 1):
             try:
                 # Presigned URLs are short-lived, so mint a fresh one each try.
-                j = self._check(
-                    self.s.get(f"{FADR_API}/assets/download/{asset_id}/hq",
-                               timeout=30), "presign download")
+                with self._lock:
+                    j = self._check(
+                        self.s.get(f"{FADR_API}/assets/download/{asset_id}/hq",
+                                   timeout=30), "presign download")
                 have = part.stat().st_size if part.exists() else 0
                 headers = {"Range": f"bytes={have}-"} if have else {}
                 # (connect, read) — a stall raises after 45s instead of hanging
@@ -502,24 +515,40 @@ def stage_fadr(job, job_dir, cfg, force):
         else:
             final_stems.append(a)
 
-    # Download stems and map to slots.
+    # Download stems in parallel — Fadr throttles per connection, so several at
+    # once is dramatically faster than one at a time, and each has its own
+    # watchdog and resume.
     slot_map = {norm_stem_type(k): v for k, v in cfg["slot_map"].items()}
-    job["stems"], unmapped, seen = [], [], {}
+    wanted, seen = [], {}
     for a in final_stems:
         name = stem_display_name(a)
         if name in IGNORED_STEMS:
             continue
         seen[name] = seen.get(name, 0) + 1
         base = name if seen[name] == 1 else f"{name}-{seen[name]}"
+        wanted.append((a, name, base))
+
+    workers = max(1, min(int(cfg.get("download_workers", DOWNLOAD_WORKERS)),
+                         len(wanted) or 1))
+    log(f"Downloading {len(wanted)} stems, {workers} at a time...")
+    results = [None] * len(wanted)
+    done = {"n": 0}
+
+    def fetch(i):
+        a, name, base = wanted[i]
         fname = sanitize_filename(f"{base}.wav")
-        log(f"Downloading stem {len(job['stems']) + 1} of {len(final_stems)}: {base}")
         fadr.download(a["_id"], stems_dir / fname, label=base)
         wav = ensure_riff_wav(stems_dir / fname)
-        slot = slot_map.get(name)
-        job["stems"].append({"fadr_name": name, "file": f"stems/{wav.name}",
-                             "slot": slot})
-        if not slot:
-            unmapped.append(name)
+        results[i] = {"fadr_name": name, "file": f"stems/{wav.name}",
+                      "slot": slot_map.get(name)}
+        done["n"] += 1
+        log(f"  [{done['n']} of {len(wanted)}] {base} done")
+
+    with ThreadPoolExecutor(max_workers=workers) as ex:
+        list(ex.map(fetch, range(len(wanted))))   # re-raises worker failures
+
+    job["stems"] = [r for r in results if r]
+    unmapped = [r["fadr_name"] for r in job["stems"] if not r["slot"]]
     if unmapped:
         log(f"WARNING: no slot mapping for stems: {unmapped} — they were "
             f"downloaded but will be skipped by the apply step until you add "

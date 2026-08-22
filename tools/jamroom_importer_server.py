@@ -73,7 +73,8 @@ def checks():
            "reaper": False, "lan": lan_url(), "splits": True,
            # Reports the running code, not the files on disk: if this looks old
            # after an update, the server simply needs restarting.
-           "build": getattr(ji, "BUILD", "pre-2026-08-22 (restart the importer)")}
+           "build": getattr(ji, "BUILD", "v1.0-or-older"),
+           "build_date": getattr(ji, "BUILD_DATE", "")}
     cfg = None
     if out["config"]:
         try:
