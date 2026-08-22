@@ -70,7 +70,10 @@ def checks():
     out = {"config": CONFIG_PATH.exists(), "key": False,
            "ytdlp": bool(shutil.which("yt-dlp")),
            "ffmpeg": bool(shutil.which("ffmpeg")),
-           "reaper": False, "lan": lan_url(), "splits": True}
+           "reaper": False, "lan": lan_url(), "splits": True,
+           # Reports the running code, not the files on disk: if this looks old
+           # after an update, the server simply needs restarting.
+           "build": getattr(ji, "BUILD", "pre-2026-08-22 (restart the importer)")}
     cfg = None
     if out["config"]:
         try:

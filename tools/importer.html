@@ -132,7 +132,10 @@ function refreshChecks(){
     ];
     $('checksList').innerHTML = rows.map(function(r){
       return '<div class="check ' + (r[0]?'ok':'bad') + '">' + (r[0]?r[1]:r[2]) + '</div>';
-    }).join('') + (c.lan ? '<div class="check" style="color:#9aa0a6">Tablet URL: ' + c.lan + '</div>' : '');
+    }).join('')
+      + (c.lan ? '<div class="check" style="color:#9aa0a6">Tablet URL: ' + c.lan + '</div>' : '')
+      + '<div class="check" style="color:#9aa0a6">Running build: ' + (c.build || '?')
+      + '</div>';
     $('keyBox').classList.toggle('hide', c.key);
     window._splits = c.splits;
   });

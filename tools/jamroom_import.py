@@ -26,6 +26,11 @@ from pathlib import Path
 
 import requests
 
+# Stamped into the CODE, so it reports what is actually running rather than
+# what is on disk — the importer server holds its modules in memory, so this is
+# how you tell "did the update take effect?" from "is the old process still up?"
+BUILD = "2026-08-22 download-watchdog"
+
 REPO_ROOT = Path(__file__).resolve().parent.parent
 DEFAULT_CONFIG = Path(__file__).resolve().parent / "jamroom_import.config.json"
 FADR_API = "https://api.fadr.com"
@@ -352,7 +357,7 @@ class Fadr:
         # never trips the read timeout, it just crawls, so watch the rate and
         # reconnect — a fresh connection usually gets a healthy path, and the
         # resume logic below means nothing already transferred is lost.
-        SLOW_KBPS, SLOW_WINDOW = 150, 20
+        SLOW_KBPS, SLOW_WINDOW = 150, 10
         for attempt in range(1, attempts + 1):
             try:
                 # Presigned URLs are short-lived, so mint a fresh one each try.
@@ -389,7 +394,10 @@ class Fadr:
                                 rate = win_b / max(now - win_t, 0.001) / 1024
                                 log(f"    {label}: {pct}({got / 1e6:.1f} MB, "
                                     f"{rate:.0f} KB/s)")
-                            if now - win_t >= SLOW_WINDOW:
+                            # Chase a faster connection for the first few
+                            # attempts; after that take whatever we are given,
+                            # because a slow download still beats a failed one.
+                            if now - win_t >= SLOW_WINDOW and attempt <= 4:
                                 rate = win_b / (now - win_t) / 1024
                                 if rate < SLOW_KBPS:
                                     raise requests.RequestException(
