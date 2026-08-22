@@ -42,9 +42,21 @@ downloaded audio.
 
 Deleting removes only that song's region, stems, lyrics and chords. The PB and
 `[JR:…]` buses, every other song, and the paid-for split on Fadr are untouched
-— and **one Ctrl+Z in REAPER puts the whole song back** (files, if you deleted
-those too, are not restored by undo). Re-importing afterwards is free via the
-Fadr library tab.
+— and **one Ctrl+Z in REAPER puts the whole song back** (deleted audio is not
+restored by undo).
+
+### Keep the audio, or not?
+
+- **Keep it** (default): the song appears under *"Downloaded on this PC but not
+  in the project"* with a **Re-add now** button that puts it back in seconds,
+  with no internet and no Fadr. Costs ~0.5 GB.
+- **Delete it**: reclaims the space. Putting the song back then means
+  re-importing from the Fadr library — free, but a few minutes and it needs
+  Fadr to be reachable.
+
+Either way the tiny job record is kept, which is what makes the Fadr library
+show a real song name instead of "source", and what restores the groups and
+custom names you chose in the review screen last time.
 
 ## How big can the project get?
 

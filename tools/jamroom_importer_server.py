@@ -142,11 +142,19 @@ def _preview_file(job_dir, stem_file):
 
 def build_review(job, job_dir, cfg):
     slot_map = {ji.norm_stem_type(k): v for k, v in cfg["slot_map"].items()}
+    # Decisions made last time this song was reviewed win over the config
+    # guesses, so re-importing or re-adding does not make you redo the work.
+    prev_slots = job.get("slot_overrides") or {}
+    prev_labels = job.get("label_overrides") or {}
+    default_labels = cfg["slot_labels"]
     stems = []
     for s in job.get("stems", []):
-        guess = slot_map.get(ji.norm_stem_type(s["fadr_name"])) or "SKIP"
+        slot = prev_slots.get(s["file"]) \
+            or slot_map.get(ji.norm_stem_type(s["fadr_name"])) or "SKIP"
         stems.append({"file": s["file"], "name": s["fadr_name"],
-                      "slot": guess,
+                      "slot": slot,
+                      "label": prev_labels.get(slot)
+                               or default_labels.get(slot, ""),
                       "audio": "/api/audio?f=" +
                                _preview_file(job_dir, s["file"]).name})
     ly = job.get("lyrics") or {}
@@ -299,17 +307,113 @@ def delete_song(name, start, end, delete_files):
         raise RuntimeError("REAPER did not confirm the delete. " + why.strip())
 
     result = receipt.read_text(encoding="utf-8").strip()
-    freed = 0
     if delete_files:
-        folder = Path(cfg.get("jobs_dir") or (ji.REPO_ROOT / "imports")) \
-                 / ji.sanitize_filename(name)
-        # Refuse anything that is not a job folder directly under jobs_dir.
-        jobs_dir = Path(cfg.get("jobs_dir") or (ji.REPO_ROOT / "imports")).resolve()
-        if folder.is_dir() and folder.resolve().parent == jobs_dir:
-            freed = _dir_size(folder)
-            shutil.rmtree(folder, ignore_errors=True)
-            result += f" files_deleted={round(freed / 1e6)}MB"
+        freed = delete_song_audio(cfg, name)
+        result += f" audio_deleted={round(freed / 1e6)}MB"
     return result
+
+
+def delete_song_audio(cfg, name):
+    """Delete a song's bulky audio but KEEP job.json and the chord/MIDI files.
+
+    The audio is ~99% of the folder. The job record is a few KB and is worth
+    keeping: it maps the Fadr asset id back to a readable song name (older
+    uploads are all called "source.wav" on Fadr and are otherwise
+    unidentifiable), and it holds the slot assignments, custom group names and
+    lyric offset chosen in the review screen, so a later re-import restores
+    those decisions instead of asking again.
+    """
+    jobs_dir = Path(cfg.get("jobs_dir") or (ji.REPO_ROOT / "imports")).resolve()
+    folder = jobs_dir / ji.sanitize_filename(name)
+    # Refuse anything that is not a job folder directly under jobs_dir.
+    if not folder.is_dir() or folder.resolve().parent != jobs_dir:
+        return 0
+    freed = 0
+    for sub in ("stems", "slots"):
+        p = folder / sub
+        if p.is_dir():
+            freed += _dir_size(p)
+            shutil.rmtree(p, ignore_errors=True)
+    src = folder / "source.wav"
+    if src.is_file():
+        freed += src.stat().st_size
+        src.unlink(missing_ok=True)
+    # Mark it so the UI knows the audio is gone without statting every file.
+    try:
+        job = ji.load_job(folder)
+        job["audio_deleted"] = True
+        ji.save_job(folder, job)
+    except Exception:  # noqa: BLE001 — bookkeeping only
+        pass
+    return freed
+
+
+def job_has_audio(folder):
+    stems = Path(folder) / "stems"
+    return stems.is_dir() and any(stems.glob("*.riff.wav"))
+
+
+def orphan_jobs():
+    """Songs downloaded on this machine that are NOT currently in the project.
+
+    Those that still have their audio can be put back instantly and offline —
+    every pipeline stage skips when its work is already cached.
+    """
+    cfg = ji.load_config(None)
+    jobs_dir = Path(cfg.get("jobs_dir") or (ji.REPO_ROOT / "imports"))
+    if not jobs_dir.is_dir():
+        return []
+    try:
+        in_project = {s["name"] for s in project_songs()}
+    except Exception:  # noqa: BLE001 — REAPER unreachable; show everything
+        in_project = set()
+    out = []
+    for jf in sorted(jobs_dir.glob("*/job.json")):
+        try:
+            job = json.loads(jf.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError):
+            continue
+        name = job.get("region_name")
+        if not name or name in in_project:
+            continue
+        folder = jf.parent
+        out.append({
+            "name": name,
+            "has_audio": job_has_audio(folder),
+            "size_mb": round(_dir_size(folder) / 1e6),
+            "duration": round(job.get("duration") or 0, 1),
+            "asset_id": (job.get("fadr") or {}).get("asset_id"),
+        })
+    return out
+
+
+def run_readd_local(name):
+    """Put a previously-downloaded song back into the project using the local
+    files — no Fadr, no internet, no waiting. Every stage is already cached, so
+    this only rebuilds the review screen from the saved job."""
+    try:
+        cfg = ji.load_config(None)
+        jobs_dir = Path(cfg.get("jobs_dir") or (ji.REPO_ROOT / "imports"))
+        job_dir = jobs_dir / ji.sanitize_filename(name)
+        job = ji.load_job(job_dir)
+        if not job.get("region_name"):
+            raise RuntimeError("No saved job for that song.")
+        if not job_has_audio(job_dir):
+            raise RuntimeError("The audio for this song was deleted. Re-import "
+                               "it from the Fadr library tab instead (free).")
+        CURRENT["job_dir"] = job_dir
+        _ui_log(f"Job folder: {job_dir}")
+        _ui_log("Re-adding from the local files — nothing to download.")
+        STATE["review"] = build_review(job, job_dir, cfg)
+        STATE["state"] = "review"
+        _ui_log("Ready for review — your previous group and name choices are "
+                "already filled in.")
+    except Exception as e:  # noqa: BLE001
+        STATE["summary"] = str(e)
+        STATE["state"] = "failed"
+        _ui_log(f"FAILED: {e}")
+    finally:
+        BUSY.release()
 
 
 def run_prepare_library(asset_id, band, title, duration, allow_new_splits=True):
@@ -476,6 +580,11 @@ class Handler(BaseHTTPRequestHandler):
             except Exception as e:  # noqa: BLE001
                 self._send(500, {"error": "Could not read the project from "
                                           "REAPER: " + str(e)})
+        elif self.path == "/api/orphans":
+            try:
+                self._send(200, {"jobs": orphan_jobs()})
+            except Exception as e:  # noqa: BLE001
+                self._send(500, {"error": str(e)})
         elif self.path == "/api/library":
             try:
                 self._send(200, {"songs": ji.fadr_library(ji.load_config(None))})
@@ -535,6 +644,18 @@ class Handler(BaseHTTPRequestHandler):
                                  args=(body.get("slots") or {},
                                        body.get("labels") or {},
                                        body.get("lyrics_offset")),
+                                 daemon=True).start()
+                self._send(200, {"ok": True})
+            elif self.path == "/api/readd":
+                if STATE["state"] in ("preparing", "applying", "review"):
+                    self._send(409, {"error": "An import is already in "
+                                     "progress — finish or cancel it first."})
+                    return
+                BUSY.acquire()
+                STATE.update({"state": "preparing", "log": [], "summary": "",
+                              "review": None, "song": body.get("name", "")})
+                threading.Thread(target=run_readd_local,
+                                 args=(body.get("name", ""),),
                                  daemon=True).start()
                 self._send(200, {"ok": True})
             elif self.path == "/api/delete_song":

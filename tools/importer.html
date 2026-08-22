@@ -129,6 +129,11 @@
       and its stems, lyrics and chords from the project. Your PB and
       <b>[JR:…]</b> buses, every other song, and the paid-for split on Fadr are
       all left alone — and one <b>Ctrl+Z in REAPER</b> puts the song back.</div>
+
+    <div id="orphanWrap" class="hide">
+      <label style="margin-top:16px">Downloaded on this PC but not in the project</label>
+      <div id="orphanList"></div>
+    </div>
   </div>
 
   <!-- DELETE CONFIRMATION -->
@@ -142,8 +147,9 @@
              oninput="delCheck()" placeholder="type it exactly">
       <label style="display:flex;align-items:center;gap:8px;margin-top:12px">
         <input type="checkbox" id="delFiles" style="width:auto" onchange="delCheck()">
-        <span id="delFilesLab">Also delete the downloaded audio files</span>
+        <span id="delFilesLab">Also delete the downloaded audio</span>
       </label>
+      <div class="note" id="delFilesWhy" style="margin-top:4px"></div>
       <button id="delGo" disabled onclick="doDelete()"
               style="background:#b3261e">Delete permanently</button>
       <button class="ghost" onclick="closeDelete()">Cancel</button>
@@ -310,6 +316,52 @@ function loadSongs(){
       $('manList').appendChild(row);
     });
   });
+  loadOrphans();
+}
+
+// Songs downloaded here but not in the project: with their audio still on
+// disk they go back instantly, offline — which is the whole reason to keep it.
+function loadOrphans(){
+  fetch('/api/orphans').then(r=>r.json()).then(function(d){
+    var jobs = (d.jobs || []);
+    if(!jobs.length){ $('orphanWrap').classList.add('hide'); return; }
+    $('orphanWrap').classList.remove('hide');
+    $('orphanList').innerHTML = '';
+    jobs.forEach(function(j){
+      var row = document.createElement('div');
+      row.className = 'songrow';
+      row.innerHTML = '<div class="sname">' + j.name + '<br><small>'
+        + (j.has_audio
+            ? (j.size_mb + ' MB on disk · can be re-added instantly, no internet')
+            : 'audio deleted · re-import free from the Fadr library tab')
+        + '</small></div>';
+      var b = document.createElement('button');
+      b.className = 'delbtn';
+      if(j.has_audio){
+        b.style.color = '#9fd0ff'; b.style.borderColor = '#2f6fed';
+        b.textContent = 'Re-add now';
+        b.onclick = function(){ doReadd(j.name); };
+      } else {
+        b.textContent = 'No audio';
+        b.disabled = true;
+      }
+      row.appendChild(b);
+      $('orphanList').appendChild(row);
+    });
+  });
+}
+
+function doReadd(name){
+  reviewShown = false;
+  fetch('/api/readd', {method:'POST', headers:{'Content-Type':'application/json'},
+    body: JSON.stringify({name: name})})
+  .then(r=>r.json()).then(function(d){
+    if(d.error){ alert(d.error); return; }
+    $('progressCard').classList.remove('hide');
+    $('finalNote').classList.add('hide');
+    $('progTitle').textContent = 'Re-adding ' + name + ' from local files…';
+    poller = setInterval(pollStatus, 1000);
+  });
 }
 
 function askDelete(s){
@@ -323,8 +375,16 @@ function askDelete(s){
   $('delConfirm').value = '';
   $('delFiles').checked = false;
   $('delFilesLab').textContent = s.folder_mb
-    ? ('Also delete the downloaded audio files (frees ' + s.folder_mb + ' MB — re-importing from Fadr is free)')
-    : 'Also delete the downloaded audio files (none found locally)';
+    ? ('Also delete the downloaded audio (frees ' + s.folder_mb + ' MB)')
+    : 'Also delete the downloaded audio (none found locally)';
+  $('delFilesWhy').innerHTML = s.folder_mb
+    ? ('<b>Leave this unticked</b> and the song appears under "Downloaded on '
+       + 'this PC but not in the project", ready to <b>re-add instantly with no '
+       + 'internet</b>.<br><b>Tick it</b> to reclaim the ' + s.folder_mb
+       + ' MB; putting the song back then means re-importing from Fadr — free, '
+       + 'but a few minutes and it needs Fadr to be up. Either way your group '
+       + 'and name choices are remembered.')
+    : '';
   $('delFiles').disabled = !s.folder_mb;
   $('delOverlay').classList.remove('hide');
   $('delConfirm').focus();
@@ -466,7 +526,8 @@ function showReview(rv){
       rv.slot_choices.map(function(c){
         return '<option value="' + c[0] + '"' + (c[0]===st.slot?' selected':'') + '>' + c[1] + '</option>';
       }).join('') + '</select>';
-    var defLbl = rv.slot_labels[st.slot] || '';
+    // st.label carries the name chosen last time this song was reviewed.
+    var defLbl = st.label || rv.slot_labels[st.slot] || '';
     row.innerHTML = '<div class="stemname">' + st.name + '</div>' + sel +
       '<input class="lbl" type="text" data-file="' + st.file + '" value="' +
         defLbl.replace(/"/g,'&quot;') + '" placeholder="name shown in ReaSet">' +
