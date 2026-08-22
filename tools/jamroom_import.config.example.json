@@ -1,8 +1,8 @@
 {
+  "_comment": "Optional keys with sensible defaults, add only if yours differ: jobs_dir (default: the imports/ folder next to this repo), reaper_exe (default: C:/Program Files/REAPER (x64)/reaper.exe), reaper_web (default: http://localhost:8080), auto_apply (default: true), slot_labels (default names shown on ReaSet's mute screen).",
   "fadr_api_key": "PASTE-YOUR-FADR-API-KEY-HERE",
   "vocal_split": true,
   "melodic_split": true,
-  "jobs_dir": "c:/JamRoomDev/ReaSet-JamRoom/imports",
   "slot_map": {
     "drums": "DRUMS",
     "bass": "BASS",
