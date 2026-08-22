@@ -24,6 +24,13 @@ For the technical design, see `JAMROOM_DESIGN.md`.
 
 ## 2. Project template — the 10 permanent PB buses
 
+> **Build these automatically:** run
+> `Requirements/ReaSet_JamRoom_BuildBuses.lua` from the Action list. It creates
+> all ten buses (names, folders, hardware outputs, master send off), a
+> `[JR:…]` sub-bus inside each, and the `lyrics`/`chords` tracks — in one undo
+> step, and safe to re-run. The manual reference below is still worth reading so
+> you know what it built, and you should verify the routing against your X32.
+
 Create these ten tracks once per project (a saved project template is the easy
 way). Each is a **folder track**, never contains media itself, has its
 **hardware output** set to the channels below, and **master/parent send OFF**

@@ -45,6 +45,9 @@ local pointer = script_dir .. "jamroom_pending_job.txt"
 local f = io.open(pointer, "r")
 if not f then return fail("no pending job (missing " .. pointer .. ")") end
 local job_dir = trim(f:read("*a") or ""); f:close()
+-- Strip a UTF-8 BOM: editors (and PowerShell's -Encoding utf8) add one, and it
+-- would otherwise become part of the path and fail with "Invalid argument".
+job_dir = trim(job_dir:gsub("^\239\187\191", ""))
 if job_dir == "" then return fail("empty pending-job pointer") end
 job_dir = job_dir:gsub("\\", "/"):gsub("/$", "")
 

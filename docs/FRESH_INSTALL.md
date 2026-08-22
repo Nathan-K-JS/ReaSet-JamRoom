@@ -67,6 +67,7 @@ day-to-day operating is [JAMROOM_SETUP.md](JAMROOM_SETUP.md).
    | `X-Raym_Convert Lyrics …lua` | Lyrics view |
    | `X-Raym_Convert Chords …lua` | Chords view |
    | `ReaSet_Startup.lua` | Starts the four above in one go |
+   | `ReaSet_JamRoom_BuildBuses.lua` | Builds the project's track layout (stage 4) |
 
    Loading only registers them. They are started in stage 5 — **the order
    matters**, because the two X-Raym scripts abort with a modal error box if the
@@ -74,36 +75,47 @@ day-to-day operating is [JAMROOM_SETUP.md](JAMROOM_SETUP.md).
 
 ---
 
-## Stage 4 — Prepare the project
+## Stage 4 — Build the project
 
 9. Open (or create) the jam room project.
 
-10. Create two tracks named exactly **`lyrics`** and **`chords`**. They can stay
-    empty; the importer fills them. They must exist before stage 5.
+10. Actions → Show action list → run **`ReaSet_JamRoom_BuildBuses.lua`**
+    (`C:\JamRoom\Requirements\`). It builds the whole layout in one undo step:
 
-11. Create the **ten permanent PB buses** — folder tracks, no media of their
-    own, master/parent send **OFF**, each with its hardware output:
-
-    | Track name | REAPER outs | X32 returns |
+    | Track | Routing | X32 returns |
     |---|---|---|
-    | `PB DRUMS` | 1–2 | 17–18 |
-    | `PB PERC/FX` | 3 | 19 |
-    | `PB BASS` | 4 | 20 |
-    | `PB GTR 1` | 5–6 | 21–22 |
-    | `PB GTR 2` | 7–8 | 23–24 |
-    | `PB KEYS` | 9–10 | 25–26 |
-    | `PB BVs` | 11–12 | 27–28 |
-    | `PB LEAD VOX` | 13 | 29 |
-    | `PB CLICK` | 14 | 30 |
-    | `PB EXTRA` | 15–16 | 31–32 |
+    | `PB DRUMS` + `[JR:DRUMS] Drums` | out 1–2 stereo | 17–18 |
+    | `PB PERC/FX` + `[JR:PERC_FX] Perc/FX` | out 3 mono | 19 |
+    | `PB BASS` + `[JR:BASS] Bass` | out 4 mono | 20 |
+    | `PB GTR 1` + `[JR:GTR1] Guitar 1` | out 5–6 stereo | 21–22 |
+    | `PB GTR 2` + `[JR:GTR2] Guitar 2` | out 7–8 stereo | 23–24 |
+    | `PB KEYS` + `[JR:KEYS] Keys` | out 9–10 stereo | 25–26 |
+    | `PB BVs` + `[JR:BVS] Backing Vocals` | out 11–12 stereo | 27–28 |
+    | `PB LEAD VOX` + `[JR:LEAD_VOX] Lead Vocals` | out 13 mono | 29 |
+    | `PB CLICK` + `[JR:CLICK] Click` | out 14 mono | 30 |
+    | `PB EXTRA` + `[JR:EXTRA] Extras` | out 15–16 stereo | 31–32 |
 
-    Keep `PB CLICK` out of the room speakers on the X32 — in-ear mixes only.
-    Details and the reasoning: [JAMROOM_SETUP.md](JAMROOM_SETUP.md) §2.
+    …plus the **`lyrics`** and **`chords`** tracks the views need. Every PB bus
+    is a folder with **master send off**, so it feeds only the X32.
 
-12. **Save the project**, and save it as a project template while you are at it.
-    Saving matters for more than your work: ReaSet stamps a hidden ID into the
-    project to keep setlists attached to it, and that ID only persists once the
-    project has been saved.
+    It is safe to re-run: anything already present is left untouched and
+    reported, so it will never clobber routing you have adjusted by hand. It
+    also tells you if your audio device has fewer than 16 outputs.
+
+11. **Check the routing** in REAPER's routing matrix against your X32 before
+    trusting it live — the script sets hardware outputs exactly as if you had
+    added them by hand, so a mono bus takes the source's channel 1. On the X32,
+    keep `PB CLICK` (channel 30) out of the room speakers; in-ear mixes only.
+
+12. **Save the project**, and save it as a project template while you are at it
+    (File → Project templates → Save as template). Saving matters for more than
+    your work: ReaSet stamps a hidden ID into the project to keep setlists
+    attached to it, and that ID only persists once the project has been saved.
+
+> The `[JR:…]` sub-buses start empty, which is normal — a group only appears on
+> the tablet for songs that actually have audio on it. The importer reuses these
+> buses by name, and creates its own only when you give a stem a custom
+> per-song name in the review screen.
 
 ---
 
