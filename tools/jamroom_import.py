@@ -185,21 +185,62 @@ def guess_band_title(video_title, uploader):
 
 # ---------------------------------------------------------------- download
 
+# YouTube breaks extraction periodically (403s, the SABR rollout, ...), and the
+# fix moves around: an explicit player client that rescues one video can be the
+# very thing that breaks the next. yt-dlp's own defaults are the best-maintained
+# path, so try those first and fall back to specific clients only if needed.
+YTDLP_CLIENTS = [
+    None,                                        # yt-dlp defaults
+    "youtube:player_client=default,web_safari",
+    "youtube:player_client=default,android",
+    "youtube:player_client=ios",
+]
+
+
+def _ytdlp_download(out, url, extractor_args):
+    args = ["--no-playlist", "-f", "bestaudio", "-x", "--audio-format", "wav",
+            "--write-info-json", "-o", str(out)]
+    if extractor_args:
+        args += ["--extractor-args", extractor_args]
+    args.append(url)
+    return run_ytdlp(args)
+
+
+def _download_any_client(out, url, wav):
+    """Try each client config until one produces the WAV."""
+    last = None
+    for cfg in YTDLP_CLIENTS:
+        wav.unlink(missing_ok=True)
+        r = _ytdlp_download(out, url, cfg)
+        if r.returncode == 0 and wav.exists():
+            return True, r
+        last = r
+        log(f"  ...no luck with {cfg or 'yt-dlp defaults'}, trying the next method")
+    return False, last
+
+
 def stage_download(job, job_dir, url, force):
     if job["stages"].get("download") and not force:
         log("Download stage already done — skipping.")
         return
     log("Downloading best-quality audio (yt-dlp -> WAV)...")
     out = job_dir / "source.%(ext)s"
-    r = run_ytdlp(["--no-playlist", "-f", "bestaudio", "-x", "--audio-format", "wav",
-                   # android client fallback avoids HTTP 403 on some videos
-                   "--extractor-args", "youtube:player_client=default,android",
-                   "--write-info-json", "-o", str(out), url])
-    if r.returncode != 0:
-        die(f"Download failed:\n{r.stderr[-1500:]}")
     wav = job_dir / "source.wav"
-    if not wav.exists():
-        die("yt-dlp finished but source.wav is missing.")
+    ok, last = _download_any_client(out, url, wav)
+    if not ok:
+        # Nine times out of ten the real problem is that yt-dlp itself is out of
+        # date — YouTube changes something and yt-dlp ships a fix within days.
+        log("Every download method failed. Updating yt-dlp and retrying once...")
+        upd = run_ytdlp(["-U"])
+        tail = (upd.stdout or upd.stderr or "").strip().splitlines()
+        if tail:
+            log("  " + tail[-1])
+        ok, last = _download_any_client(out, url, wav)
+    if not ok:
+        die("Download failed with every method, even after updating yt-dlp.\n"
+            "YouTube may have changed something yt-dlp cannot handle yet — try\n"
+            "again later, or pick a different upload of the song.\n\n"
+            + ((last.stderr or "")[-1200:] if last else ""))
     ffprobe = shutil.which("ffprobe") or die("ffprobe not found on PATH")
     pr = subprocess.run([ffprobe, "-v", "error", "-show_entries", "format=duration",
                         "-of", "csv=p=0", str(wav)], capture_output=True, text=True)

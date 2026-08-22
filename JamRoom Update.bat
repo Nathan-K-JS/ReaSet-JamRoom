@@ -13,6 +13,9 @@ echo.
 echo Deploying ReaSet to REAPER's web interface...
 call "%~dp0tools\deploy_reaset.bat"
 echo.
+echo Updating yt-dlp (YouTube changes break downloading every few weeks)...
+yt-dlp -U
+echo.
 echo ============================================
 echo  Up to date. Reload ReaSet in the browser
 echo  (Ctrl+F5) to pick up the new version.

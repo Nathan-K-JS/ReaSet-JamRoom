@@ -160,7 +160,13 @@ it off again, with a notice.
   right project **tab active**? Check REAPER's ReaScript console; the apply
   script can also be run manually from the Action list (the job pointer
   stays set). Dismiss any modal dialog REAPER is showing first.
-- *HTTP 403 from YouTube* — update yt-dlp (`yt-dlp -U`).
+- *YouTube download errors* (HTTP 403, "SABR-only streaming experiment",
+  "formats have been skipped as they are missing a URL") — YouTube changes
+  something every few weeks and yt-dlp ships a fix within days. The importer
+  already tries four extraction methods and then updates yt-dlp and retries
+  automatically, so this should self-heal; `JamRoom Update.bat` also refreshes
+  yt-dlp. If it still fails, try again later or choose a different upload of
+  the song.
 - *"SWS extension missing"* — install SWS on that REAPER.
 - *"region already exists"* — the song was imported before; delete the old
   region and its items first (one undo step if it was the last import).
