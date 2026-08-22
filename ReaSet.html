@@ -4205,6 +4205,8 @@
         // Auto-detect ReaSet_NativeLoop.lua: one-shot probe, plus refresh every 10s
         wwr_req("GET/EXTSTATE/ReaSet/nativeLoopReady");
         wwr_req_recur("GET/EXTSTATE/ReaSet/nativeLoopReady", 10000);
+        wwr_req("GET/PROJEXTSTATE/ReaSet/projectId");
+        wwr_req_recur("GET/PROJEXTSTATE/ReaSet/projectId", 5000);
 
         // Jam Room bridge (ReaSet_JamRoom.lua): tiny status poll only —
         // payload chunks are burst-fetched on demand when meta's generation changes
@@ -4230,7 +4232,14 @@
         // --- Per-project session detection via region fingerprint ---
         // Project-specific keys are namespaced with a fingerprint derived from region IDs.
         // Global UI prefs (theme, fonts, etc.) are NOT namespaced.
-        var g_projectKey = null; // e.g. 'pa3f9z' — set after first REGION_LIST_END
+        var g_projectKey = null; // active storage namespace
+        // Preferred identity: a random ID stamped into the PROJECT itself
+        // (PROJEXTSTATE ReaSet/projectId). Unlike the region fingerprint it
+        // survives songs being added or removed — importing a song used to
+        // change the fingerprint and strand the whole setlist under the old key.
+        var g_stableId = null;
+        var g_lastFingerprint = null;   // fallback identity + migration source
+        var _projectIdWriting = false;  // guards against double-stamping
 
         function _computeProjectFingerprint(regions) {
             if (!regions || !regions.length) return null;
@@ -4245,6 +4254,54 @@
         function _pkSuffix() { return g_projectKey ? '_' + g_projectKey : ''; }
         function _overridesKey() { return 'reaset_song_overrides' + _pkSuffix(); }
         function _autoSortKey() { return 'reaset_autosort' + _pkSuffix(); }
+
+        // All project-scoped localStorage keys for a given namespace, in a fixed
+        // order so migration can pair them up.
+        function _projectStorageNames(key) {
+            var s = key ? '_' + key : '';
+            return ['reaper_setlists_v9' + s, 'reaper_current_setlist' + s,
+                    'reaset_song_overrides' + s, 'reaset_autosort' + s];
+        }
+
+        // Copy-only: never deletes, never overwrites existing data at the target.
+        function _migrateProjectStorage(fromKey, toKey) {
+            if (!fromKey || !toKey || fromKey === toKey) return;
+            var from = _projectStorageNames(fromKey), to = _projectStorageNames(toKey);
+            for (var i = 0; i < from.length; i++) {
+                var val = localStorage.getItem(from[i]);
+                if (val !== null && localStorage.getItem(to[i]) === null) {
+                    localStorage.setItem(to[i], val);
+                }
+            }
+        }
+
+        // Decide the active namespace: stable project ID if we have one, else the
+        // region fingerprint. Adopting a stable ID carries existing data across.
+        function _resolveProjectKey() {
+            var key = g_stableId || g_lastFingerprint;
+            if (!key || key === g_projectKey) return;
+            if (g_stableId) _migrateProjectStorage(g_lastFingerprint, g_stableId);
+            _initProjectStorage(key);
+            lastRenderChecksum = null;
+        }
+
+        // Reply handler for PROJEXTSTATE ReaSet/projectId.
+        function _handleProjectId(val) {
+            if (val) {
+                if (val !== g_stableId) { g_stableId = val; _resolveProjectKey(); }
+                return;
+            }
+            // Project has no ID yet — stamp one. Requires the project to be SAVED
+            // to persist; until then this session still behaves correctly.
+            if (g_stableId || !g_lastFingerprint || _projectIdWriting) return;
+            _projectIdWriting = true;
+            var id = 'x' + Date.now().toString(36) +
+                     Math.floor(Math.random() * 1679616).toString(36);
+            wwr_req("SET/PROJEXTSTATE/ReaSet/projectId/" + id);
+            g_stableId = id;
+            _resolveProjectKey();
+            setTimeout(function () { _projectIdWriting = false; }, 3000);
+        }
 
         function _initProjectStorage(newKey) {
             // Called on first load and whenever the REAPER project changes.
@@ -4619,6 +4676,10 @@
                 if (tok.length > 1 && tok[1] === "XR_Lyrics" && tok[2] === "text") {
                     xr_lyrics_text = tok.slice(3).join('\t') || "";
                 }
+                // Stable project identity (PROJEXTSTATE ReaSet/projectId)
+                if (tok.length > 2 && tok[1] === "ReaSet" && tok[2] === "projectId") {
+                    _handleProjectId((tok.slice(3).join('\t') || "").trim());
+                }
                 if (tok.length > 1 && tok[1] === "XR_Lyrics" && tok[2] === "next") {
                     xr_lyrics_next = tok.slice(3).join('\t') || "";
                 }
@@ -4652,11 +4713,15 @@
                         g_regions.push(tok);
                         break;
                     case "REGION_LIST_END":
-                        // Project fingerprint: namespace all project-specific storage.
-                        // Detects REAPER project switches without requiring a page reload.
+                        // Namespace project-specific storage. The fingerprint is
+                        // only the fallback/migration source now — the stable
+                        // project ID wins as soon as it arrives (see
+                        // _handleProjectId), so adding a song no longer moves the
+                        // setlist to a new namespace.
                         var _fp = _computeProjectFingerprint(g_regions);
-                        if (_fp && _fp !== g_projectKey) {
-                            _initProjectStorage(_fp);
+                        if (_fp && _fp !== g_lastFingerprint) {
+                            g_lastFingerprint = _fp;
+                            _resolveProjectKey();
                         }
                         syncRegions();
                         break;
