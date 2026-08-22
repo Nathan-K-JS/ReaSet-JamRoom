@@ -316,32 +316,98 @@ class Fadr:
                 die(f"Fadr task '{label}' timed out after 30 minutes.")
             time.sleep(5)
 
-    def wait_asset_midi(self, asset_id, extra=240):
-        """Stems appear before the MIDI/chord analysis finishes — keep
-        re-fetching the asset until .midi is populated (or give up quietly)."""
+    def wait_asset_midi(self, asset_id, budget=600):
+        """The chord/MIDI analysis finishes AFTER the stems, on the same asset.
+        Returns the asset once .midi is populated, or None if it never is."""
         t0 = time.time()
-        while time.time() - t0 < extra:
+        while time.time() - t0 < budget:
             a = self.asset(asset_id)
             if a.get("midi"):
+                log(f"Chord/MIDI analysis ready ({time.time() - t0:.0f}s).")
                 return a
+            waited = time.time() - t0
+            if waited > 15 and int(waited) % 30 < 5:
+                log(f"  ...still waiting for chord/MIDI analysis ({waited:.0f}s)")
             time.sleep(5)
-        log("WARNING: Fadr midi/chords did not appear in time — continuing "
-            "without them.")
-        return self.asset(asset_id)
+        return None
 
     def asset(self, asset_id):
         return self._check(self.s.get(f"{FADR_API}/assets/{asset_id}", timeout=60),
                            "get asset")["asset"]
 
-    def download(self, asset_id, dest):
-        j = self._check(self.s.get(f"{FADR_API}/assets/download/{asset_id}/hq",
-                                   timeout=60), "presign download")
-        with requests.get(j["url"], stream=True, timeout=600) as r:
-            if r.status_code >= 400:
-                die(f"Asset download failed (HTTP {r.status_code})")
-            with open(dest, "wb") as f:
-                for chunk in r.iter_content(1 << 20):
-                    f.write(chunk)
+    def download(self, asset_id, dest, label=""):
+        """Download with visible progress, and RESUME after a stall.
+
+        Fadr's S3 storage regularly stalls part-way through a stem. Restarting
+        from zero could loop forever on a slow link, so each attempt resumes
+        from the bytes already on disk via a Range request. Progress is logged
+        so a slow transfer is visibly moving rather than looking like a hang."""
+        label = label or Path(dest).name
+        dest = Path(dest)
+        part = dest.with_name(dest.name + ".part")
+        part.unlink(missing_ok=True)          # always start a fresh transfer
+        attempts, total = 8, 0
+        # Fadr's S3 bucket throttles unpredictably: the same file measured
+        # 1900, then 89, then 2000 KB/s minutes apart. A degraded connection
+        # never trips the read timeout, it just crawls, so watch the rate and
+        # reconnect — a fresh connection usually gets a healthy path, and the
+        # resume logic below means nothing already transferred is lost.
+        SLOW_KBPS, SLOW_WINDOW = 150, 20
+        for attempt in range(1, attempts + 1):
+            try:
+                # Presigned URLs are short-lived, so mint a fresh one each try.
+                j = self._check(
+                    self.s.get(f"{FADR_API}/assets/download/{asset_id}/hq",
+                               timeout=30), "presign download")
+                have = part.stat().st_size if part.exists() else 0
+                headers = {"Range": f"bytes={have}-"} if have else {}
+                # (connect, read) — a stall raises after 45s instead of hanging
+                with requests.get(j["url"], stream=True, timeout=(15, 45),
+                                  headers=headers) as r:
+                    if r.status_code == 416:          # already have all of it
+                        break
+                    if r.status_code >= 400:
+                        raise requests.RequestException(f"HTTP {r.status_code}")
+                    resuming = (r.status_code == 206 and have > 0)
+                    if not resuming:
+                        have = 0
+                        part.unlink(missing_ok=True)
+                    body = int(r.headers.get("Content-Length") or 0)
+                    if body:
+                        total = have + body
+                    got, last = have, time.time()
+                    win_t, win_b = time.time(), 0
+                    with open(part, "ab" if resuming else "wb") as f:
+                        for chunk in r.iter_content(1 << 16):
+                            f.write(chunk)
+                            got += len(chunk)
+                            win_b += len(chunk)
+                            now = time.time()
+                            if now - last >= 3:
+                                last = now
+                                pct = f"{got * 100 // total}% " if total else ""
+                                rate = win_b / max(now - win_t, 0.001) / 1024
+                                log(f"    {label}: {pct}({got / 1e6:.1f} MB, "
+                                    f"{rate:.0f} KB/s)")
+                            if now - win_t >= SLOW_WINDOW:
+                                rate = win_b / (now - win_t) / 1024
+                                if rate < SLOW_KBPS:
+                                    raise requests.RequestException(
+                                        f"throttled to {rate:.0f} KB/s")
+                                win_t, win_b = now, 0
+                if total and part.stat().st_size < total:
+                    raise requests.RequestException("incomplete transfer")
+                break
+            except (requests.RequestException, OSError) as e:
+                sofar = part.stat().st_size if part.exists() else 0
+                if attempt == attempts:
+                    die(f"Could not download {label} after {attempts} attempts "
+                        f"({sofar / 1e6:.1f} MB of {total / 1e6:.1f} MB): {e}")
+                log(f"    {label}: reconnecting at {sofar / 1e6:.1f} MB "
+                    f"({e}) — attempt {attempt + 1} of {attempts}")
+                time.sleep(2)
+        dest.unlink(missing_ok=True)
+        part.replace(dest)
         return dest
 
 
@@ -386,21 +452,14 @@ def stage_fadr(job, job_dir, cfg, force):
         task = fadr.wait_task(fadr.stem_task(src_asset["_id"])["_id"],
                               "main stem split")
         main_asset = fadr.asset(task["asset"]["_id"])
-    # Stems arrive first; the MIDI/chords/key/tempo analysis lands a little
-    # later on the same asset (verified live) — wait for it.
-    if not main_asset.get("midi"):
-        log("Stems ready; waiting for Fadr's chords/MIDI analysis...")
-        main_asset = fadr.wait_asset_midi(main_asset["_id"])
-    raw_dump["main_asset"] = main_asset
+    # Record the asset id straight away: if anything later fails, a re-run then
+    # reuses this asset instead of paying to upload and split all over again.
+    job.setdefault("fadr", {})["asset_id"] = main_asset.get("_id")
+    save_job(job_dir, job)
 
-    md = main_asset.get("metaData") or {}
-    job["fadr"] = {
-        "key": md.get("key"), "tempo": md.get("tempo"),
-        "sample_rate": md.get("sampleRate"),
-        "beat_length_samples": md.get("beatLength"),
-        "beat_offset_samples": md.get("offset"),
-        "asset_id": main_asset.get("_id"),
-    }
+    # NOTE: the chord/MIDI analysis runs after the stems and is collected at the
+    # END of this function — the sub-splits and downloads below give it several
+    # minutes of cover, instead of us blocking on it here.
 
     # Collect first-level stems.
     stem_assets = [fadr.asset(sid) for sid in main_asset.get("stems", [])]
@@ -418,9 +477,16 @@ def stage_fadr(job, job_dir, cfg, force):
         elif name == "other" and cfg["melodic_split"]:
             split_type = "melodic-stem"
         if split_type:
-            t = fadr.wait_task(fadr.stem_task(a["_id"], split_type)["_id"],
-                               f"{name} sub-split")
-            parent = fadr.asset(t["asset"]["_id"])
+            # A sub-split already performed on this stem stays attached to it
+            # (verified), so re-running an import never pays for it twice.
+            existing = a.get("stems") or []
+            if existing:
+                log(f"Reusing the existing {name} sub-split (no new charge).")
+                parent = a
+            else:
+                t = fadr.wait_task(fadr.stem_task(a["_id"], split_type)["_id"],
+                                   f"{name} sub-split")
+                parent = fadr.asset(t["asset"]["_id"])
             raw_dump[f"{name}_split_asset"] = parent
             children = [fadr.asset(sid) for sid in parent.get("stems", [])]
             raw_dump[f"{name}_split_children"] = children
@@ -438,8 +504,8 @@ def stage_fadr(job, job_dir, cfg, force):
         seen[name] = seen.get(name, 0) + 1
         base = name if seen[name] == 1 else f"{name}-{seen[name]}"
         fname = sanitize_filename(f"{base}.wav")
-        log(f"Downloading stem: {base}")
-        fadr.download(a["_id"], stems_dir / fname)
+        log(f"Downloading stem {len(job['stems']) + 1} of {len(final_stems)}: {base}")
+        fadr.download(a["_id"], stems_dir / fname, label=base)
         wav = ensure_riff_wav(stems_dir / fname)
         slot = slot_map.get(name)
         job["stems"].append({"fadr_name": name, "file": f"stems/{wav.name}",
@@ -450,6 +516,28 @@ def stage_fadr(job, job_dir, cfg, force):
         log(f"WARNING: no slot mapping for stems: {unmapped} — they were "
             f"downloaded but will be skipped by the apply step until you add "
             f"them to slot_map in the config or job.json.")
+
+    # Now collect the chord/MIDI analysis. By this point the sub-splits and the
+    # stem downloads have given Fadr several minutes to finish it.
+    if not main_asset.get("midi"):
+        ready = fadr.wait_asset_midi(main_asset["_id"], budget=600)
+        if ready:
+            main_asset = ready
+    raw_dump["main_asset"] = main_asset
+
+    md = main_asset.get("metaData") or {}
+    job["fadr"].update({
+        "key": md.get("key"), "tempo": md.get("tempo"),
+        "sample_rate": md.get("sampleRate"),
+        "beat_length_samples": md.get("beatLength"),
+        "beat_offset_samples": md.get("offset"),
+    })
+
+    if not main_asset.get("midi"):
+        log("WARNING: Fadr has still not produced the chord analysis for this "
+            "song. The stems are fine, but there will be no chords. Run the "
+            "import again for this song later to collect them — the upload and "
+            "the split are reused, so it costs nothing.")
 
     # Chords + MIDI assets, typed by assetType (verified live):
     #   chord-csv -> chords.csv, chord-midi -> chords.mid,
@@ -467,12 +555,13 @@ def stage_fadr(job, job_dir, cfg, force):
             else:
                 suffix = (a.get("name") or mid_id).rsplit("-", 1)[-1]
                 fname = sanitize_filename(f"{suffix}.mid")
-            fadr.download(mid_id, midi_dir / fname)
+            fadr.download(mid_id, midi_dir / fname, label=fname)
             log(f"Downloaded Fadr analysis: {fname}")
-        except SystemExit:
-            raise
-        except Exception as e:  # non-fatal: chords/midi are best-effort
-            log(f"WARNING: could not download midi asset {mid_id}: {e}")
+        # Best-effort: losing a chord file must not throw away a good import.
+        # (die() raises SystemExit on the CLI and RuntimeError under the web UI,
+        # so both are caught here deliberately.)
+        except (Exception, SystemExit) as e:
+            log(f"WARNING: could not download analysis asset {mid_id}: {e}")
 
     with open(job_dir / "fadr_raw.json", "w", encoding="utf-8") as f:
         json.dump(raw_dump, f, indent=2, default=str)
