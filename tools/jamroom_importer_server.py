@@ -15,7 +15,9 @@ import json
 import re
 import shutil
 import socket
+import subprocess
 import threading
+import time
 import webbrowser
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
@@ -199,6 +201,117 @@ def run_prepare(url, band, title):
         BUSY.release()
 
 
+def _reaper_web(cfg):
+    return (cfg or {}).get("reaper_web", "http://localhost:8080").rstrip("/")
+
+
+def _dir_size(p):
+    try:
+        return sum(f.stat().st_size for f in Path(p).rglob("*") if f.is_file())
+    except OSError:
+        return 0
+
+
+def project_songs():
+    """Songs currently in the REAPER project (its regions), each with the size
+    of its local import folder so the operator can see what deleting frees."""
+    cfg = ji.load_config(None)
+    web = _reaper_web(cfg)
+    txt = requests.get(f"{web}/_/REGION", timeout=5).text
+    jobs_dir = Path(cfg.get("jobs_dir") or (ji.REPO_ROOT / "imports"))
+    songs = []
+    for line in txt.splitlines():
+        f = line.split("\t")
+        # REGION \t name \t id \t start \t end \t color
+        if len(f) < 5 or f[0] != "REGION":
+            continue
+        name = f[1].strip()
+        if name == "ReaSet Loop":
+            continue
+        try:
+            start, end = float(f[3]), float(f[4])
+        except ValueError:
+            continue
+        folder = jobs_dir / ji.sanitize_filename(name)
+        size = _dir_size(folder) if folder.is_dir() else 0
+        songs.append({"name": name, "start": start, "end": end,
+                      "duration": round(end - start, 1),
+                      "folder": str(folder) if folder.is_dir() else None,
+                      "folder_mb": round(size / 1e6) if size else 0})
+    # Nested regions (song sections) are not songs; drop anything contained
+    # in another region, matching how ReaSet and the bridges discover songs.
+    tops = []
+    for s in songs:
+        if not any(o is not s and o["start"] <= s["start"] and o["end"] >= s["end"]
+                   and (o["start"] < s["start"] or o["end"] > s["end"]) for o in songs):
+            tops.append(s)
+    tops.sort(key=lambda s: s["start"])
+    return tops
+
+
+def delete_song(name, start, end, delete_files):
+    """Remove a song's region and items from REAPER, optionally its local
+    audio too. The REAPER half is one undo step."""
+    cfg = ji.load_config(None)
+    web = _reaper_web(cfg)
+    tooldir = TOOLDIR
+    receipt = tooldir / "jamroom_delete_receipt.txt"
+    receipt.unlink(missing_ok=True)
+    (tooldir / "jamroom_pending_delete.txt").write_text(
+        f"{name}\n{start:.3f}\n{end:.3f}\n", encoding="utf-8")
+
+    def web_get(path, timeout=5):
+        try:
+            r = requests.get(f"{web}/_/{path}", timeout=timeout)
+            return r.text if r.status_code == 200 else None
+        except requests.RequestException:
+            return None
+
+    t = web_get("GET/EXTSTATE/ReaSetJR/delete_cmd")
+    cmd = None
+    if t:
+        parts = t.strip().split("\t")
+        if len(parts) >= 4 and parts[3].strip():
+            cmd = parts[3].strip()
+    if not cmd:
+        # Not registered yet (installs predating the delete feature).
+        reaper_exe = Path(cfg.get("reaper_exe", ""))
+        if reaper_exe.exists():
+            subprocess.Popen([str(reaper_exe), "-nonewinst",
+                              str(tooldir / "jamroom_register_apply.lua")])
+            for _ in range(15):
+                time.sleep(2)
+                t = web_get("GET/EXTSTATE/ReaSetJR/delete_cmd")
+                if t and len(t.strip().split("\t")) >= 4 and t.strip().split("\t")[3].strip():
+                    cmd = t.strip().split("\t")[3].strip()
+                    break
+    if not cmd:
+        raise RuntimeError("The delete action is not registered in REAPER. Run "
+                           "tools/jamroom_register_apply.lua once from REAPER's "
+                           "Action list, then try again.")
+    web_get(cmd, timeout=10)
+    for _ in range(45):
+        if receipt.exists():
+            break
+        time.sleep(1)
+    else:
+        why = web_get("GET/EXTSTATE/ReaSetJR/deleter") or ""
+        raise RuntimeError("REAPER did not confirm the delete. " + why.strip())
+
+    result = receipt.read_text(encoding="utf-8").strip()
+    freed = 0
+    if delete_files:
+        folder = Path(cfg.get("jobs_dir") or (ji.REPO_ROOT / "imports")) \
+                 / ji.sanitize_filename(name)
+        # Refuse anything that is not a job folder directly under jobs_dir.
+        jobs_dir = Path(cfg.get("jobs_dir") or (ji.REPO_ROOT / "imports")).resolve()
+        if folder.is_dir() and folder.resolve().parent == jobs_dir:
+            freed = _dir_size(folder)
+            shutil.rmtree(folder, ignore_errors=True)
+            result += f" files_deleted={round(freed / 1e6)}MB"
+    return result
+
+
 def run_prepare_library(asset_id, band, title, duration, allow_new_splits=True):
     """Same as run_prepare, but the song is already split on Fadr: skip the
     download, the upload and the main split.
@@ -357,6 +470,12 @@ class Handler(BaseHTTPRequestHandler):
             self._send(200, checks())
         elif self.path == "/api/status":
             self._send(200, STATE)
+        elif self.path == "/api/songs":
+            try:
+                self._send(200, {"songs": project_songs()})
+            except Exception as e:  # noqa: BLE001
+                self._send(500, {"error": "Could not read the project from "
+                                          "REAPER: " + str(e)})
         elif self.path == "/api/library":
             try:
                 self._send(200, {"songs": ji.fadr_library(ji.load_config(None))})
@@ -418,6 +537,19 @@ class Handler(BaseHTTPRequestHandler):
                                        body.get("lyrics_offset")),
                                  daemon=True).start()
                 self._send(200, {"ok": True})
+            elif self.path == "/api/delete_song":
+                if STATE["state"] in ("preparing", "applying"):
+                    self._send(409, {"error": "An import is running — wait for "
+                                     "it to finish before deleting anything."})
+                    return
+                try:
+                    res = delete_song(body.get("name", ""),
+                                      float(body.get("start", 0)),
+                                      float(body.get("end", 0)),
+                                      bool(body.get("delete_files")))
+                    self._send(200, {"ok": True, "result": res})
+                except Exception as e:  # noqa: BLE001
+                    self._send(500, {"error": str(e)})
             elif self.path == "/api/cancel":
                 if STATE["state"] == "review":
                     STATE.update({"state": "idle", "review": None,

@@ -33,6 +33,34 @@ ReaSet's Lyrics/Chords views. One command per song, then a short review pass.
    auto-registration fails, run `tools/jamroom_register_apply.lua` once from
    the Action list.
 
+## Removing a song
+
+Importer page → **Manage songs**. Lists everything in the REAPER project with
+its length and how much disk its local audio uses. **Delete…** requires typing
+the song's name to enable the button, and asks separately whether to remove the
+downloaded audio.
+
+Deleting removes only that song's region, stems, lyrics and chords. The PB and
+`[JR:…]` buses, every other song, and the paid-for split on Fadr are untouched
+— and **one Ctrl+Z in REAPER puts the whole song back** (files, if you deleted
+those too, are not restored by undo). Re-importing afterwards is free via the
+Fadr library tab.
+
+## How big can the project get?
+
+Disk is the only practical limit, and it is not close. A song costs roughly
+**0.5 GB** of local audio (about 430 MB of WAV stems REAPER plays, plus the
+downloads). REAPER itself handles hours-long projects and thousands of regions
+without complaint, and track count does not grow per song because the
+`[JR:…]` buses are shared.
+
+Roughly: **1 GB per two songs.** On a 1 TB drive with 750 GB free that is well
+over a thousand songs — you will tire of scrolling the setlist long before
+REAPER or the disk objects. To reclaim space, delete songs you no longer play
+(re-importing from the Fadr library is free), or after a successful import the
+`source.wav` and the `stems/*.wav` MP3 originals in a job folder are only
+needed for the review screen and can be removed, saving ~100 MB per song.
+
 ## Getting it onto the jam room PC / updating it
 
 First time (PowerShell — after this everything is double-click):
