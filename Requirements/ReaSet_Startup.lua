@@ -46,6 +46,9 @@ end
 local function nativeloop_alive()
     return reaper.GetExtState("ReaSet", "nativeLoopReady") == "1"
 end
+local function chordslyrics_alive()
+    return reaper.GetExtState("ReaSetCL", "heartbeat") ~= ""
+end
 
 -- Register a script and run it — but only if it is not already running.
 -- Firing the command of a live defer script makes REAPER pop its modal
@@ -78,6 +81,9 @@ local function note(ok, msg) report[#report + 1] = (ok and "  [ok] " or "  [--] 
 
 note(launch("ReaSet_JamRoom.lua", "Jam Room bridge", bridge_alive))
 note(launch("ReaSet_NativeLoop.lua", "Native loop", nativeloop_alive))
+-- Publishes the current song's whole chord/lyric timeline. Safe on any
+-- project: with no chords/lyrics tracks it simply publishes nothing.
+note(launch("ReaSet_ChordsLyrics.lua", "Chord/lyric timeline", chordslyrics_alive))
 
 if has_track_named("lyrics") then
     note(launch("X-Raym_Convert Lyrics track items notes for dedicated web browser interface.lua",

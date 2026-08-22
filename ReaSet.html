@@ -3840,6 +3840,8 @@
         </div>
 
         <div class="sidebar-section">
+            <div class="sidebar-section-title">Version</div>
+            <div style="color:#8b9199;font-size:.78rem;padding:2px 4px 10px" id="reasetVer"></div>
             <div class="sidebar-section-title">REAPER Connection</div>
             <button class="sidebar-action-btn sab-slate" onclick="wwr_start();closeSidebar()">
                 <span class="sab-icon">↻</span> Sync
@@ -3958,8 +3960,21 @@
     <!-- CHORDS PANEL -->
     <div id="chords-panel">
         <span class="chord-close-btn" onclick="toggleChordsPanel()">✕</span>
-        <div id="chord-display">&#9834;</div>
-        <div class="chord-label" id="chord-label">Chords script not running — run ReaSet_Startup.lua in REAPER</div>
+        <div class="cv-tabs">
+            <button class="cv-tab on" data-cv="chart"    onclick="setChordView('chart')">Chart</button>
+            <button class="cv-tab"    data-cv="big"      onclick="setChordView('big')">Big</button>
+            <button class="cv-tab"    data-cv="timeline" onclick="setChordView('timeline')">Timeline</button>
+        </div>
+        <div id="chords-live"></div>
+        <div class="lead-row">
+            <label class="lead-lab">Lead time <span id="leadValue">+0.5s</span></label>
+            <input type="range" id="leadSlider" min="-10" max="30" step="1" value="5"
+                   oninput="setLead(parseInt(this.value)/10)">
+            <div class="lead-song" id="leadSong">&nbsp;</div>
+        </div>
+        <!-- legacy single-chord display, used only if the timeline script is off -->
+        <div id="chord-display" style="display:none">&#9834;</div>
+        <div class="chord-label" id="chord-label" style="display:none"></div>
     </div>
 
     <!-- JAM ROOM TRACKS PANEL -->
@@ -4211,6 +4226,7 @@
         // Jam Room bridge (ReaSet_JamRoom.lua): tiny status poll only —
         // payload chunks are burst-fetched on demand when meta's generation changes
         wwr_req_recur("GET/EXTSTATE/ReaSetJR/heartbeat;GET/EXTSTATE/ReaSetJR/meta", 500);
+        wwr_req_recur("GET/EXTSTATE/ReaSetCL/heartbeat;GET/EXTSTATE/ReaSetCL/meta", 500);
         // Jam Room: live per-track mute state straight from REAPER (mute = flags & 8)
         wwr_req_recur("TRACK", 500);
         wwr_start();
@@ -4593,6 +4609,47 @@
         var isGridView = false;
 
         // Lyrics state — X-Raym engine variables (exact port)
+        // (chord/lyric view styles are injected here to keep them beside the
+        // logic that uses them; the panel itself is styled above.)
+        (function () {
+            var css = document.createElement('style');
+            css.textContent =
+              '.cv-tabs{display:flex;gap:6px;justify-content:center;margin:6px 0 10px}'
+            + '.cv-tab{background:#23262d;color:#c9ced8;border:1px solid #363b45;'
+            + 'border-radius:999px;padding:5px 14px;font-size:.8rem;cursor:pointer}'
+            + '.cv-tab.on{background:#2f6fed;color:#fff;border-color:#2f6fed}'
+            + '#chords-live{min-height:34vh;display:flex;flex-direction:column;'
+            + 'align-items:center;justify-content:center;gap:10px}'
+            + '.cv-row{display:flex;gap:10px;justify-content:center;width:100%}'
+            + '.cv-cell{flex:1 1 0;max-width:22%;text-align:center;padding:14px 4px;'
+            + 'border-radius:12px;background:#1b1e25;border:2px solid transparent;'
+            + 'font-size:clamp(1.5rem,7vw,3.4rem);font-weight:700;color:#e8eaed}'
+            + '.cv-cell.ahead{opacity:.45;font-size:clamp(1rem,4.5vw,2rem);padding:8px 4px}'
+            + '.cv-cell.empty{background:transparent}'
+            + '.cv-cell.on{background:#17304d;border-color:#2f6fed;color:#fff}'
+            + '.cv-big{font-size:clamp(3rem,22vw,9rem);font-weight:800;line-height:1}'
+            + '.cv-next{color:#9aa0a6;font-size:clamp(.9rem,4vw,1.4rem);letter-spacing:.04em}'
+            + '.cv-tl{display:flex;width:100%;gap:3px;align-items:stretch}'
+            + '.cv-tl-cell{background:#1b1e25;border-radius:8px;padding:16px 2px;'
+            + 'text-align:center;font-weight:700;overflow:hidden;'
+            + 'font-size:clamp(.9rem,3.5vw,1.8rem);color:#c9ced8}'
+            + '.cv-tl-cell.on{background:#17304d;color:#fff;outline:2px solid #2f6fed}'
+            + '.cv-tl-now{width:2px;height:14px;background:#ef5350;margin-left:12.5%}'
+            + '.cv-meta{color:#6b7280;font-size:.75rem;margin-top:4px}'
+            + '.cv-empty{color:#9aa0a6;text-align:center;font-size:.95rem;padding:0 12px}'
+            + '.lead-row{display:flex;flex-direction:column;align-items:center;'
+            + 'gap:4px;padding:10px 16px 4px}'
+            + '.lead-lab{color:#9aa0a6;font-size:.8rem}'
+            + '.lead-lab span{color:#e8eaed;font-weight:600}'
+            + '#leadSlider{width:min(420px,86vw)}'
+            + '.lead-song{color:#6b7280;font-size:.72rem}'
+            + '.lv-now{font-size:clamp(1.2rem,5.5vw,2.4rem);font-weight:600;line-height:1.3}'
+            + '.lv-next{color:#8b9199;font-size:clamp(.95rem,4vw,1.5rem);'
+            + 'margin-top:10px;line-height:1.3}'
+            + '.lv-gap{min-height:1.2em}';
+            document.head.appendChild(css);
+        })();
+
         var xr_lyrics_text = "";
         var xr_lyrics_last = "";
         var xr_lyrics_next = "";
@@ -4604,6 +4661,77 @@
         var xr_lyrics_alive = false;
         var xr_chords_alive = false;
         var xr_lyrics_last_alive = null;
+
+        // ── Full chord/lyric timeline (ReaSet_ChordsLyrics.lua) ───────────────
+        // The X-Raym scripts only ever send the item under the playhead, which
+        // makes a lookahead view or a lead time impossible. This script sends
+        // the whole current song, so everything below is local arithmetic.
+        var g_clHb = { val: null, changedAt: 0 };
+        var g_clData = null;          // {song:{...}, chords:[[s,e,txt]], lyrics:[...]}
+        var g_clDataGen = null;
+        var g_clFetch = null;
+
+        function clAlive() {
+            return g_clHb.val !== null && (Date.now() - g_clHb.changedAt) < 5000;
+        }
+
+        // Lead time: show things slightly BEFORE they happen. Positive = earlier.
+        // Stored per song (fast songs want more warning than ballads).
+        var g_leadTimes = {};
+        function _leadKey() { return 'reaset_leadtime' + _pkSuffix(); }
+        function loadLeadTimes() {
+            try { g_leadTimes = JSON.parse(localStorage.getItem(_leadKey()) || '{}'); }
+            catch (e) { g_leadTimes = {}; }
+        }
+        loadLeadTimes();
+        var DEFAULT_LEAD = 0.5;
+        function currentLeadSongKey() {
+            return (g_clData && g_clData.song) ? String(g_clData.song.name) : '_global';
+        }
+        function getLead() {
+            var k = currentLeadSongKey();
+            return (typeof g_leadTimes[k] === 'number') ? g_leadTimes[k]
+                 : (typeof g_leadTimes._global === 'number' ? g_leadTimes._global
+                                                            : DEFAULT_LEAD);
+        }
+        function setLead(v) {
+            g_leadTimes[currentLeadSongKey()] = v;
+            localStorage.setItem(_leadKey(), JSON.stringify(g_leadTimes));
+            renderChordsView(); renderLyricsView();
+            var lbl = document.getElementById('leadValue');
+            if (lbl) lbl.textContent = (v >= 0 ? '+' : '') + v.toFixed(1) + 's';
+        }
+
+        // Chord view mode: 'chart' (rows of 4), 'big' (one large + strip),
+        // 'timeline' (width proportional to duration).
+        var g_chordView = localStorage.getItem('reaset_chord_view') || 'chart';
+        function setChordView(mode) {
+            g_chordView = mode;
+            localStorage.setItem('reaset_chord_view', mode);
+            document.querySelectorAll('.cv-tab').forEach(function (b) {
+                b.classList.toggle('on', b.getAttribute('data-cv') === mode);
+            });
+            renderChordsView();
+        }
+
+        // Index of the entry active at time t (entries are [start, end, text]).
+        function clIndexAt(list, t) {
+            if (!list) return -1;
+            for (var i = 0; i < list.length; i++) {
+                if (t >= list[i][0] && t < list[i][1]) return i;
+                if (t < list[i][0]) return -1;   // in a gap before this entry
+            }
+            return -1;
+        }
+        // Index of the entry active at t, or the most recent one before it.
+        function clIndexAtOrBefore(list, t) {
+            if (!list) return -1;
+            var found = -1;
+            for (var i = 0; i < list.length; i++) {
+                if (list[i][0] <= t) found = i; else break;
+            }
+            return found;
+        }
         var lyricsVisible = false;
 
         // Chords state
@@ -4667,6 +4795,12 @@
         // Init UI
         document.getElementById("hideSkippedToggle").checked = hideSkippedMode;
         updateSetlistDropdown();
+        setChordView(g_chordView);   // paints the active view tab
+        syncLeadSlider();
+        // Shown in the sidebar so a stale cached page is obvious after a deploy.
+        var REASET_VERSION = "v1.1 · 2026-08-22";
+        var _rv = document.getElementById("reasetVer");
+        if (_rv) _rv.textContent = REASET_VERSION;
         (function () { var t = localStorage.getItem("reasetlist_theme") || "dark"; setTheme(t, true); })();
 
         // --- 3. REAPER REPLY HANDLER ---
@@ -4719,6 +4853,9 @@
                         wasPlayingLast = nowPlaying;
                         isPlaying = nowPlaying;
                         updatePlaybackUI();
+                        // Chord/lyric views follow the playhead (with lead time)
+                        // rather than waiting to be pushed a value from REAPER.
+                        if (g_clData) { renderChordsView(); renderLyricsView(); }
                         break;
                     case "REGION_LIST":
                         g_regions = [];
@@ -4785,6 +4922,8 @@
                     case "EXTSTATE":
                         // Jam Room bridge payload/heartbeat
                         if (tok[1] === "ReaSetJR") { jrHandleExtState(tok); break; }
+                        // Chord/lyric timeline payload/heartbeat
+                        if (tok[1] === "ReaSetCL") { clHandleExtState(tok); break; }
                         // Auto-detection: ReaSet_NativeLoop.lua writes "ReaSet/nativeLoopReady=1"
                         if (tok[1] === "ReaSet" && tok[2] === "nativeLoopReady") {
                             var nlReady = (tok[3] === "1");
@@ -4815,9 +4954,16 @@
                 if (tracksPanelOpen) renderTracksPanel();
             }
 
-            // === X-RAYM LYRICS DISPLAY (exact logic from X-Raym_Lyrics.html) ===
+            // === LYRICS DISPLAY ===
+            // Prefer the full timeline (lookahead + lead time); the X-Raym
+            // single-item path below is the fallback when it is not running.
             var lyricsContent = document.getElementById("lyrics-content");
-            if (lyricsContent) {
+            if (lyricsContent && g_clData && g_clData.lyrics && g_clData.lyrics.length) {
+                if (!document.getElementById('lyrics-live')) {
+                    lyricsContent.innerHTML = '<div id="lyrics-live"></div>';
+                }
+                renderLyricsView();
+            } else if (lyricsContent) {
                 var t = xr_lyrics_text;
                 var n = xr_lyrics_next;
                 if (t === "--XR-NO-TEXT--") t = "";
@@ -8180,6 +8326,139 @@
         // means nothing survives a REAPER restart either.
         function jrBridgeOnline() {
             return g_jrHb.val !== null && (Date.now() - g_jrHb.changedAt) < 3500;
+        }
+
+        // ── Chord/lyric timeline: chunked extstate reader ────────────────────
+        // Same commit-record pattern as the Jam Room bridge: meta is written
+        // last, so a generation mismatch means a rebuild raced our read.
+        function clHandleExtState(tok) {
+            var key = tok[2];
+            var val = tok.length > 3 ? jrUnescape(tok.slice(3).join('\t')) : '';
+            if (key === 'heartbeat') {
+                if (val === '') {
+                    g_clHb.val = null; g_clData = null; g_clDataGen = null;
+                } else if (val !== g_clHb.val) {
+                    g_clHb.val = val; g_clHb.changedAt = Date.now();
+                }
+            } else if (key === 'meta') {
+                if (val === '') return;
+                var parts = val.split(':');
+                var gen = parts[0], count = parseInt(parts[1]);
+                if (isNaN(count)) return;
+                if (gen !== g_clDataGen && (!g_clFetch || g_clFetch.gen !== gen)) {
+                    g_clFetch = { gen: gen, count: count, chunks: [], got: 0 };
+                    var req = [];
+                    for (var i = 0; i < count; i++) req.push('GET/EXTSTATE/ReaSetCL/d' + i);
+                    if (req.length) wwr_req(req.join(';'));
+                }
+            } else if (/^d\d+$/.test(key)) {
+                if (!g_clFetch || val === '') return;
+                var ci = parseInt(key.slice(1));
+                var sep = val.indexOf(':');
+                if (sep < 0) return;
+                if (val.slice(0, sep) !== g_clFetch.gen) { g_clFetch = null; return; }
+                if (ci < g_clFetch.count && g_clFetch.chunks[ci] === undefined) {
+                    g_clFetch.chunks[ci] = val.slice(sep + 1);
+                    g_clFetch.got++;
+                    if (g_clFetch.got === g_clFetch.count) {
+                        var f = g_clFetch; g_clFetch = null;
+                        try {
+                            var d = JSON.parse(f.chunks.join(''));
+                            g_clDataGen = f.gen;
+                            g_clData = d.song ? d : null;
+                        } catch (e) { g_clData = null; }
+                        syncLeadSlider();
+                        renderChordsView(); renderLyricsView();
+                    }
+                }
+            }
+        }
+
+        function syncLeadSlider() {
+            var sl = document.getElementById('leadSlider');
+            var lbl = document.getElementById('leadValue');
+            var who = document.getElementById('leadSong');
+            if (sl) sl.value = String(Math.round(getLead() * 10));
+            if (lbl) lbl.textContent = (getLead() >= 0 ? '+' : '') + getLead().toFixed(1) + 's';
+            if (who) {
+                who.textContent = (g_clData && g_clData.song)
+                    ? 'for ' + g_clData.song.name : 'no song at the playhead';
+            }
+        }
+
+        // ── Chord views ──────────────────────────────────────────────────────
+        function renderChordsView() {
+            var host = document.getElementById('chords-live');
+            if (!host) return;
+            if (!g_clData || !g_clData.chords || !g_clData.chords.length) {
+                host.innerHTML = '<div class="cv-empty">' + (clAlive()
+                    ? 'No chords for this song.'
+                    : 'Chord timeline script not running — run <b>ReaSet_Startup.lua</b> in REAPER.')
+                    + '</div>';
+                return;
+            }
+            var list = g_clData.chords;
+            var t = currentPos + getLead();
+            var cur = clIndexAtOrBefore(list, t);
+            if (cur < 0) cur = 0;
+            var html;
+            if (g_chordView === 'big') {
+                var nextTxt = [];
+                for (var i = cur + 1; i < Math.min(cur + 5, list.length); i++) nextTxt.push(list[i][2]);
+                html = '<div class="cv-big">' + list[cur][2] + '</div>'
+                     + '<div class="cv-next">' + (nextTxt.length
+                         ? 'next: ' + nextTxt.join(' · ') : '&nbsp;') + '</div>';
+            } else if (g_chordView === 'timeline') {
+                // Width proportional to duration, over a fixed lookahead window
+                var WIN = 16, from = t - 2, cells = [];
+                for (var j = 0; j < list.length; j++) {
+                    var s = list[j][0], e = list[j][1];
+                    if (e < from || s > from + WIN) continue;
+                    var w = Math.max(2, ((Math.min(e, from + WIN) - Math.max(s, from)) / WIN) * 100);
+                    cells.push('<div class="cv-tl-cell' + (j === cur ? ' on' : '')
+                        + '" style="width:' + w.toFixed(2) + '%">' + list[j][2] + '</div>');
+                }
+                html = '<div class="cv-tl">' + cells.join('') + '</div>'
+                     + '<div class="cv-tl-now"></div>';
+            } else {   // 'chart' — rows of four, current row plus the next
+                var rowStart = Math.floor(cur / 4) * 4;
+                var rows = '';
+                for (var r = 0; r < 2; r++) {
+                    var cellsHtml = '';
+                    for (var k = 0; k < 4; k++) {
+                        var idx = rowStart + r * 4 + k;
+                        if (idx >= list.length) { cellsHtml += '<div class="cv-cell empty"></div>'; continue; }
+                        cellsHtml += '<div class="cv-cell' + (idx === cur ? ' on' : '')
+                            + (r === 1 ? ' ahead' : '') + '">' + list[idx][2] + '</div>';
+                    }
+                    rows += '<div class="cv-row">' + cellsHtml + '</div>';
+                }
+                html = rows;
+            }
+            var meta = g_clData.song ? g_clData.song.name : '';
+            host.innerHTML = html + '<div class="cv-meta">' + meta + '</div>';
+        }
+
+        // ── Lyrics view with lookahead ───────────────────────────────────────
+        function renderLyricsView() {
+            var host = document.getElementById('lyrics-live');
+            if (!host) return;
+            if (!g_clData || !g_clData.lyrics || !g_clData.lyrics.length) return;
+            var list = g_clData.lyrics;
+            var t = currentPos + getLead();
+            var cur = clIndexAt(list, t);
+            var out = '';
+            if (cur < 0) {
+                var nxt = -1;
+                for (var i = 0; i < list.length; i++) { if (list[i][0] > t) { nxt = i; break; } }
+                out = '<div class="lv-gap">&nbsp;</div>'
+                    + (nxt >= 0 ? '<div class="lv-next">' + list[nxt][2] + '</div>' : '');
+            } else {
+                out = '<div class="lv-now">' + list[cur][2] + '</div>'
+                    + (cur + 1 < list.length
+                        ? '<div class="lv-next">' + list[cur + 1][2] + '</div>' : '');
+            }
+            host.innerHTML = out;
         }
 
         function jrHandleExtState(tok) {
