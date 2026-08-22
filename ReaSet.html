@@ -3959,7 +3959,7 @@
     <div id="chords-panel">
         <span class="chord-close-btn" onclick="toggleChordsPanel()">✕</span>
         <div id="chord-display">&#9834;</div>
-        <div class="chord-label" id="chord-label">Enable the Lua chords script in REAPER</div>
+        <div class="chord-label" id="chord-label">Chords script not running — run ReaSet_Startup.lua in REAPER</div>
     </div>
 
     <!-- JAM ROOM TRACKS PANEL -->
@@ -4597,6 +4597,13 @@
         var xr_lyrics_last = "";
         var xr_lyrics_next = "";
         var xr_lyrics_last_next = "";
+        // The publisher scripts post "--XR-NO-TEXT--" when there is simply no
+        // item under the cursor. That means the script IS running — telling the
+        // user to go and enable it would be wrong (and used to be exactly what
+        // happened on a project with no lyrics imported yet).
+        var xr_lyrics_alive = false;
+        var xr_chords_alive = false;
+        var xr_lyrics_last_alive = null;
         var lyricsVisible = false;
 
         // Chords state
@@ -4675,6 +4682,9 @@
                 // Check tok[1]/tok[2] WITHOUT checking tok[0] — same as X-Raym_Lyrics.html
                 if (tok.length > 1 && tok[1] === "XR_Lyrics" && tok[2] === "text") {
                     xr_lyrics_text = tok.slice(3).join('\t') || "";
+                    // Anything at all (including the no-text sentinel) means the
+                    // publisher script is alive; the key is blanked on its exit.
+                    xr_lyrics_alive = (xr_lyrics_text !== "");
                 }
                 // Stable project identity (PROJEXTSTATE ReaSet/projectId)
                 if (tok.length > 2 && tok[1] === "ReaSet" && tok[2] === "projectId") {
@@ -4685,7 +4695,11 @@
                 }
                 if (tok.length > 1 && tok[1] === "XR_Chords" && tok[2] === "text") {
                     var newChord = tok.slice(3).join('\t') || "";
-                    if (newChord !== chordsLastRaw) { chordsLastRaw = newChord; updateChordsDisplay(newChord); }
+                    var _chordsWasAlive = xr_chords_alive;
+                    xr_chords_alive = (newChord !== "");   // set before rendering
+                    if (newChord !== chordsLastRaw || xr_chords_alive !== _chordsWasAlive) {
+                        chordsLastRaw = newChord; updateChordsDisplay(newChord);
+                    }
                 }
 
                 // === TRANSPORT & REGION handling ===
@@ -4808,9 +4822,13 @@
                 var n = xr_lyrics_next;
                 if (t === "--XR-NO-TEXT--") t = "";
                 if (n === "--XR-NO-TEXT--") n = "";
-                if (t !== xr_lyrics_last || n !== xr_lyrics_last_next) {
-                    if (t === "") {
-                        lyricsContent.innerHTML = '<div class="lyrics-no-data">Sin datos de letra.<br><small>Activa el script Lua <b>X-Raym Convert Lyrics</b> en REAPER<br>con un track llamado <b>"lyrics"</b> con notas en los items.</small></div>';
+                if (t !== xr_lyrics_last || n !== xr_lyrics_last_next ||
+                    xr_lyrics_alive !== xr_lyrics_last_alive) {
+                    xr_lyrics_last_alive = xr_lyrics_alive;
+                    if (t === "" && xr_lyrics_alive) {
+                        lyricsContent.innerHTML = '<div class="lyrics-no-data">No lyrics at this point.<br><small>The lyrics script is running — this song has no lyric items here yet.</small></div>';
+                    } else if (t === "") {
+                        lyricsContent.innerHTML = '<div class="lyrics-no-data">Lyrics script not running.<br><small>In REAPER run <b>ReaSet_Startup.lua</b> (or the <b>X-Raym Convert Lyrics</b> script),<br>with a track named <b>"lyrics"</b> holding text in the item notes.</small></div>';
                     } else {
                         // Exact X-Raym method: split on \\n, join with <br>
                         var lines = t.split("\\n");
@@ -6676,7 +6694,11 @@
             if (!disp) return;
             if (!raw || raw === "--XR-NO-TEXT--" || raw === "") {
                 disp.innerText = "♪";
-                document.getElementById("chord-label").innerText = "Enable the Lua chords script in REAPER";
+                // "--XR-NO-TEXT--" means the script IS running and there is just
+                // no chord item here — don't send the user chasing a setup fault.
+                document.getElementById("chord-label").innerText = xr_chords_alive
+                    ? "No chords at this point in the song"
+                    : "Chords script not running — run ReaSet_Startup.lua in REAPER";
                 if (typeof canvasOpen !== "undefined" && canvasOpen && document.getElementById("cw-content-chords")) {
                     document.getElementById("cw-content-chords").innerText = "♪";
                 }
