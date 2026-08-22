@@ -256,6 +256,13 @@ reaper.AddProjectMarker2(0, true, song_pos, song_pos + song_len,
 log(string.format("region \"%s\" at %.1fs-%.1fs", job.region_name, song_pos,
                   song_pos + song_len))
 
+-- Detected BPM into project extstate, keyed by song name: the tempo/key
+-- bridge publishes it so ReaSet can offer "121 -> [type a number] BPM".
+if job.tempo then
+    reaper.SetProjExtState(0, "ReaSetTK", "bpm:" .. job.region_name,
+                           tostring(job.tempo))
+end
+
 -- Lyrics: one note-item per synced line, extended to the next line's
 -- timestamp (empty lines act as gap terminators only). Plain fallback: one
 -- item spanning the song.

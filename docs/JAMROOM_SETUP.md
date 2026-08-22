@@ -90,6 +90,25 @@ use simply don't appear on the tablet.
 - If the bridge script isn't running, the tab says so instead of showing
   anything stale.
 
+## 4b. Tempo & key (Tracks tab)
+
+Below the mute rows: per-song **TEMPO** (percentage, or type a target BPM when
+the song's detected BPM is known — captured at import) and **KEY** (±6
+semitones). Tempo time-stretches without changing pitch; key transposes
+without changing speed. Chord displays show the transposed chord names and a
+badge while active.
+
+- Settings are remembered **per song** and re-applied when the song is cued;
+  they revert automatically the moment a different song becomes active, on
+  script shutdown, and even after a crash or an accidental save (the bridge
+  records what it applied inside the project and undoes leftovers on startup).
+- The chips under KEY choose which groups transpose — drums and click stay
+  natural by default; include/exclude any group per song (a strings FX track
+  wants transposing, a cowbell does not).
+- Tempo affects everything, always — that is what tempo means.
+- Keep within ±3 semitones / 75–125% for best audio quality; beyond that,
+  stretching artifacts become audible. That is physics, not a fault.
+
 ## 5. Troubleshooting — the "Setup issues" panel
 
 Collapsed at the bottom of the Tracks tab; musicians can ignore it.

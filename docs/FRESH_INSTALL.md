@@ -66,7 +66,9 @@ day-to-day operating is [JAMROOM_SETUP.md](JAMROOM_SETUP.md).
    | `ReaSet_NativeLoop.lua` | REAPER-native looping (silently degrades to a JS timer if absent) |
    | `X-Raym_Convert Lyrics …lua` | Lyrics view |
    | `X-Raym_Convert Chords …lua` | Chords view |
-   | `ReaSet_Startup.lua` | Starts the four above in one go |
+   | `ReaSet_ChordsLyrics.lua` | Chord chart / lookahead views + lead-time slider |
+   | `ReaSet_TempoKey.lua` | Per-song tempo (playrate) and key (transpose) controls |
+   | `ReaSet_Startup.lua` | Starts all the background scripts in one go |
    | `ReaSet_JamRoom_BuildBuses.lua` | Builds the project's track layout (stage 4) |
 
    Loading only registers them. They are started in stage 5 — **the order

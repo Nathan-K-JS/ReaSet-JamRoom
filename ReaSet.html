@@ -3986,6 +3986,9 @@
         <div class="jr-body" id="jr-body">
             <div class="jr-panel-msg">Waiting for REAPER…</div>
         </div>
+        <!-- Per-song tempo & key. Static (outside jr-body's re-render) so the
+             BPM input keeps focus while the mute list refreshes. -->
+        <div id="tk-panel"></div>
     </div>
 
     <!-- LIVE VIEW -->
@@ -4227,6 +4230,7 @@
         // payload chunks are burst-fetched on demand when meta's generation changes
         wwr_req_recur("GET/EXTSTATE/ReaSetJR/heartbeat;GET/EXTSTATE/ReaSetJR/meta", 500);
         wwr_req_recur("GET/EXTSTATE/ReaSetCL/heartbeat;GET/EXTSTATE/ReaSetCL/meta", 500);
+        wwr_req_recur("GET/EXTSTATE/ReaSetTK/heartbeat;GET/EXTSTATE/ReaSetTK/state", 500);
         // Jam Room: live per-track mute state straight from REAPER (mute = flags & 8)
         wwr_req_recur("TRACK", 500);
         wwr_start();
@@ -4646,7 +4650,28 @@
             + '.lv-now{font-size:clamp(1.2rem,5.5vw,2.4rem);font-weight:600;line-height:1.3}'
             + '.lv-next{color:#8b9199;font-size:clamp(.95rem,4vw,1.5rem);'
             + 'margin-top:10px;line-height:1.3}'
-            + '.lv-gap{min-height:1.2em}';
+            + '.lv-gap{min-height:1.2em}'
+            + '#tk-panel{border-top:1px solid #2c3038;margin-top:10px;padding:10px 12px 14px}'
+            + '.tk-row{display:flex;align-items:center;gap:8px;justify-content:center;'
+            + 'flex-wrap:wrap;margin:6px 0}'
+            + '.tk-lab{color:#9aa0a6;font-size:.75rem;font-weight:700;letter-spacing:.08em;'
+            + 'min-width:52px;text-align:right}'
+            + '.tk-btn{background:#23262d;color:#e8eaed;border:1px solid #363b45;'
+            + 'border-radius:9px;padding:9px 13px;font-size:.95rem;cursor:pointer}'
+            + '.tk-btn:active{background:#2f6fed}'
+            + '.tk-val{min-width:64px;text-align:center;font-weight:700;font-size:1.15rem}'
+            + '.tk-val.pend{opacity:.45;font-style:italic}'
+            + '.tk-det{color:#9aa0a6;font-size:.85rem}'
+            + '.tk-bpm input{width:84px;font-size:1rem;padding:8px;border-radius:8px;'
+            + 'border:1px solid #363b45;background:#12141a;color:#e8eaed;text-align:center}'
+            + '.tk-excl-lab{color:#6b7280;font-size:.72rem;text-align:center;margin-top:6px}'
+            + '.tk-excl{display:flex;flex-wrap:wrap;gap:6px;justify-content:center;margin-top:4px}'
+            + '.tk-chip{background:#1b1e25;color:#6b7280;border:1px solid #2c3038;'
+            + 'border-radius:999px;padding:5px 11px;font-size:.78rem;cursor:pointer}'
+            + '.tk-chip.on{background:#17304d;color:#cfe3ff;border-color:#2f6fed}'
+            + '.tk-status{color:#9aa0a6;font-size:.75rem;text-align:center;margin-top:8px}'
+            + '.tk-off{color:#9aa0a6;font-size:.85rem;text-align:center;padding:6px}'
+            + '.cv-tkbadge{color:#f0b429;font-size:.78rem;margin-top:2px}';
             document.head.appendChild(css);
         })();
 
@@ -4700,6 +4725,205 @@
             renderChordsView(); renderLyricsView();
             var lbl = document.getElementById('leadValue');
             if (lbl) lbl.textContent = (v >= 0 ? '+' : '') + v.toFixed(1) + 's';
+        }
+
+        // ── Per-song tempo & key (ReaSet_TempoKey.lua bridge) ────────────────
+        var g_tkHb = { val: null, changedAt: 0 };
+        var g_tkState = null;     // CONFIRMED by REAPER: {rate,semis,excl,songStart,items,bpm}
+        var g_tkSongKey = null;   // displayName of the song we last sent a want for
+        var g_tkSettings = {};    // per song: {rate, semis, excl:[slots]}
+        var TK_DEFAULT_EXCL = ['DRUMS', 'CLICK'];
+
+        function _tkStoreKey() { return 'reaset_tempokey' + _pkSuffix(); }
+        function tkLoadSettings() {
+            try { g_tkSettings = JSON.parse(localStorage.getItem(_tkStoreKey()) || '{}'); }
+            catch (e) { g_tkSettings = {}; }
+        }
+        tkLoadSettings();
+        function tkAlive() {
+            return g_tkHb.val !== null && (Date.now() - g_tkHb.changedAt) < 5000;
+        }
+        function tkActiveSong() {
+            for (var i = 0; i < displayList.length; i++) {
+                var r = displayList[i];
+                if (currentPos >= r.start && currentPos < r.end) return r;
+            }
+            return null;
+        }
+        function tkGet(song) {
+            var k = song.displayName || song.name;
+            if (!g_tkSettings[k]) {
+                g_tkSettings[k] = { rate: 1.0, semis: 0, excl: TK_DEFAULT_EXCL.slice() };
+            }
+            return g_tkSettings[k];
+        }
+        function tkSave() {
+            localStorage.setItem(_tkStoreKey(), JSON.stringify(g_tkSettings));
+        }
+        function tkSendWant() {
+            var song = tkActiveSong();
+            if (!song) return;
+            var st = tkGet(song);
+            var val = st.rate.toFixed(4) + '|' + st.semis + '|' + st.excl.join(',')
+                    + '|' + song.start.toFixed(3) + '|' + song.end.toFixed(3);
+            wwr_req('SET/EXTSTATE/ReaSetTK/want/' + encodeURIComponent(val));
+            tkRenderPanel();
+        }
+        function tkAdjustRate(delta) {
+            var song = tkActiveSong(); if (!song) return;
+            var st = tkGet(song);
+            st.rate = Math.min(1.5, Math.max(0.5, Math.round((st.rate + delta) * 100) / 100));
+            tkSave(); tkSendWant();
+        }
+        function tkSetBpm() {
+            var song = tkActiveSong(); if (!song) return;
+            var det = g_tkState && g_tkState.bpm;
+            var v = parseFloat(document.getElementById('tkBpmIn').value);
+            if (!det || isNaN(v) || v <= 0) return;
+            var st = tkGet(song);
+            st.rate = Math.min(1.5, Math.max(0.5, v / det));
+            tkSave(); tkSendWant();
+        }
+        function tkAdjustSemis(delta) {
+            var song = tkActiveSong(); if (!song) return;
+            var st = tkGet(song);
+            st.semis = Math.min(6, Math.max(-6, st.semis + delta));
+            tkSave(); tkSendWant();
+        }
+        function tkReset(which) {
+            var song = tkActiveSong(); if (!song) return;
+            var st = tkGet(song);
+            if (which === 'rate') st.rate = 1.0; else st.semis = 0;
+            tkSave(); tkSendWant();
+        }
+        function tkToggleExcl(slot) {
+            var song = tkActiveSong(); if (!song) return;
+            var st = tkGet(song);
+            var i = st.excl.indexOf(slot);
+            if (i >= 0) st.excl.splice(i, 1); else st.excl.push(slot);
+            tkSave(); tkSendWant();
+        }
+        // Is REAPER's confirmed state what we asked for? Drives pending display.
+        function tkConfirmed(song) {
+            if (!g_tkState || !song) return false;
+            var st = tkGet(song);
+            return Math.abs(g_tkState.rate - st.rate) < 0.005 &&
+                   g_tkState.semis === st.semis &&
+                   Math.abs(g_tkState.songStart - song.start) < 0.06;
+        }
+        function tkHandleExtState(tok) {
+            var key = tok[2];
+            var val = tok.length > 3 ? (tok.slice(3).join('\t') || '') : '';
+            if (key === 'heartbeat') {
+                if (val === '') { g_tkHb.val = null; g_tkState = null; }
+                else if (val !== g_tkHb.val) { g_tkHb.val = val; g_tkHb.changedAt = Date.now(); }
+            } else if (key === 'state' && val !== '') {
+                var p = val.split('|');
+                var st = { rate: parseFloat(p[0]), semis: parseInt(p[1]),
+                           excl: (p[2] || ''), songStart: parseFloat(p[3]),
+                           items: parseInt(p[4]), bpm: parseFloat(p[5]) || null };
+                var changed = !g_tkState || g_tkState.rate !== st.rate ||
+                              g_tkState.semis !== st.semis ||
+                              g_tkState.songStart !== st.songStart ||
+                              g_tkState.bpm !== st.bpm;
+                g_tkState = st;
+                if (changed) { tkRenderPanel(); renderChordsView(); }
+            }
+        }
+        // Watch for the active song changing; re-send that song's saved wishes.
+        function tkTick() {
+            var song = tkActiveSong();
+            var k = song ? (song.displayName || song.name) : null;
+            if (k !== g_tkSongKey) {
+                g_tkSongKey = k;
+                if (song) tkSendWant();
+                tkRenderPanel();
+            }
+        }
+
+        // Transpose a chord name by the CONFIRMED semitone offset, for display.
+        var TK_NOTES = ['C','C#','D','D#','E','F','F#','G','G#','A','A#','B'];
+        var TK_FLAT = { 'Db':'C#','Eb':'D#','Gb':'F#','Ab':'G#','Bb':'A#' };
+        function transposeChordName(name, semis) {
+            if (!semis) return name;
+            return String(name).replace(/([A-G])([#b]?)/g, function (m, root, acc, off, whole) {
+                // Only transpose where it is actually a note: at the start, or
+                // right after a "/" (slash bass). Leave e.g. the D in "sus" alone
+                // — the regex cannot match inside lowercase text, so this is safe.
+                var idx = arguments[3];
+                if (idx !== 0 && whole[idx - 1] !== '/') return m;
+                var n = root + (acc === 'b' ? 'b' : acc);
+                if (TK_FLAT[n]) n = TK_FLAT[n];
+                var i = TK_NOTES.indexOf(n);
+                if (i < 0) return m;
+                return TK_NOTES[(i + (semis % 12) + 12) % 12];
+            });
+        }
+
+        function tkRenderPanel() {
+            var host = document.getElementById('tk-panel');
+            if (!host) return;
+            var song = tkActiveSong();
+            if (!tkAlive()) {
+                host.innerHTML = '<div class="tk-off">Tempo/key control not running — run <b>ReaSet_Startup.lua</b> in REAPER.</div>';
+                return;
+            }
+            if (!song) {
+                host.innerHTML = '<div class="tk-off">Tempo &amp; key: cue a song first.</div>';
+                return;
+            }
+            var st = tkGet(song);
+            var ok = tkConfirmed(song);
+            var pct = Math.round(st.rate * 100);
+            var det = g_tkState && g_tkState.bpm;
+            var bpmNow = det ? Math.round(det * st.rate) : null;
+            var h = '<div class="tk-row"><span class="tk-lab">TEMPO</span>'
+                + '<button class="tk-btn" onclick="tkAdjustRate(-0.05)">−5%</button>'
+                + '<button class="tk-btn" onclick="tkAdjustRate(-0.01)">−1%</button>'
+                + '<span class="tk-val' + (ok ? '' : ' pend') + '">' + pct + '%</span>'
+                + '<button class="tk-btn" onclick="tkAdjustRate(0.01)">+1%</button>'
+                + '<button class="tk-btn" onclick="tkAdjustRate(0.05)">+5%</button>'
+                + '<button class="tk-btn" onclick="tkReset(\'rate\')" title="back to normal">⟲</button>'
+                + '</div>';
+            h += '<div class="tk-row tk-bpm">'
+                + (det ? ('<span class="tk-det">' + Math.round(det) + ' bpm →</span>'
+                    + '<input id="tkBpmIn" type="number" min="40" max="260" step="1" value="'
+                    + (bpmNow || Math.round(det)) + '">'
+                    + '<button class="tk-btn" onclick="tkSetBpm()">Set BPM</button>')
+                  : '<span class="tk-det">detected BPM unknown for this song — use % (re-import to capture BPM)</span>')
+                + '</div>';
+            h += '<div class="tk-row"><span class="tk-lab">KEY</span>'
+                + '<button class="tk-btn" onclick="tkAdjustSemis(-1)">−1</button>'
+                + '<span class="tk-val' + (ok ? '' : ' pend') + '">'
+                + (st.semis > 0 ? '+' : '') + st.semis + ' st</span>'
+                + '<button class="tk-btn" onclick="tkAdjustSemis(1)">+1</button>'
+                + '<button class="tk-btn" onclick="tkReset(\'semis\')" title="back to normal">⟲</button>'
+                + '</div>';
+            // Per-group include/exclude chips for the key change only.
+            var groups = [];
+            if (typeof jrActiveSong === 'function') {
+                var jr = jrActiveSong();
+                if (jr && jr.controls) groups = jr.controls;
+            }
+            if (!groups.length) {
+                groups = [{slot:'DRUMS',label:'Drums'},{slot:'PERC_FX',label:'Perc/FX'},
+                          {slot:'BASS',label:'Bass'},{slot:'GTR1',label:'Guitar 1'},
+                          {slot:'GTR2',label:'Guitar 2'},{slot:'KEYS',label:'Keys'},
+                          {slot:'BVS',label:'BVs'},{slot:'LEAD_VOX',label:'Lead Vox'},
+                          {slot:'CLICK',label:'Click'},{slot:'EXTRA',label:'Extras'}];
+            }
+            h += '<div class="tk-excl-lab">Key change applies to:</div><div class="tk-excl">';
+            groups.forEach(function (g) {
+                var inKey = st.excl.indexOf(g.slot) < 0;
+                h += '<button class="tk-chip' + (inKey ? ' on' : '')
+                   + '" onclick="tkToggleExcl(\'' + g.slot + '\')">' + g.label + '</button>';
+            });
+            h += '</div>';
+            h += '<div class="tk-status">' + (ok
+                ? 'Applied' + (g_tkState.items ? ' to ' + g_tkState.items + ' stems' : '')
+                  + (bpmNow ? ' · now ~' + Math.round(det * g_tkState.rate) + ' bpm' : '')
+                : 'Applying…') + '</div>';
+            host.innerHTML = h;
         }
 
         // Chord view mode: 'chart' (rows of 4), 'big' (one large + strip),
@@ -4798,7 +5022,7 @@
         setChordView(g_chordView);   // paints the active view tab
         syncLeadSlider();
         // Shown in the sidebar so a stale cached page is obvious after a deploy.
-        var REASET_VERSION = "v1.1 · 2026-08-22";
+        var REASET_VERSION = "v1.3 · 2026-08-22";
         var _rv = document.getElementById("reasetVer");
         if (_rv) _rv.textContent = REASET_VERSION;
         (function () { var t = localStorage.getItem("reasetlist_theme") || "dark"; setTheme(t, true); })();
@@ -4856,6 +5080,7 @@
                         // Chord/lyric views follow the playhead (with lead time)
                         // rather than waiting to be pushed a value from REAPER.
                         if (g_clData) { renderChordsView(); renderLyricsView(); }
+                        tkTick();
                         break;
                     case "REGION_LIST":
                         g_regions = [];
@@ -4924,6 +5149,8 @@
                         if (tok[1] === "ReaSetJR") { jrHandleExtState(tok); break; }
                         // Chord/lyric timeline payload/heartbeat
                         if (tok[1] === "ReaSetCL") { clHandleExtState(tok); break; }
+                        // Tempo/key bridge confirmed state
+                        if (tok[1] === "ReaSetTK") { tkHandleExtState(tok); break; }
                         // Auto-detection: ReaSet_NativeLoop.lua writes "ReaSet/nativeLoopReady=1"
                         if (tok[1] === "ReaSet" && tok[2] === "nativeLoopReady") {
                             var nlReady = (tok[3] === "1");
@@ -8398,14 +8625,20 @@
                 return;
             }
             var list = g_clData.chords;
-            var t = currentPos + getLead();
+            // Lead is wall-clock: at 120% playrate, 0.5s of warning arrives in
+            // 0.5 real seconds only if we look 0.6 project-seconds ahead.
+            var tkRate = (g_tkState && g_tkState.rate) || 1.0;
+            var tkSemis = (g_tkState && g_tkState.semis) || 0;
+            var t = currentPos + getLead() * tkRate;
             var cur = clIndexAtOrBefore(list, t);
             if (cur < 0) cur = 0;
+            // Confirmed transpose changes the chord NAMES the musician sees.
+            var X = function (n) { return transposeChordName(n, tkSemis); };
             var html;
             if (g_chordView === 'big') {
                 var nextTxt = [];
-                for (var i = cur + 1; i < Math.min(cur + 5, list.length); i++) nextTxt.push(list[i][2]);
-                html = '<div class="cv-big">' + list[cur][2] + '</div>'
+                for (var i = cur + 1; i < Math.min(cur + 5, list.length); i++) nextTxt.push(X(list[i][2]));
+                html = '<div class="cv-big">' + X(list[cur][2]) + '</div>'
                      + '<div class="cv-next">' + (nextTxt.length
                          ? 'next: ' + nextTxt.join(' · ') : '&nbsp;') + '</div>';
             } else if (g_chordView === 'timeline') {
@@ -8416,7 +8649,7 @@
                     if (e < from || s > from + WIN) continue;
                     var w = Math.max(2, ((Math.min(e, from + WIN) - Math.max(s, from)) / WIN) * 100);
                     cells.push('<div class="cv-tl-cell' + (j === cur ? ' on' : '')
-                        + '" style="width:' + w.toFixed(2) + '%">' + list[j][2] + '</div>');
+                        + '" style="width:' + w.toFixed(2) + '%">' + X(list[j][2]) + '</div>');
                 }
                 html = '<div class="cv-tl">' + cells.join('') + '</div>'
                      + '<div class="cv-tl-now"></div>';
@@ -8429,14 +8662,22 @@
                         var idx = rowStart + r * 4 + k;
                         if (idx >= list.length) { cellsHtml += '<div class="cv-cell empty"></div>'; continue; }
                         cellsHtml += '<div class="cv-cell' + (idx === cur ? ' on' : '')
-                            + (r === 1 ? ' ahead' : '') + '">' + list[idx][2] + '</div>';
+                            + (r === 1 ? ' ahead' : '') + '">' + X(list[idx][2]) + '</div>';
                     }
                     rows += '<div class="cv-row">' + cellsHtml + '</div>';
                 }
                 html = rows;
             }
             var meta = g_clData.song ? g_clData.song.name : '';
-            host.innerHTML = html + '<div class="cv-meta">' + meta + '</div>';
+            var badge = '';
+            if (tkSemis || Math.abs(tkRate - 1) > 0.005) {
+                badge = '<div class="cv-tkbadge">'
+                    + (tkSemis ? 'Key ' + (tkSemis > 0 ? '+' : '') + tkSemis + ' (chords shown transposed)' : '')
+                    + (tkSemis && Math.abs(tkRate - 1) > 0.005 ? ' · ' : '')
+                    + (Math.abs(tkRate - 1) > 0.005 ? 'Tempo ' + Math.round(tkRate * 100) + '%' : '')
+                    + '</div>';
+            }
+            host.innerHTML = html + badge + '<div class="cv-meta">' + meta + '</div>';
         }
 
         // ── Lyrics view with lookahead ───────────────────────────────────────
@@ -8445,7 +8686,7 @@
             if (!host) return;
             if (!g_clData || !g_clData.lyrics || !g_clData.lyrics.length) return;
             var list = g_clData.lyrics;
-            var t = currentPos + getLead();
+            var t = currentPos + getLead() * ((g_tkState && g_tkState.rate) || 1.0);
             var cur = clIndexAt(list, t);
             var out = '';
             if (cur < 0) {
@@ -8617,6 +8858,7 @@
                 panel.classList.add('open');
                 g_jrLastHtml = "";
                 renderTracksPanel();
+                tkRenderPanel();
             } else {
                 panel.classList.remove('open');
             }

@@ -32,7 +32,7 @@ import requests
 # what is on disk — the importer server holds its modules in memory, so this is
 # how you tell "did the update take effect?" from "is the old process still up?"
 # BUMP THIS whenever the importer changes, and quote it when handing over.
-BUILD = "v1.2"
+BUILD = "v1.3"
 BUILD_DATE = "2026-08-22"
 
 # Fadr's S3 throttles each connection independently, so several transfers at
@@ -1025,6 +1025,7 @@ def write_reaper_job(job, job_dir):
          f"  schema = 1,",
          f"  region_name = {lua_quote(job['region_name'])},",
          f"  duration = {job.get('duration') or 0},",
+         f"  tempo = {((job.get('fadr') or {}).get('tempo')) or 'nil'},",
          f"  job_dir = {lua_quote(jd)},",
          "  slots = {"]
     for s in job.get("slots", []):

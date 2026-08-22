@@ -49,6 +49,9 @@ end
 local function chordslyrics_alive()
     return reaper.GetExtState("ReaSetCL", "heartbeat") ~= ""
 end
+local function tempokey_alive()
+    return reaper.GetExtState("ReaSetTK", "heartbeat") ~= ""
+end
 
 -- Register a script and run it — but only if it is not already running.
 -- Firing the command of a live defer script makes REAPER pop its modal
@@ -84,6 +87,8 @@ note(launch("ReaSet_NativeLoop.lua", "Native loop", nativeloop_alive))
 -- Publishes the current song's whole chord/lyric timeline. Safe on any
 -- project: with no chords/lyrics tracks it simply publishes nothing.
 note(launch("ReaSet_ChordsLyrics.lua", "Chord/lyric timeline", chordslyrics_alive))
+-- Per-song tempo (playrate, pitch preserved) and key (item pitch) control.
+note(launch("ReaSet_TempoKey.lua", "Tempo/key control", tempokey_alive))
 
 if has_track_named("lyrics") then
     note(launch("X-Raym_Convert Lyrics track items notes for dedicated web browser interface.lua",
