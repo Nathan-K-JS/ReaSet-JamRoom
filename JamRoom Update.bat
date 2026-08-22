@@ -1,6 +1,17 @@
 @echo off
 title Jam Room - update
-cd /d "%~dp0"
+
+rem Run from a COPY in %TEMP%. "git pull" updates this very file, and cmd reads
+rem a running .bat from disk by byte offset, so replacing it mid-run makes cmd
+rem skip lines and execute garbage (verified). Working from a copy means git can
+rem rewrite the original safely.
+if "%~1"=="" (
+  if not exist "%TEMP%\jamroom_upd" mkdir "%TEMP%\jamroom_upd"
+  copy /Y "%~f0" "%TEMP%\jamroom_upd\update.bat" >nul
+  "%TEMP%\jamroom_upd\update.bat" "%~dp0."
+  exit /b
+)
+cd /d "%~1"
 
 for /f "delims=" %%i in ('git rev-parse HEAD 2^>nul') do set BEFORE=%%i
 if "%BEFORE%"=="" (
@@ -41,7 +52,7 @@ findstr /i /c:"tools/" "%TEMP%\jr_changed.txt" >nul && set NEED_IMPORTER=1
 :nochange
 echo.
 echo Deploying ReaSet to REAPER's web interface...
-call "%~dp0tools\deploy_reaset.bat"
+call "%CD%\tools\deploy_reaset.bat"
 echo.
 echo Updating yt-dlp (YouTube changes break downloading every few weeks)...
 yt-dlp -U
