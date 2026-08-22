@@ -54,6 +54,11 @@ git clone -b feature/jamroom-claude https://github.com/Nathan-K-JS/ReaSet-JamRoo
 `C:\JamRoom`. Everything works the same except `JamRoom Update.bat`, which
 needs Git — without it, updating means downloading a fresh ZIP each time.
 
+### Updating later — see [UPDATING.md](UPDATING.md)
+
+Short version: double-click **`JamRoom Update.bat`**. **Delete nothing** — it
+overwrites what changed and prints exactly what you need to restart.
+
 Then run `C:\JamRoom\JamRoom Setup.bat` once (tools + config), and use the
 importer as below. **Every update after that**: on the dev machine, push the
 finished work to GitHub; on the jam room PC, double-click
