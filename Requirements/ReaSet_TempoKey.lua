@@ -155,8 +155,33 @@ end
 
 local cur = { rate = 1.0, semis = 0, excl = "", s = -1, e = -1, items = 0 }
 
+-- Force "preserve pitch when changing master playrate" ON, and report whether
+-- it actually stuck. Without it, a tempo change resamples and the whole song
+-- goes chipmunk. Checking for == 0 was not enough: some installs report -1
+-- ("state unknown"), in which case the old code silently skipped and left the
+-- preference off, which is exactly how tempo shipped broken.
+local function ensure_preserve_pitch()
+    local st = reaper.GetToggleCommandState(PRESERVE_PITCH_CMD)
+    if st ~= 1 then
+        reaper.Main_OnCommand(PRESERVE_PITCH_CMD, 0)
+        st = reaper.GetToggleCommandState(PRESERVE_PITCH_CMD)
+        if st ~= 1 then                       -- unknown state: try the once more
+            reaper.Main_OnCommand(PRESERVE_PITCH_CMD, 0)
+            st = reaper.GetToggleCommandState(PRESERVE_PITCH_CMD)
+        end
+    end
+    return st
+end
+
+local s_pp = -1        -- last known preserve-pitch state, published to ReaSet
+
 local function set_rate(rate)
     rate = math.max(MIN_RATE, math.min(MAX_RATE, rate))
+    -- Re-assert before every change, not just at boot: the preference is
+    -- global and anything (a preset, another script, the user) can flip it.
+    if math.abs(rate - 1.0) > 0.0005 then
+        s_pp = ensure_preserve_pitch()
+    end
     if math.abs(reaper.Master_GetPlayRate(0) - rate) > 0.0005 then
         reaper.CSurf_OnPlayRateChange(rate)
     end
@@ -204,8 +229,10 @@ local function publish_state()
         local _, v = reaper.GetProjExtState(0, SEC, "bpm:" .. cur.name)
         bpm = v or ""
     end
-    reaper.SetExtState(SEC, "state", string.format("%.4f|%d|%s|%.3f|%d|%s",
-        cur.rate, cur.semis, cur.excl, cur.s, cur.items, bpm), false)
+    -- Trailing field: preserve-pitch state (1 = on). ReaSet warns if it is not,
+    -- because that is the difference between time-stretch and chipmunk.
+    reaper.SetExtState(SEC, "state", string.format("%.4f|%d|%s|%.3f|%d|%s|%d",
+        cur.rate, cur.semis, cur.excl, cur.s, cur.items, bpm, s_pp), false)
 end
 
 -- ─── Main loop ───────────────────────────────────────────────────────────────
@@ -277,11 +304,11 @@ end
 
 recover_leftovers()
 -- Tempo changes must never chipmunk the audio.
-if reaper.GetToggleCommandState(PRESERVE_PITCH_CMD) == 0 then
-    reaper.Main_OnCommand(PRESERVE_PITCH_CMD, 0)
-    reaper.ShowConsoleMsg("[ReaSet tempo/key] enabled 'preserve pitch when " ..
-        "changing master playrate'.\n")
-end
+s_pp = ensure_preserve_pitch()
+reaper.ShowConsoleMsg("[ReaSet tempo/key] preserve pitch on master playrate: "
+    .. (s_pp == 1 and "ON" or ("COULD NOT ENABLE (state " .. s_pp ..
+        ") - tempo changes would shift pitch; enable it by hand at "
+        .. "Options > Preferences > Audio > Playback")) .. "\n")
 reaper.atexit(cleanup)
 publish_state()
 main_loop()

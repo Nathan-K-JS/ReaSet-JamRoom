@@ -4625,18 +4625,24 @@
             + '#chords-live{min-height:34vh;display:flex;flex-direction:column;'
             + 'align-items:center;justify-content:center;gap:10px}'
             + '.cv-row{display:flex;gap:10px;justify-content:center;width:100%}'
-            + '.cv-cell{flex:1 1 0;max-width:22%;text-align:center;padding:14px 4px;'
+            // Chord text is sized from the LONGEST name on screen (see
+            // cvFontFor): a fixed size clipped anything past one character,
+            // so "Gm" and "F#m" were unreadable.
+            + '.cv-cell{flex:1 1 0;min-width:0;text-align:center;padding:14px 2px;'
             + 'border-radius:12px;background:#1b1e25;border:2px solid transparent;'
-            + 'font-size:clamp(1.5rem,7vw,3.4rem);font-weight:700;color:#e8eaed}'
-            + '.cv-cell.ahead{opacity:.45;font-size:clamp(1rem,4.5vw,2rem);padding:8px 4px}'
+            + 'font-weight:700;color:#e8eaed;white-space:nowrap;overflow:visible}'
+            + '.cv-cell.ahead{opacity:.45;padding:8px 2px}'
             + '.cv-cell.empty{background:transparent}'
             + '.cv-cell.on{background:#17304d;border-color:#2f6fed;color:#fff}'
             + '.cv-big{font-size:clamp(3rem,22vw,9rem);font-weight:800;line-height:1}'
             + '.cv-next{color:#9aa0a6;font-size:clamp(.9rem,4vw,1.4rem);letter-spacing:.04em}'
             + '.cv-tl{display:flex;width:100%;gap:3px;align-items:stretch}'
-            + '.cv-tl-cell{background:#1b1e25;border-radius:8px;padding:16px 2px;'
-            + 'text-align:center;font-weight:700;overflow:hidden;'
-            + 'font-size:clamp(.9rem,3.5vw,1.8rem);color:#c9ced8}'
+            + '.cv-tl-cell{background:#1b1e25;border-radius:8px;padding:16px 1px;'
+            + 'text-align:center;font-weight:700;overflow:hidden;min-width:0;'
+            + 'white-space:nowrap;color:#c9ced8}'
+            + '.tk-warn{background:#3a2f1c;border:1px solid #f0b429;color:#ffe9bf;'
+            + 'border-radius:10px;padding:10px 12px;font-size:.82rem;'
+            + 'line-height:1.4;margin-bottom:8px}'
             + '.cv-tl-cell.on{background:#17304d;color:#fff;outline:2px solid #2f6fed}'
             + '.cv-tl-now{width:2px;height:14px;background:#ef5350;margin-left:12.5%}'
             + '.cv-meta{color:#6b7280;font-size:.75rem;margin-top:4px}'
@@ -4821,11 +4827,15 @@
                 var p = val.split('|');
                 var st = { rate: parseFloat(p[0]), semis: parseInt(p[1]),
                            excl: (p[2] || ''), songStart: parseFloat(p[3]),
-                           items: parseInt(p[4]), bpm: parseFloat(p[5]) || null };
+                           items: parseInt(p[4]), bpm: parseFloat(p[5]) || null,
+                           // 1 = REAPER will time-stretch; anything else means
+                           // a tempo change would shift pitch as well.
+                           pp: (p.length > 6 ? parseInt(p[6]) : 1) };
                 var changed = !g_tkState || g_tkState.rate !== st.rate ||
                               g_tkState.semis !== st.semis ||
                               g_tkState.songStart !== st.songStart ||
-                              g_tkState.bpm !== st.bpm;
+                              g_tkState.bpm !== st.bpm ||
+                              g_tkState.pp !== st.pp;
                 g_tkState = st;
                 if (changed) { tkRenderPanel(); renderChordsView(); }
             }
@@ -4877,7 +4887,15 @@
             var pct = Math.round(st.rate * 100);
             var det = g_tkState && g_tkState.bpm;
             var bpmNow = det ? Math.round(det * st.rate) : null;
-            var h = '<div class="tk-row"><span class="tk-lab">TEMPO</span>'
+            var h = '';
+            if (g_tkState && g_tkState.pp !== 1) {
+                h += '<div class="tk-warn">Tempo changes will also shift the '
+                   + 'pitch. REAPER\'s <b>preserve pitch when changing master '
+                   + 'playrate</b> could not be switched on automatically — '
+                   + 'turn it on in Options → Preferences → Audio → Playback, '
+                   + 'then reload this page.</div>';
+            }
+            h += '<div class="tk-row"><span class="tk-lab">TEMPO</span>'
                 + '<button class="tk-btn" onclick="tkAdjustRate(-0.05)">−5%</button>'
                 + '<button class="tk-btn" onclick="tkAdjustRate(-0.01)">−1%</button>'
                 + '<span class="tk-val' + (ok ? '' : ' pend') + '">' + pct + '%</span>'
@@ -5022,7 +5040,7 @@
         setChordView(g_chordView);   // paints the active view tab
         syncLeadSlider();
         // Shown in the sidebar so a stale cached page is obvious after a deploy.
-        var REASET_VERSION = "v1.3 · 2026-08-22";
+        var REASET_VERSION = "v1.4 · 2026-08-22";
         var _rv = document.getElementById("reasetVer");
         if (_rv) _rv.textContent = REASET_VERSION;
         (function () { var t = localStorage.getItem("reasetlist_theme") || "dark"; setTheme(t, true); })();
@@ -8634,35 +8652,66 @@
             if (cur < 0) cur = 0;
             // Confirmed transpose changes the chord NAMES the musician sees.
             var X = function (n) { return transposeChordName(n, tkSemis); };
+            // Size text to the LONGEST chord that will be on screen, so "F#m7"
+            // stays readable instead of being clipped by a one-character size.
+            function cvFontFor(names, big) {
+                var len = 1;
+                for (var i = 0; i < names.length; i++) {
+                    if (names[i] && names[i].length > len) len = names[i].length;
+                }
+                // vw units keep it responsive on phone, tablet and the PC.
+                var vw = big ? Math.min(18, 26 / len) : Math.min(7, 11 / len);
+                var rem = big ? Math.min(7, 10 / len) : Math.min(3.2, 4.6 / len);
+                return 'clamp(0.85rem,' + vw.toFixed(2) + 'vw,' + rem.toFixed(2) + 'rem)';
+            }
             var html;
             if (g_chordView === 'big') {
                 var nextTxt = [];
                 for (var i = cur + 1; i < Math.min(cur + 5, list.length); i++) nextTxt.push(X(list[i][2]));
-                html = '<div class="cv-big">' + X(list[cur][2]) + '</div>'
+                var bigName = X(list[cur][2]);
+                html = '<div class="cv-big" style="font-size:'
+                     + cvFontFor([bigName], true) + '">' + bigName + '</div>'
                      + '<div class="cv-next">' + (nextTxt.length
                          ? 'next: ' + nextTxt.join(' · ') : '&nbsp;') + '</div>';
             } else if (g_chordView === 'timeline') {
                 // Width proportional to duration, over a fixed lookahead window
-                var WIN = 16, from = t - 2, cells = [];
+                var WIN = 16, from = t - 2, cells = [], tlNames = [];
                 for (var j = 0; j < list.length; j++) {
                     var s = list[j][0], e = list[j][1];
                     if (e < from || s > from + WIN) continue;
-                    var w = Math.max(2, ((Math.min(e, from + WIN) - Math.max(s, from)) / WIN) * 100);
-                    cells.push('<div class="cv-tl-cell' + (j === cur ? ' on' : '')
-                        + '" style="width:' + w.toFixed(2) + '%">' + X(list[j][2]) + '</div>');
+                    tlNames.push(X(list[j][2]));
+                }
+                var tlFont = cvFontFor(tlNames, false);
+                for (var j2 = 0, ci = 0; j2 < list.length; j2++) {
+                    var s2 = list[j2][0], e2 = list[j2][1];
+                    if (e2 < from || s2 > from + WIN) continue;
+                    var w = Math.max(2, ((Math.min(e2, from + WIN) - Math.max(s2, from)) / WIN) * 100);
+                    cells.push('<div class="cv-tl-cell' + (j2 === cur ? ' on' : '')
+                        + '" style="width:' + w.toFixed(2) + '%;font-size:' + tlFont
+                        + '">' + tlNames[ci++] + '</div>');
                 }
                 html = '<div class="cv-tl">' + cells.join('') + '</div>'
                      + '<div class="cv-tl-now"></div>';
             } else {   // 'chart' — rows of four, current row plus the next
                 var rowStart = Math.floor(cur / 4) * 4;
+                var shown = [];
+                for (var p1 = 0; p1 < 8; p1++) {
+                    var ix = rowStart + p1;
+                    if (ix < list.length) shown.push(X(list[ix][2]));
+                }
+                var nowFont = cvFontFor(shown, false);
+                var aheadFont = cvFontFor(shown, false);
                 var rows = '';
                 for (var r = 0; r < 2; r++) {
                     var cellsHtml = '';
                     for (var k = 0; k < 4; k++) {
                         var idx = rowStart + r * 4 + k;
                         if (idx >= list.length) { cellsHtml += '<div class="cv-cell empty"></div>'; continue; }
+                        var fs = (r === 1)
+                            ? 'calc(' + aheadFont + ' * 0.6)' : nowFont;
                         cellsHtml += '<div class="cv-cell' + (idx === cur ? ' on' : '')
-                            + (r === 1 ? ' ahead' : '') + '">' + X(list[idx][2]) + '</div>';
+                            + (r === 1 ? ' ahead' : '') + '" style="font-size:' + fs
+                            + '">' + X(list[idx][2]) + '</div>';
                     }
                     rows += '<div class="cv-row">' + cellsHtml + '</div>';
                 }
