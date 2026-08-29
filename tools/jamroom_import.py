@@ -928,6 +928,241 @@ def ug_chart_vocabulary(url, detected_key=None):
     }
 
 
+def ug_chart_sequence(url):
+    """The chart's chords AS PRINTED, in order, corrected for capo.
+
+    This is the musical truth: a real player's transcription, containing only
+    actual chord changes. Fadr, by contrast, reports a chord for every harmonic
+    event including passing notes and lead lines, which is why its charts are
+    cluttered. Here we keep the chart's sequence intact and use Fadr only to
+    place it in time (see chords_from_chart).
+    """
+    data = _ug_page_data(url)
+    page = data.get("store", {}).get("page", {}).get("data", {})
+    content = ((page.get("tab_view") or {}).get("wiki_tab") or {}).get("content") or ""
+    try:
+        capo = int((page.get("tab_view") or {}).get("capo") or 0)
+    except (TypeError, ValueError):
+        capo = 0
+
+    seq = []
+    for line in content.replace("\r\n", "\n").split("\n"):
+        # Section headers carry no chords; skip so they cannot pollute the run.
+        if re.match(r"^\s*\[?\s*(intro|verse|chorus|bridge|outro|solo|"
+                    r"pre-?chorus|interlude|instrumental|refrain|coda)",
+                    re.sub(r"\[/?ch\]", "", line), re.I):
+            continue
+        for c in re.findall(r"\[ch\]([^\[]+)\[/ch\]", line):
+            c = c.strip()
+            if c:
+                seq.append(transpose_chord(c, capo))
+    return {"sequence": seq, "capo": capo, "url": url,
+            "key": transpose_chord((page.get("tab") or {}).get("tonality_name") or "", capo)}
+
+
+def _collapse_detected(chords, min_len=0.35):
+    """Fadr's stream reduced to plausible chord CHANGES: merge runs of the same
+    chord, and drop blips too short to be a real change (passing notes)."""
+    merged = []
+    for c in chords:
+        name = c.get("chord")
+        s, e = float(c["start"]), float(c["end"])
+        if merged and merged[-1]["chord"] == name:
+            merged[-1]["end"] = max(merged[-1]["end"], e)
+        else:
+            merged.append({"chord": name, "start": s, "end": e})
+    kept = [c for c in merged if (c["end"] - c["start"]) >= min_len]
+    # Re-merge in case dropping a blip joined two identical neighbours.
+    out = []
+    for c in kept:
+        if out and out[-1]["chord"] == c["chord"]:
+            out[-1]["end"] = c["end"]
+        else:
+            out.append(dict(c))
+    return out
+
+
+def _align(seq_a, seq_b):
+    """Needleman-Wunsch alignment of two chord sequences.
+
+    Returns pairs (i, j) where i indexes seq_a and j indexes seq_b, or None for
+    a gap. Scoring rewards an exact chord match most, a shared root next; gaps
+    are cheap because the two sources legitimately differ in density.
+    """
+    GAP = -1.0
+
+    def score(a, b):
+        if a == b:
+            return 3.0
+        ra = _root_index(_chord_parts(a)[0])
+        rb = _root_index(_chord_parts(b)[0])
+        if ra is not None and ra == rb:
+            return 2.0
+        return -2.0
+
+    n, m = len(seq_a), len(seq_b)
+    if not n or not m:
+        return []
+    # Score matrix
+    F = [[0.0] * (m + 1) for _ in range(n + 1)]
+    for i in range(1, n + 1):
+        F[i][0] = F[i - 1][0] + GAP
+    for j in range(1, m + 1):
+        F[0][j] = F[0][j - 1] + GAP
+    for i in range(1, n + 1):
+        ai = seq_a[i - 1]
+        Fi, Fp = F[i], F[i - 1]
+        for j in range(1, m + 1):
+            Fi[j] = max(Fp[j - 1] + score(ai, seq_b[j - 1]),
+                        Fp[j] + GAP, Fi[j - 1] + GAP)
+    # Traceback
+    pairs, i, j = [], n, m
+    while i > 0 or j > 0:
+        if i > 0 and j > 0 and abs(F[i][j] - (F[i - 1][j - 1]
+                                 + score(seq_a[i - 1], seq_b[j - 1]))) < 1e-9:
+            pairs.append((i - 1, j - 1)); i -= 1; j -= 1
+        elif i > 0 and abs(F[i][j] - (F[i - 1][j] + GAP)) < 1e-9:
+            pairs.append((i - 1, None)); i -= 1
+        else:
+            pairs.append((None, j - 1)); j -= 1
+    pairs.reverse()
+    return pairs
+
+
+def _best_chart_offset(detected, seq):
+    """How far the chart is transposed from the recording, in semitones.
+
+    Charts are routinely written in a friendlier key than the record - a
+    semitone down for Misery Business, for example - and a capo field does not
+    always say so. Comparing roots without correcting for that makes every
+    match fail. Each of the twelve offsets is scored by how much of the song's
+    DURATION lands on a chord root the transposed chart actually plays, so a
+    brief wrong guess cannot outvote the real key.
+    """
+    chart_roots = set()
+    for c in seq:
+        i = _root_index(_chord_parts(c)[0])
+        if i is not None:
+            chart_roots.add(i)
+    if not chart_roots or not detected:
+        return 0, 0.0
+    weights = {}
+    total = 0.0
+    for d in detected:
+        i = _root_index(_chord_parts(d["chord"])[0])
+        if i is None:
+            continue
+        w = max(0.0, float(d["end"]) - float(d["start"]))
+        weights[i] = weights.get(i, 0.0) + w
+        total += w
+    if total <= 0:
+        return 0, 0.0
+    best_off, best_score = 0, -1.0
+    for off in range(12):
+        moved = {(r + off) % 12 for r in chart_roots}
+        score = sum(w for pc, w in weights.items() if pc in moved)
+        if score > best_score:
+            best_off, best_score = off, score
+    return best_off, best_score / total
+
+
+def chords_from_chart(job, url, min_len=0.35):
+    """Build a chord list that shows the CHART's chords, timed from the audio.
+
+    The chart supplies which chords exist and in what order; the detected
+    stream supplies when things change. Chart chords that align to a detected
+    change take its time; the rest are spread evenly between their anchored
+    neighbours, so nothing is invented and nothing is dropped.
+    """
+    chart = ug_chart_sequence(url)
+    seq = chart["sequence"]
+    detected = _collapse_detected(job.get("chords") or [], min_len)
+    if not seq:
+        raise RuntimeError("That chart contains no chord symbols.")
+    if not detected:
+        raise RuntimeError("This song has no detected chord timing to anchor to.")
+
+    # Put the chart into the recording's key before trying to match anything.
+    offset, fit = _best_chart_offset(detected, seq)
+    if offset:
+        seq = [transpose_chord(c, offset) for c in seq]
+
+    det_names = [d["chord"] for d in detected]
+    pairs = _align(seq, det_names)
+
+    # Anchor times for chart chords that matched something detected.
+    anchored = {}
+    for i, j in pairs:
+        if i is not None and j is not None and i not in anchored:
+            anchored[i] = detected[j]["start"]
+
+    song_end = max(d["end"] for d in detected)
+    times = [anchored.get(i) for i in range(len(seq))]
+
+    # Fill unanchored chords by spreading them between known anchors, so an
+    # unmatched run still lands in musically sensible places.
+    first = next((k for k, t in enumerate(times) if t is not None), None)
+    if first is None:
+        raise RuntimeError("The chart could not be matched to this recording at "
+                           "all - it is probably a different arrangement.")
+    last = max(k for k, t in enumerate(times) if t is not None)
+    # Chords ahead of the first anchor (a chart intro the detector missed) get
+    # real room rather than being stacked into a millisecond each.
+    if first > 0:
+        anchor_t = times[first]
+        room = min(anchor_t, first * 1.5)
+        step = room / first if first else 0
+        for k in range(first):
+            times[k] = max(0.0, anchor_t - (first - k) * step)
+    prev = first
+    for k in range(first + 1, len(times)):
+        if times[k] is not None:
+            if k - prev > 1:                    # interpolate the gap
+                a, b = times[prev], times[k]
+                for q in range(prev + 1, k):
+                    times[q] = a + (b - a) * (q - prev) / (k - prev)
+            prev = k
+    tail = [k for k in range(last + 1, len(times))]
+    if tail:                                    # after the last anchor
+        a = times[last]
+        step = max(0.5, (song_end - a) / (len(tail) + 1))
+        for n, k in enumerate(tail, start=1):
+            times[k] = a + step * n
+
+    # A chord nobody can read is worse than no chord. Where the chart packs in
+    # more changes than the recording has room for, merge the crush rather than
+    # emitting a flicker of unreadable entries.
+    MIN_SHOW = 0.30
+    out = []
+    for k, name in enumerate(seq):
+        s = max(0.0, float(times[k]))
+        # The chart can list more changes than the recording actually contains
+        # (repeats written out, or a busier arrangement than this take). Any
+        # chord that would flash by faster than it can be read is dropped and
+        # its predecessor keeps the space - a 0.2s chord helps nobody.
+        if out and s - out[-1]["start"] < MIN_SHOW:
+            continue
+        out.append({"start": round(s, 3), "end": 0.0, "chord": name})
+    for k in range(len(out)):
+        out[k]["end"] = round(out[k + 1]["start"] if k + 1 < len(out) else song_end, 3)
+    out = [c for c in out if c["end"] > c["start"]]
+    matched = sum(1 for i, j in pairs if i is not None and j is not None)
+    return {
+        "chords": out,
+        "chart_chords": len(seq),
+        "detected_raw": len(job.get("chords") or []),
+        "detected_changes": len(detected),
+        "anchored": len(anchored),
+        "matched": matched,
+        "merged": len(seq) - len(out),
+        "capo": chart["capo"],
+        "key_offset": offset,
+        "key_fit_pct": round(100 * fit),
+        "key": transpose_chord(chart["key"], offset) if chart["key"] else "",
+        "coverage_pct": round(100 * len(anchored) / max(1, len(seq))),
+    }
+
+
 def chart_match_report(job, voc):
     """Does this chart actually belong to this recording?
 
