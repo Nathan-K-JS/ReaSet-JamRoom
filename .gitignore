@@ -3,5 +3,7 @@ tools/jamroom_import.config.json
 tools/jamroom_pending_job.txt
 tools/jamroom_pending_delete.txt
 tools/jamroom_delete_receipt.txt
+tools/jamroom_pending_rechord.lua
+tools/jamroom_rechord_receipt.txt
 imports/
 __pycache__/
