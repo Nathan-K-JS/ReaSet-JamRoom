@@ -16,6 +16,7 @@ Part of ReaSet Jam Room. GPL v3, same as the repo.
 """
 
 import argparse
+import difflib
 import json
 import re
 import shutil
@@ -32,8 +33,8 @@ import requests
 # what is on disk — the importer server holds its modules in memory, so this is
 # how you tell "did the update take effect?" from "is the old process still up?"
 # BUMP THIS whenever the importer changes, and quote it when handing over.
-BUILD = "v1.7"
-BUILD_DATE = "2026-08-22"
+BUILD = "v1.8"
+BUILD_DATE = "2026-08-29"
 
 # Fadr's S3 throttles each connection independently, so several transfers at
 # once finish far sooner than one at a time. Overridable via config.
@@ -781,7 +782,11 @@ def lyrics_search(artist="", title="", free=""):
     song is filed under a slightly different name — this is the manual way in.
     """
     hdr = {"User-Agent": USER_AGENT}
-    params = {"q": free} if free else {"artist_name": artist, "track_name": title}
+    # Same cleaning as the chart search: "ft. …" and "_ Lyrics" come from the
+    # YouTube title and stop the lyrics database matching at all.
+    params = ({"q": free} if free else
+              {"artist_name": clean_song_title(artist),
+               "track_name": clean_song_title(title)})
     try:
         r = requests.get(f"{LRCLIB_API}/search", params=params, headers=hdr,
                          timeout=30)
@@ -853,8 +858,35 @@ def _ug_page_data(url):
     return json.loads(_html.unescape(m.group(1)))
 
 
-def ug_search(artist, title):
-    """Chord charts for a song, best-rated first."""
+def clean_song_title(title):
+    """A song title as a chart site would list it.
+
+    Names reaching us come from YouTube and Fadr, so they carry things no chart
+    index knows about - "(Official Video)", "_ Lyrics", "ft. Somebody". Left in,
+    they cause a search to find nothing at all (Bring Me To Life did exactly
+    that) or to fall through to a wrong song.
+    """
+    t = re.sub(r"\s*[\(\[][^)\]]*[\)\]]", " ", title or "")
+    t = re.sub(r"\s*[_|/-]\s*(official\s*)?(music\s*)?(lyric|lyrics|video|"
+               r"audio|hd|hq|4k|remaster(ed)?|live)\b.*$", " ", t, flags=re.I)
+    t = re.sub(r"\s+(ft|feat|featuring)\.?\s+.*$", " ", t, flags=re.I)
+    t = re.sub(r"\s*[-–—]\s*topic\s*$", " ", t, flags=re.I)
+    return " ".join(t.split()).strip(" -–—_|")
+
+
+def ug_search(artist, title, free=""):
+    """Chord charts for a song, best match first.
+
+    `free` is the operator typing their own search terms, for when the song is
+    filed under a different name than ours. A hand-typed search is deliberate,
+    so it is matched loosely - the automatic one is held to a strict standard
+    because nobody is watching it.
+    """
+    artist, title = clean_song_title(artist), clean_song_title(title)
+    if free.strip():
+        artist, title, floor = "", free.strip(), 0.4
+    else:
+        floor = 0.75
     q = requests.utils.quote(f"{artist} {title}".strip())
     data = _ug_page_data("https://www.ultimate-guitar.com/search.php"
                          f"?search_type=title&value={q}")
@@ -867,15 +899,26 @@ def ug_search(artist, title):
         url = r.get("tab_url") or ""
         if "tabs.ultimate-guitar.com" not in url:
             continue
-        out.append({
+        cand = {
             "url": url,
             "artist": r.get("artist_name") or "",
             "title": r.get("song_name") or "",
             "rating": round(float(r.get("rating") or 0), 2),
             "votes": int(r.get("votes") or 0),
             "version": r.get("version"),
-        })
-    out.sort(key=lambda c: (-c["votes"], -c["rating"]))
+        }
+        # Ultimate Guitar's search returns loose matches, and sorting those by
+        # popularity alone hands back a famous chart for a DIFFERENT song (the
+        # Californication chart was being returned for Can't Stop). Judge the
+        # song by name first, and only then by how well-voted it is.
+        t = _line_ratio(_norm_lyric(title), _norm_lyric(cand["title"]))
+        a = _line_ratio(_norm_lyric(artist), _norm_lyric(cand["artist"])) \
+            if artist else 1.0
+        if t < floor or a < 0.5:
+            continue
+        cand["match"] = round((t + a) / 2, 3)
+        out.append(cand)
+    out.sort(key=lambda c: (-c["match"], -c["votes"], -c["rating"]))
     return out[:20]
 
 
@@ -960,6 +1003,116 @@ def ug_chart_sequence(url):
             "key": transpose_chord((page.get("tab") or {}).get("tonality_name") or "", capo)}
 
 
+_CH_TAG = re.compile(r"\[ch\](.*?)\[/ch\]")
+_SECTION = re.compile(r"^\s*\[?\s*(intro|verse|chorus|bridge|outro|solo|"
+                      r"pre-?chorus|interlude|instrumental|refrain|coda|tag|"
+                      r"break|hook|riff|ending|capo|tuning|repeat)\b", re.I)
+
+
+def _chart_line_chords(line):
+    """[(chord, column)] for one chart line, with the [ch] markup removed so the
+    column is where the chord actually sits above the words underneath."""
+    out, col, i = [], 0, 0
+    while i < len(line):
+        m = _CH_TAG.match(line, i)
+        if m:
+            name = m.group(1).strip()
+            if name:
+                out.append((name, col))
+            col += len(m.group(1))
+            i = m.end()
+        else:
+            col += 1
+            i += 1
+    return out
+
+
+def ug_chart_blocks(url):
+    """The chart as CHORD LINES paired with the lyric line printed beneath.
+
+    This is the structure that makes accurate timing possible: a chart does not
+    merely list chords, it positions each one above the exact word it is played
+    on. Keeping that pairing lets a chord inherit the timestamp of the words it
+    sits over, rather than being guessed from a chord detector.
+
+    The lyric text is used in memory to match lines against LRCLIB and is never
+    stored or displayed — the words shown to the player always come from LRCLIB.
+    """
+    data = _ug_page_data(url)
+    page = data.get("store", {}).get("page", {}).get("data", {})
+    content = ((page.get("tab_view") or {}).get("wiki_tab") or {}).get("content") or ""
+    try:
+        capo = int((page.get("tab_view") or {}).get("capo") or 0)
+    except (TypeError, ValueError):
+        capo = 0
+
+    lines = content.replace("\r\n", "\n").split("\n")
+    blocks, i = [], 0
+    while i < len(lines):
+        chords = _chart_line_chords(lines[i])
+        if not chords:
+            i += 1
+            continue
+        # The line underneath is this chord line's lyric, unless it is blank,
+        # another chord line, or a section header.
+        lyric, step = "", 1
+        if i + 1 < len(lines):
+            nxt = re.sub(r"\[/?[a-z]+\]", "", lines[i + 1])
+            if nxt.strip() and "[ch]" not in lines[i + 1] and not _SECTION.match(nxt):
+                lyric, step = nxt, 2
+        blocks.append({"chords": [(transpose_chord(c, capo), col) for c, col in chords],
+                       "lyric": lyric})
+        i += step
+    return {"blocks": blocks, "capo": capo, "url": url,
+            "key": transpose_chord((page.get("tab") or {}).get("tonality_name") or "", capo)}
+
+
+def _norm_lyric(text):
+    """Lyric text reduced to comparable words."""
+    return " ".join(re.sub(r"[^a-z0-9 ]+", " ", (text or "").lower()).split())
+
+
+def _line_ratio(a, b):
+    """0..1 similarity between two lyric lines."""
+    if not a or not b:
+        return 0.0
+    return difflib.SequenceMatcher(None, a, b).ratio()
+
+
+def _align_lines(chart_lyrics, timed_lyrics, floor=0.55):
+    """Match the chart's lyric lines to the timestamped ones, in order.
+
+    Order matters: a chorus line appears several times with identical words, and
+    only a monotonic alignment can tell the second chorus from the first.
+    """
+    n, m = len(chart_lyrics), len(timed_lyrics)
+    if not n or not m:
+        return {}
+    GAP = -0.35
+    F = [[0.0] * (m + 1) for _ in range(n + 1)]
+    for i in range(1, n + 1):
+        F[i][0] = F[i - 1][0] + GAP
+    for j in range(1, m + 1):
+        F[0][j] = F[0][j - 1] + GAP
+    for i in range(1, n + 1):
+        for j in range(1, m + 1):
+            r = _line_ratio(chart_lyrics[i - 1], timed_lyrics[j - 1])
+            F[i][j] = max(F[i - 1][j - 1] + (r - 0.5), F[i - 1][j] + GAP,
+                          F[i][j - 1] + GAP)
+    out, i, j = {}, n, m
+    while i > 0 and j > 0:
+        r = _line_ratio(chart_lyrics[i - 1], timed_lyrics[j - 1])
+        if abs(F[i][j] - (F[i - 1][j - 1] + (r - 0.5))) < 1e-9:
+            if r >= floor:
+                out[i - 1] = j - 1
+            i, j = i - 1, j - 1
+        elif abs(F[i][j] - (F[i - 1][j] + GAP)) < 1e-9:
+            i -= 1
+        else:
+            j -= 1
+    return out
+
+
 def _collapse_detected(chords, min_len=0.35):
     """Fadr's stream reduced to plausible chord CHANGES: merge runs of the same
     chord, and drop blips too short to be a real change (passing notes)."""
@@ -982,12 +1135,16 @@ def _collapse_detected(chords, min_len=0.35):
     return out
 
 
-def _align(seq_a, seq_b):
+def _align(seq_a, seq_b, mismatch=-0.5):
     """Needleman-Wunsch alignment of two chord sequences.
 
     Returns pairs (i, j) where i indexes seq_a and j indexes seq_b, or None for
-    a gap. Scoring rewards an exact chord match most, a shared root next; gaps
-    are cheap because the two sources legitimately differ in density.
+    a gap. An exact chord match scores highest, a shared root next.
+
+    Mismatches are deliberately cheaper than two gaps. A detected segment marks
+    a real harmonic change even when the detector NAMES it wrongly, and its
+    time is the only thing being borrowed - the chord shown always comes from
+    the chart. Refusing such pairings threw away usable change points.
     """
     GAP = -1.0
 
@@ -998,7 +1155,7 @@ def _align(seq_a, seq_b):
         rb = _root_index(_chord_parts(b)[0])
         if ra is not None and ra == rb:
             return 2.0
-        return -2.0
+        return mismatch
 
     n, m = len(seq_a), len(seq_b)
     if not n or not m:
@@ -1066,13 +1223,159 @@ def _best_chart_offset(detected, seq):
     return best_off, best_score / total
 
 
-def chords_from_chart(job, url, min_len=0.35):
+def lyric_lines_shifted(job):
+    """The song's timed lyric lines in the same timebase REAPER will show them,
+    so chords derived from them cannot drift away from the words."""
+    ly = job.get("lyrics") or {}
+    if not ly.get("synced"):
+        return []
+    shift = ((ly.get("align") or {}).get("shift")) or 0.0
+    if ly.get("offset_override") is not None:
+        shift = ly["offset_override"]
+    return [{"time": max(0.0, float(l["time"]) + shift), "text": l.get("text", "")}
+            for l in ly.get("lines", []) if str(l.get("text", "")).strip()]
+
+
+def _finish_chords(placed, song_end, min_show=0.30):
+    """Order, de-duplicate and close out a placed chord list."""
+    placed.sort(key=lambda c: c["start"])
+    out = []
+    for c in placed:
+        s = max(0.0, c["start"])
+        if s >= song_end:
+            break                         # never past the end of the song
+        if out and c["chord"] == out[-1]["chord"]:
+            continue                      # same chord still sounding
+        if out and s - out[-1]["start"] < min_show:
+            continue                      # too brief to be read
+        out.append({"start": round(s, 3), "end": 0.0, "chord": c["chord"]})
+    for k in range(len(out)):
+        out[k]["end"] = round(out[k + 1]["start"] if k + 1 < len(out) else song_end, 3)
+    return [c for c in out if c["end"] > c["start"]]
+
+
+def chords_from_lyrics(job, url, song_end=None):
+    """Place the chart's chords using the WORDS they are printed above.
+
+    A chord chart is not a bare list of chords: each chord sits over the exact
+    syllable it is played on. Given timestamped lyrics, that pairing gives a
+    chord's time directly, with no chord detection involved at all — which
+    matters because the detector is the unreliable part.
+
+    Chord lines with no lyrics (intros, solos) are spread evenly between their
+    placed neighbours. Only chord symbols are kept; the chart's words are used
+    for matching and discarded.
+    """
+    chart = ug_chart_blocks(url)
+    blocks = chart["blocks"]
+    timed = lyric_lines_shifted(job)
+    if not blocks:
+        raise RuntimeError("That chart contains no chord symbols.")
+    if not timed:
+        raise RuntimeError("This song has no timed lyrics to place chords against.")
+
+    detected = job.get("chords") or []
+    if song_end is None:
+        song_end = max([float(d["end"]) for d in detected] or
+                       [timed[-1]["time"] + 8.0])
+
+    # The chart may be written in a friendlier key than the record. Correct it
+    # against the recording before anything is placed.
+    flat = [c for b in blocks for c, _ in b["chords"]]
+    offset, fit = _best_chart_offset(_collapse_detected(detected), flat) \
+        if detected else (0, 0.0)
+
+    # Which chart lines correspond to which sung lines.
+    have = [k for k, b in enumerate(blocks) if _norm_lyric(b["lyric"])]
+    match = _align_lines([_norm_lyric(blocks[k]["lyric"]) for k in have],
+                         [_norm_lyric(t["text"]) for t in timed])
+
+    # Place every chord on a matched line by its column across that line's span.
+    placed, anchored_blocks = [], {}
+    for pos, k in enumerate(have):
+        if pos not in match:
+            continue
+        j = match[pos]
+        t0 = timed[j]["time"]
+        t1 = timed[j + 1]["time"] if j + 1 < len(timed) else min(song_end, t0 + 6.0)
+        span = max(0.25, t1 - t0)
+        width = max(1, len(blocks[k]["lyric"].rstrip()))
+        anchored_blocks[k] = t0
+        for name, col in blocks[k]["chords"]:
+            frac = min(1.0, max(0.0, col / width))
+            placed.append({"start": t0 + frac * span, "chord": name, "k": k})
+
+    if not placed:
+        raise RuntimeError("Could not match this chart's lines to the lyrics.")
+
+    # Chord-only lines (intro, solo, instrumental) sit between placed lines:
+    # spread them evenly across the gap rather than inventing a timing.
+    ks = sorted(anchored_blocks)
+    for k, b in enumerate(blocks):
+        if k in anchored_blocks or not b["chords"]:
+            continue
+        prev = max((x for x in ks if x < k), default=None)
+        nxt = min((x for x in ks if x > k), default=None)
+        if prev is None and nxt is None:
+            continue
+        if prev is None:
+            lo, hi = max(0.0, anchored_blocks[nxt] - 8.0), anchored_blocks[nxt]
+        elif nxt is None:
+            lo, hi = anchored_blocks[prev], song_end
+        else:
+            lo, hi = anchored_blocks[prev], anchored_blocks[nxt]
+        gap_blocks = [x for x in range(prev + 1 if prev is not None else 0,
+                                       nxt if nxt is not None else len(blocks))
+                      if x not in anchored_blocks and blocks[x]["chords"]]
+        n_slots = sum(len(blocks[x]["chords"]) for x in gap_blocks) + 1
+        done = sum(len(blocks[x]["chords"]) for x in gap_blocks
+                   if x < k)
+        for c_i, (name, _col) in enumerate(b["chords"]):
+            frac = (done + c_i + 1) / n_slots
+            placed.append({"start": lo + frac * (hi - lo), "chord": name, "k": k})
+
+    if offset:
+        for p in placed:
+            p["chord"] = transpose_chord(p["chord"], offset)
+
+    # Deliberately NOT snapped to the beat grid. It sounds like it should help
+    # - chords do change on beats - but measured across the library it made
+    # placement worse, twice (58% -> 54% of chords landing on a real harmonic
+    # change). Fadr's grid phase is not reliable enough to be worth up to half
+    # a beat of movement on an estimate that is already closer than that.
+    out = _finish_chords(placed, song_end)
+    # A chart written mostly as tablature yields almost no chord symbols over
+    # words - Bulls On Parade produced nine chords for a four-minute song. That
+    # is not a chart a player can follow, so say so and let the caller fall
+    # back rather than publishing something unusable.
+    if len(out) < 12 or song_end / max(1, len(out)) > 15.0:
+        raise RuntimeError(f"This chart only yielded {len(out)} chords for a "
+                           f"{song_end:.0f}s song — too sparse to follow.")
+    return {
+        "chords": out,
+        "method": "lyrics",
+        "chart_chords": len(flat),
+        "chart_lines": len(have),
+        "lyric_lines": len(timed),
+        "lines_matched": len(match),
+        "line_match_pct": round(100 * len(match) / max(1, len(have))),
+        "detected_raw": len(detected),
+        "capo": chart["capo"],
+        "key_offset": offset,
+        "key_fit_pct": round(100 * fit),
+        "key": transpose_chord(chart["key"], offset) if chart["key"] else "",
+    }
+
+
+def chords_from_chart(job, url, min_len=0.0):
     """Build a chord list that shows the CHART's chords, timed from the audio.
 
-    The chart supplies which chords exist and in what order; the detected
-    stream supplies when things change. Chart chords that align to a detected
-    change take its time; the rest are spread evenly between their anchored
-    neighbours, so nothing is invented and nothing is dropped.
+    The chart supplies which chords exist and in what order; the recording
+    supplies when things change. Every detected segment is offered as an anchor
+    - collapsing the stream first only starves the aligner, and it cannot help
+    the display, which comes from the chart either way. Whatever the alignment
+    cannot pin down is then placed on the song's beat grid, so a chord is never
+    left floating between beats.
     """
     chart = ug_chart_sequence(url)
     seq = chart["sequence"]
@@ -1132,14 +1435,16 @@ def chords_from_chart(job, url, min_len=0.35):
     # A chord nobody can read is worse than no chord. Where the chart packs in
     # more changes than the recording has room for, merge the crush rather than
     # emitting a flicker of unreadable entries.
+    # Not snapped to the beat grid: these times come straight from the audio's
+    # own chord changes and are already exact, so moving them onto Fadr's grid
+    # can only add error. Measured, it did.
     MIN_SHOW = 0.30
     out = []
     for k, name in enumerate(seq):
         s = max(0.0, float(times[k]))
-        # The chart can list more changes than the recording actually contains
-        # (repeats written out, or a busier arrangement than this take). Any
-        # chord that would flash by faster than it can be read is dropped and
-        # its predecessor keeps the space - a 0.2s chord helps nobody.
+        # The chart can write out more changes than this take actually plays.
+        # Anything that would flash past unreadably is dropped so the chord
+        # before it keeps the space - a 0.2s chord helps nobody.
         if out and s - out[-1]["start"] < MIN_SHOW:
             continue
         out.append({"start": round(s, 3), "end": 0.0, "chord": name})
@@ -1149,6 +1454,7 @@ def chords_from_chart(job, url, min_len=0.35):
     matched = sum(1 for i, j in pairs if i is not None and j is not None)
     return {
         "chords": out,
+        "method": "detected",
         "chart_chords": len(seq),
         "detected_raw": len(job.get("chords") or []),
         "detected_changes": len(detected),
@@ -1161,6 +1467,22 @@ def chords_from_chart(job, url, min_len=0.35):
         "key": transpose_chord(chart["key"], offset) if chart["key"] else "",
         "coverage_pct": round(100 * len(anchored) / max(1, len(seq))),
     }
+
+
+def build_chart_chords(job, url):
+    """The chart's chords, timed against this recording.
+
+    Timing comes from the sung words wherever timed lyrics exist, because a
+    chart states exactly which word each chord falls on. Only when that is
+    impossible — an instrumental, or a song with no synced lyrics — does it
+    fall back to anchoring against the chord detector, which is less reliable.
+    """
+    try:
+        return chords_from_lyrics(job, url)
+    except RuntimeError as why:
+        res = chords_from_chart(job, url)
+        res["fallback_reason"] = str(why)
+        return res
 
 
 def chart_match_report(job, voc):

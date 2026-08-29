@@ -143,18 +143,23 @@
 
     <div id="rechordBox" class="hide">
       <label id="rechordFor">Chord charts</label>
-      <div class="note">Keeps the chord <b>timing</b> measured from your audio
-        and takes the chord <b>names</b> from the chart. Capo charts are
-        converted to sounding pitch automatically. One Ctrl+Z in REAPER
-        restores the old chords.</div>
-      <label style="display:flex;align-items:center;gap:8px;margin-top:8px">
-        <input type="checkbox" id="rechordForce" style="width:auto" checked>
-        <span>Also correct wrongly-detected chords onto the chart's chord set</span>
-      </label>
-      <div class="note">The chart is the authority on which chords the song
-        uses, so a detected chord the chart never plays is almost certainly a
-        detection error and gets pulled to the nearest chord the song does use.
-        Untick to only upgrade chords whose root already matched.</div>
+      <div class="note">Replaces the song's chords with the <b>chart's own
+        chords</b>, in the chart's order — the auto-detected chords are
+        discarded, not renamed, because their fault is inventing changes that
+        were never played. Timing comes from the <b>words</b>: each chord is
+        placed on the lyric line it is printed above. Capo charts and charts
+        written in another key are converted to what actually sounds.
+        One Ctrl+Z in REAPER restores the old chords.</div>
+      <div class="note">Wrong song listed below? Search for it yourself, or
+        paste the chart's address straight from Ultimate Guitar.</div>
+      <div style="display:flex;gap:8px;margin-top:8px">
+        <input id="rechordQuery" placeholder="search Ultimate Guitar, e.g. paramore misery">
+        <button id="rechordSearchBtn" class="delbtn" style="white-space:nowrap">Search</button>
+      </div>
+      <div style="display:flex;gap:8px;margin-top:8px">
+        <input id="rechordUrl" placeholder="…or paste a tabs.ultimate-guitar.com chart link">
+        <button id="rechordUrlBtn" class="delbtn" style="white-space:nowrap">Use link</button>
+      </div>
       <div id="rechordResults"></div>
       <div id="rechordLog" class="note"></div>
     </div>
@@ -229,7 +234,17 @@
 
     <h2 style="margin-top:16px">Chord chart</h2>
     <div id="chartNow" class="note"></div>
+    <div class="note">The chart becomes the chords shown in ReaSet, placed on
+      the words they are printed above. Nothing is chosen automatically — pick
+      the chart you actually play from.</div>
     <button class="small" onclick="doUgSearch()">Find chord charts on Ultimate Guitar</button>
+    <label style="margin-top:10px">Not the right song? Search it yourself</label>
+    <input type="text" id="ugQuery" placeholder="e.g. paramore misery business"
+           onkeydown="if(event.key==='Enter')doUgSearch(this.value)">
+    <button class="small" onclick="doUgSearch($('ugQuery').value)">Search charts</button>
+    <label style="margin-top:10px">…or paste the chart link from Ultimate Guitar</label>
+    <input type="text" id="ugUrl" placeholder="https://tabs.ultimate-guitar.com/tab/…">
+    <button class="small" onclick="useTypedChart()">Use this chart</button>
     <div id="ugResults"></div>
     <button id="applyBtn" onclick="doApply()">Looks right — add to REAPER</button>
     <button class="ghost" onclick="doCancel()">Cancel this import</button>
@@ -247,7 +262,7 @@
 <script>
 // Version of THIS page (served fresh from disk). Compared against the version
 // of the running server; a mismatch means the importer needs restarting.
-var UI_BUILD = "v1.7";
+var UI_BUILD = "v1.8";
 
 var picked = null, poller = null, reviewShown = false;
 
@@ -455,22 +470,46 @@ function openRechord(s){
   $('rechordBox').classList.remove('hide');
   $('rechordFor').textContent = 'Chord charts for “' + s.name + '”';
   $('rechordLog').textContent = '';
-  $('rechordResults').innerHTML = '<div class="note">Searching Ultimate Guitar…</div>';
+  $('rechordUrl').value = '';
   var i = s.name.indexOf(' - ');
   var artist = i > 0 ? s.name.slice(0, i) : '';
   var title  = i > 0 ? s.name.slice(i + 3) : s.name;
+  $('rechordQuery').value = (artist ? artist + ' ' : '') + title;
+  $('rechordSearchBtn').onclick = function(){ searchRechord($('rechordQuery').value); };
+  $('rechordUrlBtn').onclick = function(){
+    var u = ($('rechordUrl').value || '').trim();
+    if(!/^https?:\/\/tabs\.ultimate-guitar\.com\//.test(u)){
+      $('rechordLog').innerHTML = '<span class="check bad">That is not an '
+        + 'Ultimate Guitar chart link. Open the chart on the site and copy the '
+        + 'address — it starts with https://tabs.ultimate-guitar.com/</span>';
+      return;
+    }
+    doRechord(u, $('rechordUrlBtn'));
+  };
+  searchRechord('', artist, title);
+}
+
+function searchRechord(free, artist, title){
+  $('rechordResults').innerHTML = '<div class="note">Searching Ultimate Guitar…</div>';
   fetch('/api/ug_search', {method:'POST', headers:{'Content-Type':'application/json'},
-    body: JSON.stringify({artist: artist, title: title})})
+    body: JSON.stringify({artist: artist||'', title: title||'', free: free||''})})
   .then(r=>r.json()).then(function(d){
     if(d.error){ $('rechordResults').innerHTML = '<div class="check bad">'+d.error+'</div>'; return; }
     var rows = d.charts || [];
-    if(!rows.length){ $('rechordResults').innerHTML = '<div class="note">No chord charts found for that title.</div>'; return; }
+    if(!rows.length){
+      $('rechordResults').innerHTML = '<div class="note">No chart matched that '
+        + 'closely enough to trust. Try your own wording in the search box above, '
+        + 'or paste the chart link directly — nothing is chosen for you.</div>';
+      return;
+    }
     $('rechordResults').innerHTML = '';
     rows.forEach(function(c){
       var b = document.createElement('button');
       b.className = 'result';
+      var conf = c.match >= 0.95 ? '' :
+        ' <span class="libpill warn">name only ' + Math.round(c.match*100) + '% match</span>';
       b.innerHTML = c.artist + ' — ' + c.title + ' <span class="libpill">v'
-        + (c.version||'?') + '</span><br><small>' + c.rating.toFixed(2)
+        + (c.version||'?') + '</span>' + conf + '<br><small>' + c.rating.toFixed(2)
         + '★ from ' + c.votes + ' votes</small>';
       b.onclick = function(){ doRechord(c.url, b); };
       $('rechordResults').appendChild(b);
@@ -483,8 +522,7 @@ function doRechord(url, btn){
   btn.disabled = true; btn.style.opacity = '.6';
   $('rechordLog').textContent = 'Rewriting chords in REAPER…';
   fetch('/api/rechord', {method:'POST', headers:{'Content-Type':'application/json'},
-    body: JSON.stringify({name: g_rechordSong.name, url: url, snap: true,
-                          force: $('rechordForce').checked})})
+    body: JSON.stringify({name: g_rechordSong.name, url: url, snap: true})})
   .then(r=>r.json()).then(function(d){
     btn.disabled = false; btn.style.opacity = '';
     if(d.error){
@@ -773,36 +811,62 @@ function renderChartNow(rv){
   var el = $('chartNow');
   if(!el) return;
   if(c.url){
-    var snapped = c.snapped
-      ? (' · ' + c.snapped.changed + ' chord names corrected, '
-         + c.snapped.unmatched + ' left as detected') : '';
-    el.innerHTML = 'Chart linked' + (c.key ? ' (key ' + c.key + ')' : '')
-      + snapped + '<br><small>uses: ' + (c.vocab || []).join(' · ')
-      + '</small><br><a href="' + c.url + '" target="_blank" rel="noopener">'
+    var how = c.method === 'lyrics'
+      ? ('placed on the words — ' + c.lines_matched + ' of ' + c.chart_lines
+         + ' chart lines matched to sung lines')
+      : ('no timed lyrics to place against, so the chart was matched to the '
+         + 'detected chords instead'
+         + (c.fallback_reason ? ' (' + c.fallback_reason + ')' : ''));
+    el.innerHTML = 'Using this chart' + (c.key ? ' (key ' + c.key + ')' : '')
+      + (c.capo ? ' · capo ' + c.capo + ' converted to sounding pitch' : '')
+      + (c.key_offset ? ' · transposed ' + (c.key_offset>0?'+':'')
+                        + c.key_offset + ' to match the record' : '')
+      + '<br><small>' + how + '</small>'
+      + '<br><a href="' + c.url + '" target="_blank" rel="noopener">'
       + 'Open the chart</a>';
   } else {
     el.textContent = (rv && rv.chords_count)
-      ? (rv.chords_count + ' chords detected from the audio. Their timing is '
-         + 'reliable; the names can be improved with a real chart.')
+      ? (rv.chords_count + ' chords were auto-detected from the audio. These '
+         + 'include passing notes and lead lines that were never played as '
+         + 'chords — pick a chart below to replace them.')
       : 'No chords detected for this song.';
   }
 }
 
-function doUgSearch(){
+function useTypedChart(){
+  var u = ($('ugUrl').value || '').trim();
+  if(!/^https?:\/\/tabs\.ultimate-guitar\.com\//.test(u)){
+    $('ugResults').innerHTML = '<div class="check bad">That is not an Ultimate '
+      + 'Guitar chart link. Open the chart on the site and copy the address — '
+      + 'it starts with https://tabs.ultimate-guitar.com/</div>';
+    return;
+  }
+  useChart(u, $('ugUrl'));
+}
+
+function doUgSearch(free){
   var rv = window._review || {};
   $('ugResults').innerHTML = '<div class="note">Searching Ultimate Guitar…</div>';
   fetch('/api/ug_search', {method:'POST', headers:{'Content-Type':'application/json'},
-    body: JSON.stringify({artist: rv.band || '', title: rv.title || ''})})
+    body: JSON.stringify({artist: rv.band || '', title: rv.title || '',
+                          free: (typeof free === 'string' ? free : '')})})
   .then(r=>r.json()).then(function(d){
     if(d.error){ $('ugResults').innerHTML = '<div class="check bad">'+d.error+'</div>'; return; }
     var rows = d.charts || [];
-    if(!rows.length){ $('ugResults').innerHTML = '<div class="note">No chord charts found for that title.</div>'; return; }
+    if(!rows.length){
+      $('ugResults').innerHTML = '<div class="note">No chart matched that closely '
+        + 'enough to trust, so none was picked. Search in your own words above, '
+        + 'or paste the chart link.</div>';
+      return;
+    }
     $('ugResults').innerHTML = '';
     rows.forEach(function(c){
       var b = document.createElement('button');
       b.className = 'result';
+      var conf = c.match >= 0.95 ? '' :
+        ' <span class="libpill warn">name only ' + Math.round(c.match*100) + '% match</span>';
       b.innerHTML = c.artist + ' — ' + c.title + ' <span class="libpill">v'
-        + (c.version||'?') + '</span>'
+        + (c.version||'?') + '</span>' + conf
         + '<br><small>' + c.rating.toFixed(2) + '★ from ' + c.votes + ' votes</small>';
       b.onclick = function(){ useChart(c.url, b); };
       $('ugResults').appendChild(b);
@@ -812,17 +876,24 @@ function doUgSearch(){
 
 function useChart(url, btn){
   btn.disabled = true; btn.style.opacity = '.6';
-  var snap = confirm('Also correct the detected chord names using this chart?\\n\\n'
-    + 'OK  = keep Fadr\\'s timing but adopt the chart\\'s chord spellings where '
-    + 'the root matches (e.g. F becomes Fmaj7).\\n'
-    + 'Cancel = just link the chart and leave the chords as detected.');
+  $('ugResults').innerHTML = '<div class="note">Reading the chart and placing '
+    + 'its chords against the words…</div>';
   fetch('/api/ug_use', {method:'POST', headers:{'Content-Type':'application/json'},
-    body: JSON.stringify({url: url, snap: snap})})
+    body: JSON.stringify({url: url})})
   .then(r=>r.json()).then(function(d){
-    if(d.error){ alert(d.error); btn.disabled = false; btn.style.opacity=''; return; }
+    btn.disabled = false; btn.style.opacity='';
+    if(d.error){
+      $('ugResults').innerHTML = '<div class="check bad">' + d.error
+        + '<br>Pick a different chart, or paste another link.</div>';
+      return;
+    }
     window._review = d.review;
     renderChartNow(d.review);
-    $('ugResults').innerHTML = '<div class="check ok">Chart linked.</div>';
+    $('ugResults').innerHTML = '<div class="check ok">Chords taken from this '
+      + 'chart.</div>';
+  }).catch(function(e){
+    btn.disabled = false; btn.style.opacity='';
+    $('ugResults').innerHTML = '<div class="check bad">Failed: ' + e + '</div>';
   });
 }
 

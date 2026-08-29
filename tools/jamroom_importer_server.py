@@ -485,33 +485,37 @@ def rechord_song(name, chart_url, snap=True, force=False):
     if not song:
         raise RuntimeError(f'"{name}" is not in the REAPER project.')
 
-    voc = ji.ug_chart_vocabulary(chart_url, (job.get("fadr") or {}).get("key") or "")
-    match = ji.chart_match_report(job, voc)
-    if voc.get("capo"):
-        _ui_log(f"Chart has a capo at fret {voc['capo']}: printed "
-                f"{voc['shapes'][:5]} sound as {voc['vocab'][:5]}.")
-    _ui_log(f"Chart match: {match['overlap_pct']}% of this song's chords use a "
-            f"root the chart plays.")
-    if match["warning"]:
-        _ui_log("WARNING: " + match["warning"])
+    # The chart REPLACES the detected chords rather than renaming them. The
+    # detector's fault is not bad names but spurious changes - passing notes and
+    # lead lines reported as chords - so renaming those was never going to fix
+    # the chart. What is shown now is the chart's own chords, in its own order.
+    res = ji.build_chart_chords(job, chart_url)
+    if res.get("fallback_reason"):
+        _ui_log(f"Could not place chords from the words ({res['fallback_reason']}) "
+                f"— fell back to matching the chart against the detected chords.")
+    if res.get("capo"):
+        _ui_log(f"Chart has a capo at fret {res['capo']}; its printed shapes are "
+                f"converted to the pitches actually sounding.")
+    if res.get("key_offset"):
+        _ui_log(f"Chart is written {res['key_offset']:+d} semitones from the "
+                f"record — transposed to match the audio "
+                f"(fits {res['key_fit_pct']}% of the song).")
+    if res["method"] == "lyrics":
+        _ui_log(f"Placed by the words: {res['lines_matched']} of "
+                f"{res['chart_lines']} chart lines matched to sung lines.")
+    _ui_log(f"{len(job['chords'])} detected chords replaced by "
+            f"{len(res['chords'])} chart chords.")
 
-    stats = None
-    if snap:
-        stats = ji.snap_chords_to_vocabulary(job, voc["vocab"], force=force,
-                                             counts=voc.get("counts"))
-        _ui_log(f"Renamed {stats['changed']} of {stats['total']} chords.")
-        if force and stats["forced"]:
-            _ui_log(f"Pulled {stats['forced']} mis-detected chords onto the "
-                    f"chart's chord set: "
-                    + ", ".join(f"{k} x{v}" for k, v in stats["moves"]))
-        if stats["unmatched"]:
-            _ui_log(f"{stats['unmatched']} left exactly as detected.")
-    job["chart"] = {"url": voc["url"], "vocab": voc["vocab"],
-                    "shapes": voc["shapes"], "key": voc["key"],
-                    "capo": voc["capo"], "snapped": stats,
-                    "overlap_pct": match["overlap_pct"],
-                    "warning": match["warning"]}
+    job["chords"] = res["chords"]
+    job["chart"] = {"url": chart_url, "method": res["method"],
+                    "key": res.get("key", ""), "capo": res.get("capo", 0),
+                    "key_offset": res.get("key_offset", 0),
+                    "lines_matched": res.get("lines_matched"),
+                    "chart_lines": res.get("chart_lines"),
+                    "fallback_reason": res.get("fallback_reason", "")}
     ji.save_job(job_dir, job)
+    match = {"overlap_pct": res.get("key_fit_pct", 0), "warning": ""}
+    stats = {"method": res["method"], "shown": len(res["chords"])}
 
     # Hand REAPER the new chord list, timed RELATIVE to the region start.
     start = song["start"]
@@ -812,7 +816,8 @@ class Handler(BaseHTTPRequestHandler):
             elif self.path == "/api/ug_search":
                 try:
                     self._send(200, {"charts": ji.ug_search(
-                        body.get("artist", ""), body.get("title", ""))})
+                        body.get("artist", ""), body.get("title", ""),
+                        free=body.get("free", ""))})
                 except Exception as e:  # noqa: BLE001
                     self._send(500, {"error": str(e)})
             elif self.path == "/api/ug_use":
@@ -823,33 +828,32 @@ class Handler(BaseHTTPRequestHandler):
                     cfg = ji.load_config(None)
                     job_dir = CURRENT["job_dir"]
                     job = ji.load_job(job_dir)
-                    detected = (job.get("fadr") or {}).get("key") or ""
-                    voc = ji.ug_chart_vocabulary(body.get("url", ""), detected)
-                    if voc.get("capo"):
-                        _ui_log(f"Chart has a capo at fret {voc['capo']} — its "
-                                f"printed shapes {voc['shapes'][:6]} sound as "
-                                f"{voc['vocab'][:6]}. Using the sounding names.")
-                    match = ji.chart_match_report(job, voc)
-                    _ui_log(f"Chart match: {match['overlap_pct']}% of the "
-                            f"detected chords use a root this chart plays.")
-                    if match["warning"]:
-                        _ui_log("WARNING: " + match["warning"])
-                    voc["warning"] = match["warning"]
-                    voc["overlap_pct"] = match["overlap_pct"]
-                    stats = None
-                    if body.get("snap"):
-                        stats = ji.snap_chords_to_vocabulary(job, voc["vocab"])
-                        _ui_log(f"Chord names snapped to the chart: "
-                                f"{stats['changed']} renamed, "
-                                f"{stats['unmatched']} left alone "
-                                f"(root not in the chart).")
-                    job["chart"] = {"url": voc["url"], "vocab": voc["vocab"],
-                                    "shapes": voc["shapes"], "key": voc["key"],
-                                    "shape_key": voc["shape_key"],
-                                    "capo": voc["capo"], "snapped": stats,
-                                    "warning": voc.get("warning", ""),
-                                    "overlap_pct": voc.get("overlap_pct"),
-                                    "detected_key": voc["detected_key"]}
+                    res = ji.build_chart_chords(job, body.get("url", ""))
+                    if res.get("fallback_reason"):
+                        _ui_log(f"Could not place chords from the words "
+                                f"({res['fallback_reason']}) — matched the "
+                                f"chart against the detected chords instead.")
+                    if res.get("capo"):
+                        _ui_log(f"Chart has a capo at fret {res['capo']}; using "
+                                f"the pitches that actually sound.")
+                    if res.get("key_offset"):
+                        _ui_log(f"Chart is written {res['key_offset']:+d} "
+                                f"semitones from the record — transposed to "
+                                f"match the audio.")
+                    if res["method"] == "lyrics":
+                        _ui_log(f"Placed by the words: {res['lines_matched']} of "
+                                f"{res['chart_lines']} chart lines matched.")
+                    _ui_log(f"{len(job.get('chords') or [])} detected chords "
+                            f"replaced by {len(res['chords'])} chart chords.")
+                    job["chords"] = res["chords"]
+                    job["chart"] = {"url": body.get("url", ""),
+                                    "method": res["method"],
+                                    "key": res.get("key", ""),
+                                    "capo": res.get("capo", 0),
+                                    "key_offset": res.get("key_offset", 0),
+                                    "lines_matched": res.get("lines_matched"),
+                                    "chart_lines": res.get("chart_lines"),
+                                    "fallback_reason": res.get("fallback_reason", "")}
                     ji.save_job(job_dir, job)
                     STATE["review"] = build_review(job, job_dir, cfg)
                     self._send(200, {"ok": True, "chart": job["chart"],
