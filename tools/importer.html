@@ -141,6 +141,16 @@
       <b>[JR:…]</b> buses, every other song, and the paid-for split on Fadr are
       all left alone — and one <b>Ctrl+Z in REAPER</b> puts the song back.</div>
 
+    <div id="rechordBox" class="hide">
+      <label id="rechordFor">Chord charts</label>
+      <div class="note">Keeps the chord <b>timing</b> measured from your audio
+        and takes the chord <b>names</b> from the chart. Capo charts are
+        converted to sounding pitch automatically. One Ctrl+Z in REAPER
+        restores the old chords.</div>
+      <div id="rechordResults"></div>
+      <div id="rechordLog" class="note"></div>
+    </div>
+
     <div id="orphanWrap" class="hide">
       <label style="margin-top:16px">Downloaded on this PC but not in the project</label>
       <div id="orphanList"></div>
@@ -366,6 +376,14 @@ function loadSongs(){
       row.innerHTML = '<div class="sname">' + s.name + '<br><small>' + m + ':' + sec
         + (s.folder_mb ? ' · ' + s.folder_mb + ' MB on disk' : ' · no local files')
         + '</small></div>';
+      var fx = document.createElement('button');
+      fx.className = 'delbtn';
+      fx.style.color = '#9fd0ff'; fx.style.borderColor = '#2f6fed';
+      fx.textContent = 'Fix chords…';
+      fx.title = 'Replace this song\'s chords from a chord chart, keeping the '
+               + 'timing measured from the audio. No re-import, no charge.';
+      fx.onclick = function(){ openRechord(s); };
+      row.appendChild(fx);
       var b = document.createElement('button');
       b.className = 'delbtn'; b.textContent = 'Delete…';
       b.onclick = function(){ askDelete(s); };
@@ -419,6 +437,55 @@ function doReadd(name){
     $('progTitle').textContent = 'Re-adding ' + name + ' from local files…';
     poller = setInterval(pollStatus, 1000);
   });
+}
+
+// ── Fix the chords of a song already in the project ───────────────────────
+var g_rechordSong = null;
+
+function openRechord(s){
+  g_rechordSong = s;
+  $('rechordBox').classList.remove('hide');
+  $('rechordFor').textContent = 'Chord charts for “' + s.name + '”';
+  $('rechordLog').textContent = '';
+  $('rechordResults').innerHTML = '<div class="note">Searching Ultimate Guitar…</div>';
+  var i = s.name.indexOf(' - ');
+  var artist = i > 0 ? s.name.slice(0, i) : '';
+  var title  = i > 0 ? s.name.slice(i + 3) : s.name;
+  fetch('/api/ug_search', {method:'POST', headers:{'Content-Type':'application/json'},
+    body: JSON.stringify({artist: artist, title: title})})
+  .then(r=>r.json()).then(function(d){
+    if(d.error){ $('rechordResults').innerHTML = '<div class="check bad">'+d.error+'</div>'; return; }
+    var rows = d.charts || [];
+    if(!rows.length){ $('rechordResults').innerHTML = '<div class="note">No chord charts found for that title.</div>'; return; }
+    $('rechordResults').innerHTML = '';
+    rows.forEach(function(c){
+      var b = document.createElement('button');
+      b.className = 'result';
+      b.innerHTML = c.artist + ' — ' + c.title + ' <span class="libpill">v'
+        + (c.version||'?') + '</span><br><small>' + c.rating.toFixed(2)
+        + '★ from ' + c.votes + ' votes</small>';
+      b.onclick = function(){ doRechord(c.url, b); };
+      $('rechordResults').appendChild(b);
+    });
+  });
+}
+
+function doRechord(url, btn){
+  if(!g_rechordSong) return;
+  btn.disabled = true; btn.style.opacity = '.6';
+  $('rechordLog').textContent = 'Rewriting chords in REAPER…';
+  fetch('/api/rechord', {method:'POST', headers:{'Content-Type':'application/json'},
+    body: JSON.stringify({name: g_rechordSong.name, url: url, snap: true})})
+  .then(r=>r.json()).then(function(d){
+    btn.disabled = false; btn.style.opacity = '';
+    if(d.error){
+      $('rechordLog').innerHTML = '<span class="check bad">' + d.error + '</span>';
+      return;
+    }
+    var s = d.snapped || {};
+    $('rechordLog').innerHTML = '<span class="check ok">Chords replaced.</span>'
+      + '<br>' + (d.log || []).join('<br>');
+  }).catch(function(e){ $('rechordLog').textContent = 'Failed: ' + e; });
 }
 
 function askDelete(s){

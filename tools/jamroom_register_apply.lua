@@ -28,8 +28,9 @@ local function register(file, key, label)
     report[#report + 1] = label .. ": " .. cmd
 end
 
-register("jamroom_import_apply.lua", "import_cmd", "Apply import")
-register("jamroom_delete_song.lua",  "delete_cmd", "Delete song")
+register("jamroom_import_apply.lua", "import_cmd",  "Apply import")
+register("jamroom_delete_song.lua",  "delete_cmd",  "Delete song")
+register("jamroom_rechord.lua",      "rechord_cmd", "Replace chords")
 
 reaper.ShowConsoleMsg("[JR import] registered actions:\n  " ..
                       table.concat(report, "\n  ") .. "\n")
