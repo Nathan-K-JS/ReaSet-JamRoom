@@ -489,7 +489,11 @@ def rechord_song(name, chart_url, snap=True, force=False):
     # detector's fault is not bad names but spurious changes - passing notes and
     # lead lines reported as chords - so renaming those was never going to fix
     # the chart. What is shown now is the chart's own chords, in its own order.
-    res = ji.build_chart_chords(job, chart_url)
+    # Keep what Fadr heard before publishing the chart over it, or a second
+    # pass would anchor to our own previous output instead of the recording.
+    if not job.get("chords_detected"):
+        job["chords_detected"] = ji.detected_chords(job, job_dir)
+    res = ji.build_chart_chords(job, chart_url, job_dir=job_dir)
     if res.get("fallback_reason"):
         _ui_log(f"Could not place chords from the words ({res['fallback_reason']}) "
                 f"— fell back to matching the chart against the detected chords.")
@@ -828,7 +832,10 @@ class Handler(BaseHTTPRequestHandler):
                     cfg = ji.load_config(None)
                     job_dir = CURRENT["job_dir"]
                     job = ji.load_job(job_dir)
-                    res = ji.build_chart_chords(job, body.get("url", ""))
+                    if not job.get("chords_detected"):
+                        job["chords_detected"] = ji.detected_chords(job, job_dir)
+                    res = ji.build_chart_chords(job, body.get("url", ""),
+                                                job_dir=job_dir)
                     if res.get("fallback_reason"):
                         _ui_log(f"Could not place chords from the words "
                                 f"({res['fallback_reason']}) — matched the "

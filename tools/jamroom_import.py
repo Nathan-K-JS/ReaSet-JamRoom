@@ -1223,6 +1223,37 @@ def _best_chart_offset(detected, seq):
     return best_off, best_score / total
 
 
+def detected_chords(job, job_dir=None):
+    """The chords Fadr heard in the recording — never the ones we published.
+
+    Replacing a song's chords with a chart's overwrites job["chords"], so a
+    second pass would otherwise anchor to its own previous output and quietly
+    reproduce it. The detected stream is kept separately, and can be rebuilt
+    from Fadr's csv for songs imported before that was true.
+    """
+    got = job.get("chords_detected")
+    if got:
+        return got
+    if job_dir:
+        f = Path(job_dir) / "fadr_midi" / "chords.csv"
+        if f.exists():
+            import csv as csvmod
+            out = []
+            with open(f, encoding="utf-8", errors="replace", newline="") as fh:
+                for row in csvmod.DictReader(fh):
+                    try:
+                        out.append({"start": float(row["start"]),
+                                    "end": float(row["end"]),
+                                    "chord": pretty_chord(row["chord"].strip())})
+                    except (KeyError, ValueError):
+                        pass
+            if out:
+                return out
+    # Nothing preserved and no csv: only safe if the song has never been
+    # re-chorded, in which case job["chords"] IS the detected stream.
+    return [] if job.get("chart") else (job.get("chords") or [])
+
+
 def lyric_lines_shifted(job):
     """The song's timed lyric lines in the same timebase REAPER will show them,
     so chords derived from them cannot drift away from the words."""
@@ -1254,7 +1285,7 @@ def _finish_chords(placed, song_end, min_show=0.30):
     return [c for c in out if c["end"] > c["start"]]
 
 
-def chords_from_lyrics(job, url, song_end=None):
+def chords_from_lyrics(job, url, song_end=None, job_dir=None):
     """Place the chart's chords using the WORDS they are printed above.
 
     A chord chart is not a bare list of chords: each chord sits over the exact
@@ -1274,9 +1305,10 @@ def chords_from_lyrics(job, url, song_end=None):
     if not timed:
         raise RuntimeError("This song has no timed lyrics to place chords against.")
 
-    detected = job.get("chords") or []
+    detected = detected_chords(job, job_dir)
     if song_end is None:
         song_end = max([float(d["end"]) for d in detected] or
+                       [float(job.get("duration") or 0)] or
                        [timed[-1]["time"] + 8.0])
 
     # The chart may be written in a friendlier key than the record. Correct it
@@ -1308,31 +1340,62 @@ def chords_from_lyrics(job, url, song_end=None):
     if not placed:
         raise RuntimeError("Could not match this chart's lines to the lyrics.")
 
-    # Chord-only lines (intro, solo, instrumental) sit between placed lines:
-    # spread them evenly across the gap rather than inventing a timing.
+    # Intros, solos, breaks and outros have no words to hang on. There the
+    # recording's own chord changes are used instead: the detector's NAMES are
+    # unreliable, but the MOMENTS it changes are real, and that is all a gap
+    # needs. Only if a stretch has no detected changes at all do the chords get
+    # spread evenly across it, which is a last resort rather than the plan.
     ks = sorted(anchored_blocks)
+    changes = _collapse_detected(detected, 0.35) if detected else []
+    music_start = changes[0]["start"] if changes else 0.0
+
+    # Consecutive chord-only lines belong to one instrumental stretch, so group
+    # them and place the whole run against that stretch's changes at once.
+    gaps, run = [], []
     for k, b in enumerate(blocks):
-        if k in anchored_blocks or not b["chords"]:
+        if k in anchored_blocks:
+            if run:
+                gaps.append(run)
+                run = []
+        elif b["chords"]:
+            run.append(k)
+    if run:
+        gaps.append(run)
+
+    instr_total = instr_anchored = 0
+    for run in gaps:
+        prev = max((x for x in ks if x < run[0]), default=None)
+        nxt = min((x for x in ks if x > run[-1]), default=None)
+        lo = anchored_blocks[prev] if prev is not None else music_start
+        hi = anchored_blocks[nxt] if nxt is not None else song_end
+        if hi <= lo:
             continue
-        prev = max((x for x in ks if x < k), default=None)
-        nxt = min((x for x in ks if x > k), default=None)
-        if prev is None and nxt is None:
-            continue
-        if prev is None:
-            lo, hi = max(0.0, anchored_blocks[nxt] - 8.0), anchored_blocks[nxt]
-        elif nxt is None:
-            lo, hi = anchored_blocks[prev], song_end
-        else:
-            lo, hi = anchored_blocks[prev], anchored_blocks[nxt]
-        gap_blocks = [x for x in range(prev + 1 if prev is not None else 0,
-                                       nxt if nxt is not None else len(blocks))
-                      if x not in anchored_blocks and blocks[x]["chords"]]
-        n_slots = sum(len(blocks[x]["chords"]) for x in gap_blocks) + 1
-        done = sum(len(blocks[x]["chords"]) for x in gap_blocks
-                   if x < k)
-        for c_i, (name, _col) in enumerate(b["chords"]):
-            frac = (done + c_i + 1) / n_slots
-            placed.append({"start": lo + frac * (hi - lo), "chord": name, "k": k})
+        names = [(nm, k) for k in run for nm, _col in blocks[k]["chords"]]
+        window = [c for c in changes if lo < c["start"] < hi]
+
+        times = [None] * len(names)
+        if len(window) >= 2:
+            pairs = _align([nm for nm, _ in names], [c["chord"] for c in window])
+            for i, j in pairs:
+                if i is not None and j is not None and times[i] is None:
+                    times[i] = window[j]["start"]
+        # Anything unmatched sits between its matched neighbours; with no
+        # matches at all the whole run spreads evenly, as before.
+        got = [i for i, t in enumerate(times) if t is not None]
+        instr_total += len(names)
+        instr_anchored += len(got)
+        for i in range(len(names)):
+            if times[i] is not None:
+                continue
+            p = max((x for x in got if x < i), default=None)
+            n = min((x for x in got if x > i), default=None)
+            a = times[p] if p is not None else lo
+            b_ = times[n] if n is not None else hi
+            lo_i = p if p is not None else -1
+            hi_i = n if n is not None else len(names)
+            times[i] = a + (b_ - a) * (i - lo_i) / max(1, hi_i - lo_i)
+        for (nm, k), t in zip(names, times):
+            placed.append({"start": t, "chord": nm, "k": k})
 
     if offset:
         for p in placed:
@@ -1359,6 +1422,8 @@ def chords_from_lyrics(job, url, song_end=None):
         "lyric_lines": len(timed),
         "lines_matched": len(match),
         "line_match_pct": round(100 * len(match) / max(1, len(have))),
+        "instrumental_chords": instr_total,
+        "instrumental_anchored": instr_anchored,
         "detected_raw": len(detected),
         "capo": chart["capo"],
         "key_offset": offset,
@@ -1367,19 +1432,21 @@ def chords_from_lyrics(job, url, song_end=None):
     }
 
 
-def chords_from_chart(job, url, min_len=0.0):
+def chords_from_chart(job, url, min_len=0.0, job_dir=None):
     """Build a chord list that shows the CHART's chords, timed from the audio.
 
     The chart supplies which chords exist and in what order; the recording
     supplies when things change. Every detected segment is offered as an anchor
     - collapsing the stream first only starves the aligner, and it cannot help
-    the display, which comes from the chart either way. Whatever the alignment
-    cannot pin down is then placed on the song's beat grid, so a chord is never
-    left floating between beats.
+    the display, which comes from the chart either way. Anything the alignment
+    cannot pin down is spread between its anchored neighbours.
+
+    This is the fallback for songs with no timed lyrics; where lyrics exist,
+    chords_from_lyrics places them far more directly.
     """
     chart = ug_chart_sequence(url)
     seq = chart["sequence"]
-    detected = _collapse_detected(job.get("chords") or [], min_len)
+    detected = _collapse_detected(detected_chords(job, job_dir), min_len)
     if not seq:
         raise RuntimeError("That chart contains no chord symbols.")
     if not detected:
@@ -1469,7 +1536,7 @@ def chords_from_chart(job, url, min_len=0.0):
     }
 
 
-def build_chart_chords(job, url):
+def build_chart_chords(job, url, job_dir=None):
     """The chart's chords, timed against this recording.
 
     Timing comes from the sung words wherever timed lyrics exist, because a
@@ -1478,9 +1545,9 @@ def build_chart_chords(job, url):
     fall back to anchoring against the chord detector, which is less reliable.
     """
     try:
-        return chords_from_lyrics(job, url)
+        return chords_from_lyrics(job, url, job_dir=job_dir)
     except RuntimeError as why:
-        res = chords_from_chart(job, url)
+        res = chords_from_chart(job, url, job_dir=job_dir)
         res["fallback_reason"] = str(why)
         return res
 
