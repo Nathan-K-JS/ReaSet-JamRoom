@@ -3980,14 +3980,6 @@
                    oninput="setLead(parseInt(this.value)/10)">
             <div class="lead-song" id="leadSong">&nbsp;</div>
         </div>
-        <!-- Reading aid only: shifts the SHAPES shown, never the audio. -->
-        <div class="tk-row" style="margin-bottom:10px">
-            <span class="tk-lab">CAPO</span>
-            <button class="tk-btn" onclick="adjustCapo(-1)">−</button>
-            <span class="tk-val" id="capoValue">off</span>
-            <button class="tk-btn" onclick="adjustCapo(1)">+</button>
-            <button class="tk-btn" onclick="setCapo(0)" title="no capo">⟲</button>
-        </div>
         <!-- legacy single-chord display, used only if the timeline script is off -->
         <div id="chord-display" style="display:none">&#9834;</div>
         <div class="chord-label" id="chord-label" style="display:none"></div>
@@ -4002,9 +3994,20 @@
         <div class="jr-body" id="jr-body">
             <div class="jr-panel-msg">Waiting for REAPER…</div>
         </div>
-        <!-- Per-song tempo & key. Static (outside jr-body's re-render) so the
-             BPM input keeps focus while the mute list refreshes. -->
-        <div id="tk-panel"></div>
+    </div>
+
+    <!-- PERFORMANCE BAR — tempo, key and capo are per-song performance
+         settings, not settings of any one screen, so they live here: fixed
+         above the transport and above every panel, collapsed to chips until
+         tapped. -->
+    <div id="perfBar">
+        <div id="perfChips" onclick="togglePerf()">
+            <span class="pchip" id="pchipTempo">Tempo 100%</span>
+            <span class="pchip" id="pchipKey">Key +0</span>
+            <span class="pchip" id="pchipCapo">Capo off</span>
+            <span class="pchip pchip-caret" id="pchipCaret">▲</span>
+        </div>
+        <div id="perfBody" class="hide"></div>
     </div>
 
     <!-- LIVE VIEW -->
@@ -4693,7 +4696,25 @@
             + '.tk-chip.on{background:#17304d;color:#cfe3ff;border-color:#2f6fed}'
             + '.tk-status{color:#9aa0a6;font-size:.75rem;text-align:center;margin-top:8px}'
             + '.tk-off{color:#9aa0a6;font-size:.85rem;text-align:center;padding:6px}'
-            + '.cv-tkbadge{color:#f0b429;font-size:.78rem;margin-top:2px}';
+            + '.cv-tkbadge{color:#f0b429;font-size:.78rem;margin-top:2px}'
+            // Performance bar: above every panel (which sit at z-index 1000-ish)
+            // and clear of the transport footer.
+            + '#perfBar{position:fixed;left:0;right:0;bottom:var(--perf-bottom,86px);'
+            + 'z-index:12000;background:#171a20;border-top:1px solid #2c3038;'
+            + 'border-bottom:1px solid #2c3038;box-shadow:0 -4px 16px rgba(0,0,0,.45)}'
+            + '#perfChips{display:flex;gap:8px;align-items:center;justify-content:center;'
+            + 'padding:7px 10px;cursor:pointer;flex-wrap:wrap}'
+            + '.pchip{font-size:.78rem;padding:4px 11px;border-radius:999px;'
+            + 'background:#23262d;color:#6b7280;border:1px solid #2c3038;white-space:nowrap}'
+            + '.pchip.on{background:#17304d;color:#cfe3ff;border-color:#2f6fed;font-weight:600}'
+            + '.pchip.pending{opacity:.5;font-style:italic}'
+            + '.pchip-caret{background:transparent;border:0;color:#6b7280}'
+            + '#perfBody{max-height:52vh;overflow-y:auto;padding:4px 8px 12px;'
+            + 'border-top:1px solid #2c3038}'
+            // ReaSet had no .hide class of its own (it came from the importer
+            // page), so anything marked hidden here was staying visible.
+            // !important so it beats any id rule that sets display.
+            + '.hide{display:none !important}';
             document.head.appendChild(css);
         })();
 
@@ -4896,9 +4917,40 @@
             }).join('/');
         }
 
+        // The performance bar is collapsed by default; the chips stay visible.
+        var g_perfOpen = false;
+        function togglePerf() {
+            g_perfOpen = !g_perfOpen;
+            document.getElementById('perfBody').classList.toggle('hide', !g_perfOpen);
+            var c = document.getElementById('pchipCaret');
+            if (c) c.textContent = g_perfOpen ? '▼' : '▲';
+            if (g_perfOpen) tkRenderPanel();
+        }
+
+        // Chips summarise state at a glance from any screen; they dim when at
+        // their defaults so an unchanged song is visually quiet.
+        function perfChips() {
+            var song = tkActiveSong();
+            var st = song ? tkGet(song) : { rate: 1, semis: 0 };
+            var capo = getCapo();
+            var ok = song && tkConfirmed(song);
+            function chip(id, text, active) {
+                var el = document.getElementById(id);
+                if (!el) return;
+                el.textContent = text;
+                el.classList.toggle('on', !!active);
+                el.classList.toggle('pending', !!(active && song && !ok));
+            }
+            chip('pchipTempo', 'Tempo ' + Math.round(st.rate * 100) + '%',
+                 Math.abs(st.rate - 1) > 0.005);
+            chip('pchipKey', 'Key ' + (st.semis > 0 ? '+' : '') + st.semis, st.semis !== 0);
+            chip('pchipCapo', capo ? ('Capo ' + capo) : 'Capo off', capo !== 0);
+        }
+
         function tkRenderPanel() {
-            var host = document.getElementById('tk-panel');
-            if (!host) return;
+            perfChips();
+            var host = document.getElementById('perfBody');
+            if (!host || !g_perfOpen) return;
             var song = tkActiveSong();
             if (!tkAlive()) {
                 host.innerHTML = '<div class="tk-off">Tempo/key control not running — run <b>ReaSet_Startup.lua</b> in REAPER.</div>';
@@ -4963,6 +5015,18 @@
                    + '" onclick="tkToggleExcl(\'' + g.slot + '\')">' + g.label + '</button>';
             });
             h += '</div>';
+            // Capo lives here too: it is a performance setting, not a property
+            // of the chords screen. Display only — the audio is untouched.
+            h += '<div class="tk-row" style="margin-top:10px">'
+                + '<span class="tk-lab">CAPO</span>'
+                + '<button class="tk-btn" onclick="adjustCapo(-1)">−</button>'
+                + '<span class="tk-val" id="capoValue">'
+                + (getCapo() ? 'fret ' + getCapo() : 'off') + '</span>'
+                + '<button class="tk-btn" onclick="adjustCapo(1)">+</button>'
+                + '<button class="tk-btn" onclick="setCapo(0)" title="no capo">⟲</button>'
+                + '</div>'
+                + '<div class="tk-excl-lab">Shows the shapes to finger with a capo '
+                + 'on. The backing track is not changed.</div>';
             h += '<div class="tk-status">' + (ok
                 ? 'Applied' + (g_tkState.items ? ' to ' + g_tkState.items + ' stems' : '')
                   + (bpmNow ? ' · now ~' + Math.round(det * g_tkState.rate) + ' bpm' : '')
@@ -5094,6 +5158,7 @@
         updateSetlistDropdown();
         setChordView(g_chordView);   // paints the active view tab
         syncLeadSlider();
+        tkRenderPanel();             // paints the performance chips on load
         // Shown in the sidebar so a stale cached page is obvious after a deploy.
         var REASET_VERSION = "v1.5 · 2026-08-29";
         var _rv = document.getElementById("reasetVer");
