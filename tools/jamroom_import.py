@@ -774,6 +774,259 @@ def parse_lrc(lrc):
     return out
 
 
+def lyrics_search(artist="", title="", free=""):
+    """Candidate lyric records from LRCLIB for the operator to choose between.
+
+    The automatic lookup matches on artist+title+duration and gives up when the
+    song is filed under a slightly different name — this is the manual way in.
+    """
+    hdr = {"User-Agent": USER_AGENT}
+    params = {"q": free} if free else {"artist_name": artist, "track_name": title}
+    try:
+        r = requests.get(f"{LRCLIB_API}/search", params=params, headers=hdr,
+                         timeout=30)
+        rows = r.json() if r.status_code == 200 else []
+    except (requests.RequestException, ValueError) as e:
+        raise RuntimeError(f"Could not reach the lyrics database: {e}")
+    out = []
+    for c in rows[:40]:
+        synced = c.get("syncedLyrics") or ""
+        out.append({
+            "id": c.get("id"),
+            "artist": c.get("artistName") or "",
+            "title": c.get("trackName") or "",
+            "album": c.get("albumName") or "",
+            "duration": round(c.get("duration") or 0),
+            "synced": bool(synced),
+            "plain": bool(c.get("plainLyrics")),
+            "lines": len([l for l in synced.splitlines() if l.strip()]),
+        })
+    # Timed lyrics first, then the ones with the most lines.
+    out.sort(key=lambda c: (not c["synced"], -c["lines"]))
+    return out
+
+
+def lyrics_use_record(job, job_dir, record_id):
+    """Adopt a specific LRCLIB record chosen by the operator."""
+    hdr = {"User-Agent": USER_AGENT}
+    try:
+        r = requests.get(f"{LRCLIB_API}/get/{int(record_id)}", headers=hdr, timeout=30)
+        if r.status_code != 200:
+            raise RuntimeError(f"lyrics record {record_id} not available "
+                               f"(HTTP {r.status_code})")
+        rec = r.json()
+    except (requests.RequestException, ValueError) as e:
+        raise RuntimeError(f"Could not fetch those lyrics: {e}")
+    lyr = {"synced": False, "lines": [], "plain": "",
+           "source": f"lrclib:{rec.get('id')} (chosen by hand)"}
+    if rec.get("syncedLyrics"):
+        lyr["synced"] = True
+        lyr["lines"] = parse_lrc(rec["syncedLyrics"])
+    elif rec.get("plainLyrics"):
+        lyr["plain"] = rec["plainLyrics"]
+    job["lyrics"] = lyr
+    job["stages"]["lyrics"] = True
+    save_job(job_dir, job)
+    log(f"Using lyrics: {rec.get('artistName')} - {rec.get('trackName')} "
+        f"({'synced, ' + str(len(lyr['lines'])) + ' lines' if lyr['synced'] else 'plain text'})")
+    # Re-check the timing against the vocal stem for the new lyrics.
+    stage_lyrics_align(job, job_dir, True)
+    return lyr
+
+
+# ── Ultimate Guitar: chord charts ────────────────────────────────────────────
+# Only CHORD SYMBOLS and the key are read from a chart. The lyric text on those
+# pages is not ours to copy — lyrics come from LRCLIB, which is built for it.
+UG_UA = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+                       "AppleWebKit/537.36 (KHTML, like Gecko) "
+                       "Chrome/120.0 Safari/537.36"}
+
+
+def _ug_page_data(url):
+    import html as _html
+    r = requests.get(url, headers=UG_UA, timeout=25)
+    if r.status_code != 200:
+        raise RuntimeError(f"Ultimate Guitar returned HTTP {r.status_code}")
+    m = re.search(r'<div[^>]+data-content="([^"]+)"', r.text)
+    if not m:
+        raise RuntimeError("Could not read that Ultimate Guitar page")
+    return json.loads(_html.unescape(m.group(1)))
+
+
+def ug_search(artist, title):
+    """Chord charts for a song, best-rated first."""
+    q = requests.utils.quote(f"{artist} {title}".strip())
+    data = _ug_page_data("https://www.ultimate-guitar.com/search.php"
+                         f"?search_type=title&value={q}")
+    results = (data.get("store", {}).get("page", {}).get("data", {})
+                   .get("results") or [])
+    out = []
+    for r in results:
+        if str(r.get("type", "")).lower() != "chords":
+            continue
+        url = r.get("tab_url") or ""
+        if "tabs.ultimate-guitar.com" not in url:
+            continue
+        out.append({
+            "url": url,
+            "artist": r.get("artist_name") or "",
+            "title": r.get("song_name") or "",
+            "rating": round(float(r.get("rating") or 0), 2),
+            "votes": int(r.get("votes") or 0),
+            "version": r.get("version"),
+        })
+    out.sort(key=lambda c: (-c["votes"], -c["rating"]))
+    return out[:20]
+
+
+def ug_chart_vocabulary(url, detected_key=None):
+    """The chord symbols a chart uses, corrected for CAPO.
+
+    A capo'd chart prints the SHAPES the guitarist fingers, not the pitches the
+    audience hears: with a capo at 3, a printed 'Am' sounds as 'Cm'. Fadr's
+    chords come from the recording, so they are sounding pitches. Everything
+    below is therefore converted to sounding pitch before being compared to or
+    substituted into the detected chords — otherwise a capo'd chart would
+    rename every chord wrongly.
+    """
+    data = _ug_page_data(url)
+    page = data.get("store", {}).get("page", {}).get("data", {})
+    content = ((page.get("tab_view") or {}).get("wiki_tab") or {}).get("content") or ""
+    chords = re.findall(r"\[ch\]([^\[]+)\[/ch\]", content)
+    seen, shapes = set(), []
+    for c in chords:
+        c = c.strip()
+        if c and c not in seen:
+            seen.add(c)
+            shapes.append(c)
+    try:
+        capo = int((page.get("tab_view") or {}).get("capo") or 0)
+    except (TypeError, ValueError):
+        capo = 0
+    shape_key = (page.get("tab") or {}).get("tonality_name") or ""
+    sounding = [transpose_chord(c, capo) for c in shapes]
+    sounding_key = transpose_chord(shape_key, capo) if shape_key else ""
+
+    return {
+        "url": url,
+        "vocab": sounding,          # sounding pitches: comparable with Fadr
+        "shapes": shapes,           # what the chart actually prints
+        "capo": capo,
+        "count": len(chords),
+        "key": sounding_key,
+        "shape_key": shape_key,
+        "detected_key": detected_key or "",
+    }
+
+
+def chart_match_report(job, voc):
+    """Does this chart actually belong to this recording?
+
+    Key metadata is a poor test — A minor and C major are the SAME key, so
+    comparing key roots reports a 9-semitone gap for a perfect match. Compare
+    the evidence instead: how many of the chords detected in the audio have a
+    root the chart also uses. Low overlap means a different arrangement, a
+    different key, or a wrong capo.
+    """
+    chart_roots = set()
+    for c in voc.get("vocab") or []:
+        i = _root_index(_chord_parts(c)[0])
+        if i is not None:
+            chart_roots.add(i)
+    hits = total = 0
+    for c in job.get("chords") or []:
+        i = _root_index(_chord_parts(c.get("chord"))[0])
+        if i is None:
+            continue
+        total += 1
+        if i in chart_roots:
+            hits += 1
+    pct = round(100 * hits / total) if total else 0
+    warning = ""
+    if total and pct < 60:
+        warning = (f"Only {pct}% of the chords heard in this recording use a "
+                   f"root this chart plays. It is probably a different version "
+                   f"or key — linking it is fine, but correcting the chord "
+                   f"names from it is not recommended.")
+    return {"overlap_pct": pct, "matched": hits, "total": total,
+            "warning": warning}
+
+
+_NOTE_INDEX = {"C": 0, "C#": 1, "DB": 1, "D": 2, "D#": 3, "EB": 3, "E": 4,
+               "FB": 4, "F": 5, "E#": 5, "F#": 6, "GB": 6, "G": 7, "G#": 8,
+               "AB": 8, "A": 9, "A#": 10, "BB": 10, "B": 11, "CB": 11}
+
+
+def _chord_parts(name):
+    """('F#', 'm7') from 'F#m7'; returns (None, None) if it is not a chord."""
+    m = re.match(r"^([A-G][#b]?)(.*)$", str(name).strip())
+    if not m:
+        return None, None
+    return m.group(1), m.group(2).strip()
+
+
+_SHARP_NAMES = ["C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B"]
+
+
+def _root_index(root):
+    return _NOTE_INDEX.get(str(root).upper()) if root else None
+
+
+def transpose_chord(name, semitones):
+    """'Am' + 3 -> 'Cm'. Keeps the quality suffix; returns the name unchanged
+    if it is not a chord symbol."""
+    root, qual = _chord_parts(name)
+    idx = _root_index(root)
+    if idx is None:
+        return name
+    if not semitones:
+        return name
+    return _SHARP_NAMES[(idx + int(semitones)) % 12] + (qual or "")
+
+
+def key_root_index(key_text):
+    """Pitch class of a key written as 'C:maj', 'Am', 'F# minor', ..."""
+    if not key_text:
+        return None
+    m = re.match(r"^\s*([A-G][#b]?)", str(key_text))
+    return _root_index(m.group(1)) if m else None
+
+
+def snap_chords_to_vocabulary(job, vocab):
+    """Improve Fadr's chord NAMES using a chart's chord set, keeping Fadr's
+    timing (which comes from the audio and is the part worth trusting).
+
+    Deliberately conservative: a chord is only rewritten when its ROOT matches
+    a chord in the chart, adopting the chart's fuller quality (Fadr's flat "F"
+    becomes "Fmaj7" if that is what the song actually plays). Chords whose root
+    the chart never uses are left exactly as they were and counted, so a poor
+    match is visible rather than silently mangling the chart.
+    """
+    by_root = {}
+    for v in vocab:
+        root, _ = _chord_parts(v)
+        idx = _root_index(root)
+        if idx is None:
+            continue
+        by_root.setdefault(idx, []).append(v)
+    changed = unmatched = 0
+    for c in job.get("chords") or []:
+        root, qual = _chord_parts(c.get("chord"))
+        idx = _root_index(root)
+        cands = by_root.get(idx) if idx is not None else None
+        if not cands:
+            unmatched += 1
+            continue
+        # Prefer a chart chord whose quality already matches; else the simplest.
+        exact = [v for v in cands if _chord_parts(v)[1].lower() == (qual or "").lower()]
+        pick = exact[0] if exact else sorted(cands, key=len)[0]
+        if pick != c["chord"]:
+            c["chord"] = pick
+            changed += 1
+    return {"changed": changed, "unmatched": unmatched,
+            "total": len(job.get("chords") or [])}
+
+
 def stage_lyrics(job, job_dir, force):
     if job["stages"].get("lyrics") and not force:
         log("Lyrics stage already done — skipping.")

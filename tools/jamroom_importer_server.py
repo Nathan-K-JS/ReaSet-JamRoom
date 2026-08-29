@@ -160,7 +160,13 @@ def build_review(job, job_dir, cfg):
     ly = job.get("lyrics") or {}
     first = next((l for l in ly.get("lines", []) if l["text"]), None)
     align = ly.get("align") or {}
+    chart = job.get("chart") or {}
     return {"stems": stems, "slot_choices": SLOT_CHOICES,
+            "band": job.get("band", ""), "title": job.get("title", ""),
+            "chords_count": len(job.get("chords") or []),
+            "chart": {"url": chart.get("url"), "vocab": chart.get("vocab") or [],
+                      "key": chart.get("key"), "snapped": chart.get("snapped")},
+            "lyrics_source": ly.get("source"),
             "slot_labels": {sid: cfg["slot_labels"].get(sid, name)
                             for sid, name in SLOT_CHOICES if sid != "SKIP"},
             "lyrics": {
@@ -658,6 +664,73 @@ class Handler(BaseHTTPRequestHandler):
                                  args=(body.get("name", ""),),
                                  daemon=True).start()
                 self._send(200, {"ok": True})
+            elif self.path == "/api/lyrics_search":
+                try:
+                    self._send(200, {"results": ji.lyrics_search(
+                        artist=body.get("artist", ""), title=body.get("title", ""),
+                        free=body.get("free", ""))})
+                except Exception as e:  # noqa: BLE001
+                    self._send(500, {"error": str(e)})
+            elif self.path == "/api/lyrics_pick":
+                if STATE["state"] != "review":
+                    self._send(409, {"error": "Nothing is awaiting review."})
+                    return
+                try:
+                    cfg = ji.load_config(None)
+                    job_dir = CURRENT["job_dir"]
+                    job = ji.load_job(job_dir)
+                    ji.lyrics_use_record(job, job_dir, body.get("id"))
+                    STATE["review"] = build_review(job, job_dir, cfg)
+                    self._send(200, {"ok": True, "review": STATE["review"]})
+                except Exception as e:  # noqa: BLE001
+                    self._send(500, {"error": str(e)})
+            elif self.path == "/api/ug_search":
+                try:
+                    self._send(200, {"charts": ji.ug_search(
+                        body.get("artist", ""), body.get("title", ""))})
+                except Exception as e:  # noqa: BLE001
+                    self._send(500, {"error": str(e)})
+            elif self.path == "/api/ug_use":
+                if STATE["state"] != "review":
+                    self._send(409, {"error": "Nothing is awaiting review."})
+                    return
+                try:
+                    cfg = ji.load_config(None)
+                    job_dir = CURRENT["job_dir"]
+                    job = ji.load_job(job_dir)
+                    detected = (job.get("fadr") or {}).get("key") or ""
+                    voc = ji.ug_chart_vocabulary(body.get("url", ""), detected)
+                    if voc.get("capo"):
+                        _ui_log(f"Chart has a capo at fret {voc['capo']} — its "
+                                f"printed shapes {voc['shapes'][:6]} sound as "
+                                f"{voc['vocab'][:6]}. Using the sounding names.")
+                    match = ji.chart_match_report(job, voc)
+                    _ui_log(f"Chart match: {match['overlap_pct']}% of the "
+                            f"detected chords use a root this chart plays.")
+                    if match["warning"]:
+                        _ui_log("WARNING: " + match["warning"])
+                    voc["warning"] = match["warning"]
+                    voc["overlap_pct"] = match["overlap_pct"]
+                    stats = None
+                    if body.get("snap"):
+                        stats = ji.snap_chords_to_vocabulary(job, voc["vocab"])
+                        _ui_log(f"Chord names snapped to the chart: "
+                                f"{stats['changed']} renamed, "
+                                f"{stats['unmatched']} left alone "
+                                f"(root not in the chart).")
+                    job["chart"] = {"url": voc["url"], "vocab": voc["vocab"],
+                                    "shapes": voc["shapes"], "key": voc["key"],
+                                    "shape_key": voc["shape_key"],
+                                    "capo": voc["capo"], "snapped": stats,
+                                    "warning": voc.get("warning", ""),
+                                    "overlap_pct": voc.get("overlap_pct"),
+                                    "detected_key": voc["detected_key"]}
+                    ji.save_job(job_dir, job)
+                    STATE["review"] = build_review(job, job_dir, cfg)
+                    self._send(200, {"ok": True, "chart": job["chart"],
+                                     "review": STATE["review"]})
+                except Exception as e:  # noqa: BLE001
+                    self._send(500, {"error": str(e)})
             elif self.path == "/api/delete_song":
                 if STATE["state"] in ("preparing", "applying"):
                     self._send(409, {"error": "An import is running — wait for "

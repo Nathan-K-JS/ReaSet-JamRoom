@@ -197,6 +197,22 @@
     </div>
     <label>Shift all lyrics by (seconds — positive = show later)</label>
     <input type="number" id="lyrOffset" step="0.1" value="0">
+
+    <button class="small" onclick="openLyricPicker()" style="margin-top:10px">
+      Wrong lyrics? Pick a different version…</button>
+    <div id="lyrPick" class="hide">
+      <label>Search the lyrics database (try a different spelling, or the
+        artist the song is filed under)</label>
+      <input type="text" id="lyrQuery" placeholder="e.g. maneskin beggin"
+             onkeydown="if(event.key==='Enter')doLyricSearch()">
+      <button class="small" onclick="doLyricSearch()">Search lyrics</button>
+      <div id="lyrResults"></div>
+    </div>
+
+    <h2 style="margin-top:16px">Chord chart</h2>
+    <div id="chartNow" class="note"></div>
+    <button class="small" onclick="doUgSearch()">Find chord charts on Ultimate Guitar</button>
+    <div id="ugResults"></div>
     <button id="applyBtn" onclick="doApply()">Looks right — add to REAPER</button>
     <button class="ghost" onclick="doCancel()">Cancel this import</button>
   </div>
@@ -621,6 +637,112 @@ function showReview(rv){
     a.addEventListener('play', function(){
       document.querySelectorAll('audio').forEach(function(b){ if(b!==a) b.pause(); });
     });
+  });
+}
+
+// ── Manual lyric picker (when the automatic match is wrong or missing) ─────
+function openLyricPicker(){
+  var box = $('lyrPick');
+  box.classList.toggle('hide');
+  if(!box.classList.contains('hide') && !$('lyrQuery').value){
+    var rv = window._review || {};
+    $('lyrQuery').value = ((rv.band || '') + ' ' + (rv.title || '')).trim();
+    doLyricSearch();
+  }
+}
+
+function doLyricSearch(){
+  var q = $('lyrQuery').value.trim();
+  if(!q) return;
+  $('lyrResults').innerHTML = '<div class="note">Searching…</div>';
+  fetch('/api/lyrics_search', {method:'POST', headers:{'Content-Type':'application/json'},
+    body: JSON.stringify({free: q})})
+  .then(r=>r.json()).then(function(d){
+    if(d.error){ $('lyrResults').innerHTML = '<div class="check bad">'+d.error+'</div>'; return; }
+    var rows = d.results || [];
+    if(!rows.length){ $('lyrResults').innerHTML = '<div class="note">Nothing found. Try just the song name, or the artist it is filed under.</div>'; return; }
+    $('lyrResults').innerHTML = '';
+    rows.forEach(function(c){
+      var b = document.createElement('button');
+      b.className = 'result';
+      var m = Math.floor(c.duration/60), s = ('0'+(c.duration%60)).slice(-2);
+      b.innerHTML = c.artist + ' — ' + c.title
+        + (c.synced ? '<span class="libpill">timed · ' + c.lines + ' lines</span>'
+                    : '<span class="libpill warn">plain text only</span>')
+        + '<br><small>' + (c.album || 'no album') + ' · ' + m + ':' + s + '</small>';
+      b.onclick = function(){ useLyricRecord(c.id, b); };
+      $('lyrResults').appendChild(b);
+    });
+  });
+}
+
+function useLyricRecord(id, btn){
+  btn.disabled = true; btn.style.opacity = '.6';
+  fetch('/api/lyrics_pick', {method:'POST', headers:{'Content-Type':'application/json'},
+    body: JSON.stringify({id: id})})
+  .then(r=>r.json()).then(function(d){
+    if(d.error){ alert(d.error); btn.disabled = false; btn.style.opacity=''; return; }
+    showReview(d.review);          // refreshed first line, timing and offset
+    $('lyrResults').innerHTML = '<div class="check ok">Lyrics replaced.</div>';
+  });
+}
+
+// ── Chord chart from Ultimate Guitar ──────────────────────────────────────
+function renderChartNow(rv){
+  var c = (rv && rv.chart) || {};
+  var el = $('chartNow');
+  if(!el) return;
+  if(c.url){
+    var snapped = c.snapped
+      ? (' · ' + c.snapped.changed + ' chord names corrected, '
+         + c.snapped.unmatched + ' left as detected') : '';
+    el.innerHTML = 'Chart linked' + (c.key ? ' (key ' + c.key + ')' : '')
+      + snapped + '<br><small>uses: ' + (c.vocab || []).join(' · ')
+      + '</small><br><a href="' + c.url + '" target="_blank" rel="noopener">'
+      + 'Open the chart</a>';
+  } else {
+    el.textContent = (rv && rv.chords_count)
+      ? (rv.chords_count + ' chords detected from the audio. Their timing is '
+         + 'reliable; the names can be improved with a real chart.')
+      : 'No chords detected for this song.';
+  }
+}
+
+function doUgSearch(){
+  var rv = window._review || {};
+  $('ugResults').innerHTML = '<div class="note">Searching Ultimate Guitar…</div>';
+  fetch('/api/ug_search', {method:'POST', headers:{'Content-Type':'application/json'},
+    body: JSON.stringify({artist: rv.band || '', title: rv.title || ''})})
+  .then(r=>r.json()).then(function(d){
+    if(d.error){ $('ugResults').innerHTML = '<div class="check bad">'+d.error+'</div>'; return; }
+    var rows = d.charts || [];
+    if(!rows.length){ $('ugResults').innerHTML = '<div class="note">No chord charts found for that title.</div>'; return; }
+    $('ugResults').innerHTML = '';
+    rows.forEach(function(c){
+      var b = document.createElement('button');
+      b.className = 'result';
+      b.innerHTML = c.artist + ' — ' + c.title + ' <span class="libpill">v'
+        + (c.version||'?') + '</span>'
+        + '<br><small>' + c.rating.toFixed(2) + '★ from ' + c.votes + ' votes</small>';
+      b.onclick = function(){ useChart(c.url, b); };
+      $('ugResults').appendChild(b);
+    });
+  });
+}
+
+function useChart(url, btn){
+  btn.disabled = true; btn.style.opacity = '.6';
+  var snap = confirm('Also correct the detected chord names using this chart?\\n\\n'
+    + 'OK  = keep Fadr\\'s timing but adopt the chart\\'s chord spellings where '
+    + 'the root matches (e.g. F becomes Fmaj7).\\n'
+    + 'Cancel = just link the chart and leave the chords as detected.');
+  fetch('/api/ug_use', {method:'POST', headers:{'Content-Type':'application/json'},
+    body: JSON.stringify({url: url, snap: snap})})
+  .then(r=>r.json()).then(function(d){
+    if(d.error){ alert(d.error); btn.disabled = false; btn.style.opacity=''; return; }
+    window._review = d.review;
+    renderChartNow(d.review);
+    $('ugResults').innerHTML = '<div class="check ok">Chart linked.</div>';
   });
 }
 
