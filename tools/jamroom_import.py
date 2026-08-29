@@ -249,6 +249,11 @@ def job_from_existing_asset(cfg, asset_id, band, title, duration):
     job.setdefault("fadr", {})["asset_id"] = asset_id
     job["stages"]["download"] = True          # there is nothing to download
     job["stages"].pop("fadr", None)           # re-collect stems from the asset
+    # A completed lyrics stage that found nothing usable is a failure worth
+    # retrying: the search has since improved, and the saved job is kept on
+    # purpose, so without this a re-import silently restores the same miss.
+    if not (job.get("lyrics") or {}).get("synced"):
+        job["stages"].pop("lyrics", None)
     save_job(job_dir, job)
     return job_dir, job
 
@@ -775,7 +780,7 @@ def parse_lrc(lrc):
     return out
 
 
-def lyrics_search(artist="", title="", free=""):
+def lyrics_search(artist="", title="", free="", duration=0):
     """Candidate lyric records from LRCLIB for the operator to choose between.
 
     The automatic lookup matches on artist+title+duration and gives up when the
@@ -806,8 +811,15 @@ def lyrics_search(artist="", title="", free=""):
             "plain": bool(c.get("plainLyrics")),
             "lines": len([l for l in synced.splitlines() if l.strip()]),
         })
-    # Timed lyrics first, then the ones with the most lines.
-    out.sort(key=lambda c: (not c["synced"], -c["lines"]))
+    # A record's duration says which EDIT it was timed against, and a record
+    # for a different edit is wrong by seconds throughout. Searching Dreams
+    # otherwise offers a 1016-second record for a 257-second song.
+    for c in out:
+        c["dur_delta"] = (round(abs(c["duration"] - duration))
+                          if duration and c["duration"] else None)
+    out.sort(key=lambda c: (not c["synced"],
+                            c["dur_delta"] if c["dur_delta"] is not None else 999,
+                            -c["lines"]))
     return out
 
 
@@ -1773,7 +1785,9 @@ def ensure_riff_wav(path):
 
 # If lyric lines and sung audio best align at an offset beyond this, correct.
 CORRECT_ABOVE = 0.35   # seconds
-ALIGN_SEARCH = 6.0     # +/- seconds of offset searched
+ALIGN_SEARCH = 15.0    # +/- seconds of offset searched. Lyric records written
+                       # for a different edit are routinely 5-10s out (Dreams
+                       # was 5.6s), which the old +/-6s could barely reach.
 
 
 def _activity(wav_path):
@@ -1796,6 +1810,31 @@ def _activity(wav_path):
     env = np.convolve(env, np.ones(5) / 5, mode="same")
     thr = max(np.percentile(env, 95) * 0.10, 1e-4)
     return env > thr, hop / 22050.0
+
+
+def _vocal_onset(vocal_path, min_voiced=0.5):
+    """When the singing actually starts, ignoring short artefacts.
+
+    Separation leaves brief bleed and breaths in the vocal stem, so requiring
+    half a second of continuous voice is what separates a real entry from a
+    click. On Dreams, 0.25s finds a stray blip at 4.05s while anything from
+    0.5s upward agrees on the true first line at 17.35s.
+    """
+    act, hop_s = _activity(vocal_path)
+    if act is None:
+        return None
+    import numpy as np
+    a = np.asarray(act, dtype=np.float32)
+    if not a.size:
+        return None
+    thr = max(0.02, float(a.max()) * 0.08)
+    need = max(1, int(min_voiced / hop_s))
+    run = 0
+    for i, v in enumerate(a):
+        run = run + 1 if v > thr else 0
+        if run >= need:
+            return round((i - need + 1) * hop_s, 3)
+    return None
 
 
 def stage_lyrics_align(job, job_dir, force):
@@ -1850,20 +1889,40 @@ def stage_lyrics_align(job, job_dir, force):
     side = float(max(scores[max(0, best_i - two)],
                      scores[min(len(scores) - 1, best_i + two)]))
     drop = float(1.0 - (side / peak if peak > 0 else 1.0))
+    # Second, independent opinion: line up the FIRST lyric line with the first
+    # real singing. The correlation can settle on a plausible-looking peak that
+    # is simply wrong — on Dreams it proposed -0.72s for a record that was
+    # already correct to within 0.03s — and a single unambiguous landmark is
+    # harder to fool than a whole-song average.
+    first_line = next((l["time"] for l in lines if l["text"].strip()), None)
+    onset = _vocal_onset(vocal)
+    onset_offset = (round(onset - first_line, 3)
+                    if onset is not None and first_line is not None else None)
+
     shift = 0.0
+    if onset_offset is not None and abs(offset - onset_offset) > 1.5:
+        # The two disagree. Believe the landmark, and say so rather than
+        # silently picking one.
+        log(f"Lyric-align: the correlation says {offset:+.2f}s but the first "
+            f"sung line lands at {onset:.2f}s, which needs {onset_offset:+.2f}s. "
+            f"Trusting the vocal entry — the correlation can lock onto a "
+            f"plausible but wrong peak.")
+        offset = onset_offset
+        drop = max(drop, 0.10)
     if abs(offset) <= CORRECT_ABOVE:
         log(f"Lyric-align: OK — lyric timing matches the sung vocals "
             f"(best offset {offset:+.2f}s); no correction needed.")
     elif drop >= 0.10:
         shift = offset
         log(f"Lyric-align: lyric lines best match the sung vocals when moved "
-            f"{offset:+.2f}s (fit worsens {drop * 100:.0f}% by ±2s) — applying.")
+            f"{offset:+.2f}s — applying.")
     else:
         log(f"Lyric-align: WARNING — best offset {offset:+.2f}s but the "
             f"correlation is too flat (only {drop * 100:.0f}% drop by ±2s) to "
             f"apply safely; lyrics may be for a different version. Review "
             f"timing manually.")
     ly["align"] = {"offset": offset, "peak_drop_2s": round(drop, 3),
+                   "vocal_onset": onset, "onset_offset": onset_offset,
                    "shift": shift}
     save_job(job_dir, job)
 

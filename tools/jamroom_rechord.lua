@@ -44,8 +44,15 @@ local function find_track(name)
     end
 end
 
-local chords_tr = find_track("chords")
-if not chords_tr then return fail('no track named "chords" in this project') end
+-- A song's chords are placed against its lyrics, so a lyric fix has to be able
+-- to rewrite both together. Either list may be absent: a chords-only update
+-- must not touch the lyrics track, and vice versa.
+if job.chords and not find_track("chords") then
+    return fail('no track named "chords" in this project')
+end
+if job.lyrics and not find_track("lyrics") then
+    return fail('no track named "lyrics" in this project')
+end
 
 -- Confirm the region really is where the server thinks it is, so a stale list
 -- can never rewrite the wrong song.
@@ -70,38 +77,51 @@ end
 reaper.Undo_BeginBlock()
 reaper.PreventUIRefresh(1)
 
--- Out with the old: chord items whose START lies inside the song.
-local removed = 0
-for ii = reaper.CountTrackMediaItems(chords_tr) - 1, 0, -1 do
-    local it = reaper.GetTrackMediaItem(chords_tr, ii)
-    local p = reaper.GetMediaItemInfo_Value(it, "D_POSITION")
-    if p >= job.start - 0.001 and p < job["end"] then
-        reaper.DeleteTrackMediaItem(chords_tr, it)
-        removed = removed + 1
+-- Out with the old, in with the new — for whichever track this update carries.
+-- Items are matched by their START lying inside the song, so neighbouring
+-- songs and every other track are untouched.
+local function replace(track_name, items)
+    local tr = find_track(track_name)
+    if not tr or not items then return 0, 0 end
+    local removed, added = 0, 0
+    for ii = reaper.CountTrackMediaItems(tr) - 1, 0, -1 do
+        local it = reaper.GetTrackMediaItem(tr, ii)
+        local p = reaper.GetMediaItemInfo_Value(it, "D_POSITION")
+        if p >= job.start - 0.001 and p < job["end"] then
+            reaper.DeleteTrackMediaItem(tr, it)
+            removed = removed + 1
+        end
     end
+    for _, c in ipairs(items) do
+        local s = job.start + (c.s or 0)
+        local e = job.start + (c.e or 0)
+        local txt = c.name or c.text
+        if e > s and txt and txt ~= "" then
+            if e > job["end"] then e = job["end"] end
+            local it = reaper.AddMediaItemToTrack(tr)
+            reaper.SetMediaItemInfo_Value(it, "D_POSITION", s)
+            reaper.SetMediaItemInfo_Value(it, "D_LENGTH", e - s)
+            reaper.ULT_SetMediaItemNote(it, txt)
+            added = added + 1
+        end
+    end
+    return removed, added
 end
 
--- In with the new, positioned relative to the region start.
-local added = 0
-for _, c in ipairs(job.chords or {}) do
-    local s = job.start + (c.s or 0)
-    local e = job.start + (c.e or 0)
-    if e > s and c.name and c.name ~= "" then
-        if e > job["end"] then e = job["end"] end
-        local it = reaper.AddMediaItemToTrack(chords_tr)
-        reaper.SetMediaItemInfo_Value(it, "D_POSITION", s)
-        reaper.SetMediaItemInfo_Value(it, "D_LENGTH", e - s)
-        reaper.ULT_SetMediaItemNote(it, c.name)
-        added = added + 1
-    end
-end
+local removed, added = replace("chords", job.chords)
+local lremoved, ladded = replace("lyrics", job.lyrics)
 
 reaper.PreventUIRefresh(-1)
 reaper.UpdateArrange()
-reaper.Undo_EndBlock("Replace chords: " .. job.region, -1)
+reaper.Undo_EndBlock((job.lyrics and "Replace lyrics and chords: "
+                                 or "Replace chords: ") .. job.region, -1)
 
 local summary = string.format('rechorded="%s" removed=%d added=%d',
                               job.region, removed, added)
+if job.lyrics then
+    summary = summary .. string.format(' lyrics_removed=%d lyrics_added=%d',
+                                       lremoved, ladded)
+end
 local rf = io.open(dir .. "jamroom_rechord_receipt.txt", "w")
 if rf then rf:write(summary .. "\n") rf:close() end
 os.remove(dir .. "jamroom_pending_rechord.lua")

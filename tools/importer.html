@@ -164,6 +164,20 @@
       <div id="rechordLog" class="note"></div>
     </div>
 
+    <div id="relyricBox" class="hide">
+      <label id="relyricFor">Lyrics</label>
+      <div class="note">Replaces this song's timed lyrics, and re-places its
+        chords against the new words — chords are positioned by the words they
+        sit above, so the two have to move together. One Ctrl+Z in REAPER puts
+        both back.</div>
+      <div style="display:flex;gap:8px;margin-top:8px">
+        <input id="relyricQuery" placeholder="song name, or the artist it is filed under">
+        <button id="relyricSearchBtn" class="delbtn" style="white-space:nowrap">Search</button>
+      </div>
+      <div id="relyricResults"></div>
+      <div id="relyricLog" class="note"></div>
+    </div>
+
     <div id="orphanWrap" class="hide">
       <label style="margin-top:16px">Downloaded on this PC but not in the project</label>
       <div id="orphanList"></div>
@@ -407,6 +421,14 @@ function loadSongs(){
                + 'timing measured from the audio. No re-import, no charge.';
       fx.onclick = function(){ openRechord(s); };
       row.appendChild(fx);
+      var lx = document.createElement('button');
+      lx.className = 'delbtn';
+      lx.style.color = '#9fd0ff'; lx.style.borderColor = '#2f6fed';
+      lx.textContent = 'Fix lyrics…';
+      lx.title = 'Give this song different timed lyrics and re-place its '
+               + 'chords against them. No re-import, no charge.';
+      lx.onclick = function(){ openRelyric(s); };
+      row.appendChild(lx);
       var b = document.createElement('button');
       b.className = 'delbtn'; b.textContent = 'Delete…';
       b.onclick = function(){ askDelete(s); };
@@ -533,6 +555,75 @@ function doRechord(url, btn){
     $('rechordLog').innerHTML = '<span class="check ok">Chords replaced.</span>'
       + '<br>' + (d.log || []).join('<br>');
   }).catch(function(e){ $('rechordLog').textContent = 'Failed: ' + e; });
+}
+
+// ── Give an existing song different lyrics (and re-place its chords) ──────
+var g_relyricSong = null;
+
+function openRelyric(s){
+  g_relyricSong = s;
+  $('relyricBox').classList.remove('hide');
+  $('relyricFor').textContent = 'Lyrics for “' + s.name + '”';
+  $('relyricLog').textContent = '';
+  var i = s.name.indexOf(' - ');
+  $('relyricQuery').value = i > 0 ? s.name.slice(0, i) + ' ' + s.name.slice(i+3)
+                                  : s.name;
+  $('relyricSearchBtn').onclick = function(){ searchRelyric(); };
+  searchRelyric();
+}
+
+function searchRelyric(){
+  $('relyricResults').innerHTML = '<div class="note">Searching…</div>';
+  fetch('/api/lyrics_search', {method:'POST', headers:{'Content-Type':'application/json'},
+    body: JSON.stringify({free: $('relyricQuery').value || '',
+                          duration: g_relyricSong ? g_relyricSong.duration : 0})})
+  .then(r=>r.json()).then(function(d){
+    if(d.error){ $('relyricResults').innerHTML = '<div class="check bad">'+d.error+'</div>'; return; }
+    var rows = (d.results || []).filter(function(c){ return c.synced; });
+    if(!rows.length){
+      $('relyricResults').innerHTML = '<div class="note">Nothing with timings '
+        + 'found. Try just the song name, or the artist it is filed under.</div>';
+      return;
+    }
+    $('relyricResults').innerHTML = '';
+    rows.forEach(function(c){
+      var b = document.createElement('button');
+      b.className = 'result';
+      var m = Math.floor(c.duration/60), sec = ('0'+(c.duration%60)).slice(-2);
+      var dd = (c.dur_delta === null || c.dur_delta === undefined) ? null : c.dur_delta;
+      var durPill = dd === null ? ''
+        : (dd <= 3 ? '<span class="libpill">same length</span>'
+                   : '<span class="libpill warn">' + dd + 's different length</span>');
+      b.innerHTML = c.artist + ' — ' + c.title
+        + '<span class="libpill">timed · ' + c.lines + ' lines</span>' + durPill
+        + '<br><small>' + (c.album || 'no album') + ' · ' + m + ':' + sec
+        + ' (this song is ' + Math.floor(g_relyricSong.duration/60) + ':'
+        + ('0'+Math.round(g_relyricSong.duration%60)).slice(-2) + ')'
+        + '<br>A different length usually means it was timed against another '
+        + 'edit, so every line will be out.</small>';
+      b.onclick = function(){ doRelyric(c.id, b); };
+      $('relyricResults').appendChild(b);
+    });
+  });
+}
+
+function doRelyric(id, btn){
+  if(!g_relyricSong) return;
+  btn.disabled = true; btn.style.opacity = '.6';
+  $('relyricLog').textContent = 'Rewriting lyrics and chords in REAPER…';
+  fetch('/api/relyric', {method:'POST', headers:{'Content-Type':'application/json'},
+    body: JSON.stringify({name: g_relyricSong.name, id: id})})
+  .then(r=>r.json()).then(function(d){
+    btn.disabled = false; btn.style.opacity = '';
+    if(d.error){
+      $('relyricLog').innerHTML = '<span class="check bad">' + d.error + '</span>'
+        + '<br>' + (d.log || []).join('<br>');
+      return;
+    }
+    $('relyricLog').innerHTML = '<span class="check ok">' + d.lines
+      + ' lyric lines and ' + d.chords + ' chords replaced.</span><br>'
+      + (d.log || []).join('<br>');
+  }).catch(function(e){ $('relyricLog').textContent = 'Failed: ' + e; });
 }
 
 function askDelete(s){
