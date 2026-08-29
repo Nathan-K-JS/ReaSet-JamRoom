@@ -147,6 +147,14 @@
         and takes the chord <b>names</b> from the chart. Capo charts are
         converted to sounding pitch automatically. One Ctrl+Z in REAPER
         restores the old chords.</div>
+      <label style="display:flex;align-items:center;gap:8px;margin-top:8px">
+        <input type="checkbox" id="rechordForce" style="width:auto" checked>
+        <span>Also correct wrongly-detected chords onto the chart's chord set</span>
+      </label>
+      <div class="note">The chart is the authority on which chords the song
+        uses, so a detected chord the chart never plays is almost certainly a
+        detection error and gets pulled to the nearest chord the song does use.
+        Untick to only upgrade chords whose root already matched.</div>
       <div id="rechordResults"></div>
       <div id="rechordLog" class="note"></div>
     </div>
@@ -475,7 +483,8 @@ function doRechord(url, btn){
   btn.disabled = true; btn.style.opacity = '.6';
   $('rechordLog').textContent = 'Rewriting chords in REAPER…';
   fetch('/api/rechord', {method:'POST', headers:{'Content-Type':'application/json'},
-    body: JSON.stringify({name: g_rechordSong.name, url: url, snap: true})})
+    body: JSON.stringify({name: g_rechordSong.name, url: url, snap: true,
+                          force: $('rechordForce').checked})})
   .then(r=>r.json()).then(function(d){
     btn.disabled = false; btn.style.opacity = '';
     if(d.error){

@@ -893,10 +893,13 @@ def ug_chart_vocabulary(url, detected_key=None):
     page = data.get("store", {}).get("page", {}).get("data", {})
     content = ((page.get("tab_view") or {}).get("wiki_tab") or {}).get("content") or ""
     chords = re.findall(r"\[ch\]([^\[]+)\[/ch\]", content)
-    seen, shapes = set(), []
+    seen, shapes, counts = set(), [], {}
     for c in chords:
         c = c.strip()
-        if c and c not in seen:
+        if not c:
+            continue
+        counts[c] = counts.get(c, 0) + 1
+        if c not in seen:
             seen.add(c)
             shapes.append(c)
     try:
@@ -906,6 +909,11 @@ def ug_chart_vocabulary(url, detected_key=None):
     shape_key = (page.get("tab") or {}).get("tonality_name") or ""
     sounding = [transpose_chord(c, capo) for c in shapes]
     sounding_key = transpose_chord(shape_key, capo) if shape_key else ""
+    # How often each SOUNDING chord appears, used to break ties when forcing a
+    # badly-detected chord onto the chart's vocabulary.
+    sounding_counts = {}
+    for shape, snd in zip(shapes, sounding):
+        sounding_counts[snd] = sounding_counts.get(snd, 0) + counts.get(shape, 1)
 
     return {
         "url": url,
@@ -915,6 +923,7 @@ def ug_chart_vocabulary(url, detected_key=None):
         "count": len(chords),
         "key": sounding_key,
         "shape_key": shape_key,
+        "counts": sounding_counts,
         "detected_key": detected_key or "",
     }
 
@@ -992,7 +1001,21 @@ def key_root_index(key_text):
     return _root_index(m.group(1)) if m else None
 
 
-def snap_chords_to_vocabulary(job, vocab):
+def _nearest_in_vocab(root_pc, by_root, counts):
+    """The vocabulary chord whose root is closest around the circle of
+    semitones. Ties go to whichever the chart actually plays more often."""
+    best, best_d, best_n = None, 99, -1
+    for pc, names in by_root.items():
+        d = abs(pc - root_pc) % 12
+        d = min(d, 12 - d)
+        for n in names:
+            n_count = counts.get(n, 0)
+            if d < best_d or (d == best_d and n_count > best_n):
+                best, best_d, best_n = n, d, n_count
+    return best, best_d
+
+
+def snap_chords_to_vocabulary(job, vocab, force=False, counts=None):
     """Improve Fadr's chord NAMES using a chart's chord set, keeping Fadr's
     timing (which comes from the audio and is the part worth trusting).
 
@@ -1009,12 +1032,25 @@ def snap_chords_to_vocabulary(job, vocab):
         if idx is None:
             continue
         by_root.setdefault(idx, []).append(v)
-    changed = unmatched = 0
+    counts = counts or {}
+    changed = unmatched = forced = 0
+    moves = {}
     for c in job.get("chords") or []:
         root, qual = _chord_parts(c.get("chord"))
         idx = _root_index(root)
         cands = by_root.get(idx) if idx is not None else None
         if not cands:
+            if force and idx is not None and by_root:
+                # The chart is the authority on which chords this song uses, so
+                # a detected root the chart never plays is almost certainly a
+                # detection error: pull it to the nearest chord the song does.
+                pick, dist = _nearest_in_vocab(idx, by_root, counts)
+                if pick and pick != c["chord"]:
+                    moves[c["chord"] + " -> " + pick] = \
+                        moves.get(c["chord"] + " -> " + pick, 0) + 1
+                    c["chord"] = pick
+                    forced += 1
+                    continue
             unmatched += 1
             continue
         # Prefer a chart chord whose quality already matches; else the simplest.
@@ -1023,8 +1059,9 @@ def snap_chords_to_vocabulary(job, vocab):
         if pick != c["chord"]:
             c["chord"] = pick
             changed += 1
-    return {"changed": changed, "unmatched": unmatched,
-            "total": len(job.get("chords") or [])}
+    return {"changed": changed, "forced": forced, "unmatched": unmatched,
+            "total": len(job.get("chords") or []),
+            "moves": sorted(moves.items(), key=lambda kv: -kv[1])[:8]}
 
 
 def stage_lyrics(job, job_dir, force):

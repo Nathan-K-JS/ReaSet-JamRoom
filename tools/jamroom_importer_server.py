@@ -464,7 +464,7 @@ def _trigger_reaper_action(cfg, ext_key, receipt, timeout=60):
     return None
 
 
-def rechord_song(name, chart_url, snap=True):
+def rechord_song(name, chart_url, snap=True, force=False):
     """Replace an existing song's chords in REAPER from a chosen chart.
 
     Uses the song's own saved job for the chord TIMING (measured from the
@@ -495,10 +495,17 @@ def rechord_song(name, chart_url, snap=True):
     if match["warning"]:
         _ui_log("WARNING: " + match["warning"])
 
-    stats = ji.snap_chords_to_vocabulary(job, voc["vocab"]) if snap else None
-    if stats:
-        _ui_log(f"Renamed {stats['changed']} of {stats['total']} chords; "
-                f"{stats['unmatched']} left as detected.")
+    stats = None
+    if snap:
+        stats = ji.snap_chords_to_vocabulary(job, voc["vocab"], force=force,
+                                             counts=voc.get("counts"))
+        _ui_log(f"Renamed {stats['changed']} of {stats['total']} chords.")
+        if force and stats["forced"]:
+            _ui_log(f"Pulled {stats['forced']} mis-detected chords onto the "
+                    f"chart's chord set: "
+                    + ", ".join(f"{k} x{v}" for k, v in stats["moves"]))
+        if stats["unmatched"]:
+            _ui_log(f"{stats['unmatched']} left exactly as detected.")
     job["chart"] = {"url": voc["url"], "vocab": voc["vocab"],
                     "shapes": voc["shapes"], "key": voc["key"],
                     "capo": voc["capo"], "snapped": stats,
@@ -858,7 +865,8 @@ class Handler(BaseHTTPRequestHandler):
                     STATE["log"] = []
                     res = rechord_song(body.get("name", ""),
                                        body.get("url", ""),
-                                       bool(body.get("snap", True)))
+                                       bool(body.get("snap", True)),
+                                       bool(body.get("force", False)))
                     self._send(200, {"ok": True, "result": res["result"],
                                      "match": res["match"],
                                      "snapped": res["snapped"],
