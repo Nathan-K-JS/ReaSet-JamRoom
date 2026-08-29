@@ -3955,6 +3955,14 @@
             <div class="lyrics-no-data">Enable the "X-Raym Convert Lyrics" Lua script in REAPER to see live lyrics.
             </div>
         </div>
+        <!-- Same per-song lead time as the chords panel: one shared value, so
+             adjusting it here moves both displays together. -->
+        <div class="lead-row" id="lyrLeadRow">
+            <label class="lead-lab">Lead time <span id="leadValueLyr">+0.5s</span></label>
+            <input type="range" id="leadSliderLyr" min="-10" max="30" step="1" value="5"
+                   oninput="setLead(parseInt(this.value)/10)">
+            <div class="lead-song" id="leadSongLyr">&nbsp;</div>
+        </div>
     </div>
 
     <!-- CHORDS PANEL -->
@@ -4729,8 +4737,7 @@
             g_leadTimes[currentLeadSongKey()] = v;
             localStorage.setItem(_leadKey(), JSON.stringify(g_leadTimes));
             renderChordsView(); renderLyricsView();
-            var lbl = document.getElementById('leadValue');
-            if (lbl) lbl.textContent = (v >= 0 ? '+' : '') + v.toFixed(1) + 's';
+            syncLeadSlider();          // keeps both panels' sliders in step
         }
 
         // ── Per-song tempo & key (ReaSet_TempoKey.lua bridge) ────────────────
@@ -8619,16 +8626,22 @@
             }
         }
 
+        // One lead-time value, mirrored into the chords panel and the lyrics
+        // panel, so whichever one you are looking at can adjust it.
         function syncLeadSlider() {
-            var sl = document.getElementById('leadSlider');
-            var lbl = document.getElementById('leadValue');
-            var who = document.getElementById('leadSong');
-            if (sl) sl.value = String(Math.round(getLead() * 10));
-            if (lbl) lbl.textContent = (getLead() >= 0 ? '+' : '') + getLead().toFixed(1) + 's';
-            if (who) {
-                who.textContent = (g_clData && g_clData.song)
-                    ? 'for ' + g_clData.song.name : 'no song at the playhead';
-            }
+            var v = getLead();
+            var txt = (v >= 0 ? '+' : '') + v.toFixed(1) + 's';
+            var who = (g_clData && g_clData.song)
+                ? 'for ' + g_clData.song.name : 'no song at the playhead';
+            [['leadSlider', 'leadValue', 'leadSong'],
+             ['leadSliderLyr', 'leadValueLyr', 'leadSongLyr']].forEach(function (ids) {
+                var sl = document.getElementById(ids[0]);
+                var lbl = document.getElementById(ids[1]);
+                var w = document.getElementById(ids[2]);
+                if (sl) sl.value = String(Math.round(v * 10));
+                if (lbl) lbl.textContent = txt;
+                if (w) w.textContent = who;
+            });
         }
 
         // ── Chord views ──────────────────────────────────────────────────────

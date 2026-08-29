@@ -102,12 +102,45 @@ end
 
 -- ─── Applied-offset bookkeeping (with project-extstate mirror) ───────────────
 
-local applied = {}      -- guid -> semitone offset currently applied by us
+-- guid -> { off = semitones, pp = original B_PPITCH, pm = original I_PITCHMODE }
+-- We must own three things per item, not one: the pitch offset, the
+-- "preserve pitch when changing rate" flag, and the stretch algorithm.
+local applied = {}
 
+-- Which time-stretch algorithm to force while tempo is changed. REAPER's
+-- project default is SoundTouch (DEFPITCHMODE 0), which smears and wobbles
+-- audibly at 110-125% - heard as "warping" even though the pitch is correct.
+-- elastique Pro is the quality option; resolved at boot from whatever this
+-- build actually offers, so a build without it degrades gracefully.
+local STRETCH_MODE = nil          -- nil = leave the item's mode alone
+
+local function resolve_stretch_mode()
+    local best
+    for i = 0, 20 do
+        local ok, name = reaper.EnumPitchShiftModes(i)
+        if ok and name and name ~= "" then
+            local l = name:lower()
+            -- Prefer elastique 3.3.3 Pro, then any elastique Pro, then Rubber Band
+            if l:find("3%.3%.3") and l:find("pro") then best = i break end
+            if not best and l:find("pro") then best = i end
+            if not best and l:find("rubber") then best = i end
+        end
+    end
+    if best then
+        STRETCH_MODE = best * 65536      -- high word = mode, low word = submode 0
+        local _, nm = reaper.EnumPitchShiftModes(best)
+        return nm
+    end
+    return nil
+end
+
+-- Mirror the pitch OFFSETS into the project so a crash or an accidental save
+-- can be undone next boot. (The preserve-pitch flag and stretch mode are
+-- cosmetic-but-restorable; the offset is the one that must never be stranded.)
 local function persist_applied()
     local parts = {}
-    for g, off in pairs(applied) do
-        if off ~= 0 then parts[#parts + 1] = g .. "=" .. off end
+    for g, rec in pairs(applied) do
+        if rec.off ~= 0 then parts[#parts + 1] = g .. "=" .. rec.off end
     end
     reaper.SetProjExtState(0, SEC, "applied", table.concat(parts, ";"))
 end
@@ -134,8 +167,7 @@ local function recover_leftovers()
     end
     local n = 0
     all_audio_items(function(it, tk)
-        local g = item_guid(it)
-        local off = leftover[g]
+        local off = leftover[item_guid(it)]
         if off and off ~= 0 then
             reaper.SetMediaItemTakeInfo_Value(tk, "D_PITCH",
                 reaper.GetMediaItemTakeInfo_Value(tk, "D_PITCH") - off)
@@ -187,9 +219,11 @@ local function set_rate(rate)
     end
 end
 
--- Bring every item to its target offset for the active song (0 for excluded
--- groups and for items outside the song). Deltas only — idempotent.
-local function apply_pitch(song, semis, excl_csv)
+-- Bring every item to its target state for the active song. Handles three
+-- properties: the pitch offset (key change), the preserve-pitch flag and the
+-- stretch algorithm (both needed for a tempo change to sound right).
+-- Items outside the song, and excluded groups, are returned to normal.
+local function apply_pitch(song, semis, excl_csv, stretching)
     local excl = {}
     for s in (excl_csv or ""):gmatch("[^,]+") do excl[trim(s):upper()] = true end
     local slots = slot_by_trackidx()
@@ -197,23 +231,50 @@ local function apply_pitch(song, semis, excl_csv)
     local new_applied = {}
     all_audio_items(function(it, tk, tidx)
         local g = item_guid(it)
-        local target = 0
-        if song and semis ~= 0 then
+        local rec = applied[g]
+        local in_song = false
+        if song then
             local p = reaper.GetMediaItemInfo_Value(it, "D_POSITION")
             local l = reaper.GetMediaItemInfo_Value(it, "D_LENGTH")
-            if p < song.e and (p + l) > song.s then
-                local slot = slots[tidx]
-                if not (slot and excl[slot]) then target = semis end
-            end
+            in_song = (p < song.e and (p + l) > song.s)
         end
-        local have = applied[g] or 0
-        if target ~= have then
+        local slot = slots[tidx]
+        local excluded = (slot and excl[slot]) and true or false
+        local target = (in_song and not excluded) and semis or 0
+        -- Tempo affects EVERYTHING in the song, including drums: the exclusion
+        -- list is only about the key change.
+        local want_stretch = stretching and in_song
+
+        if target ~= (rec and rec.off or 0) then
             reaper.SetMediaItemTakeInfo_Value(tk, "D_PITCH",
-                reaper.GetMediaItemTakeInfo_Value(tk, "D_PITCH") + (target - have))
+                reaper.GetMediaItemTakeInfo_Value(tk, "D_PITCH")
+                + (target - (rec and rec.off or 0)))
         end
-        if target ~= 0 then
-            new_applied[g] = target
-            touched = touched + 1
+
+        if want_stretch then
+            if not rec then                       -- first touch: remember originals
+                rec = { off = 0,
+                        pp = reaper.GetMediaItemTakeInfo_Value(tk, "B_PPITCH"),
+                        pm = reaper.GetMediaItemTakeInfo_Value(tk, "I_PITCHMODE") }
+            end
+            -- Do not depend on REAPER's per-item defaults or the project's
+            -- stretch algorithm: set both explicitly.
+            reaper.SetMediaItemTakeInfo_Value(tk, "B_PPITCH", 1)
+            if STRETCH_MODE then
+                reaper.SetMediaItemTakeInfo_Value(tk, "I_PITCHMODE", STRETCH_MODE)
+            end
+        elseif rec then                            -- put the originals back
+            reaper.SetMediaItemTakeInfo_Value(tk, "B_PPITCH", rec.pp)
+            reaper.SetMediaItemTakeInfo_Value(tk, "I_PITCHMODE", rec.pm)
+        end
+
+        if target ~= 0 or want_stretch then
+            new_applied[g] = { off = target,
+                               pp = rec and rec.pp or
+                                    reaper.GetMediaItemTakeInfo_Value(tk, "B_PPITCH"),
+                               pm = rec and rec.pm or
+                                    reaper.GetMediaItemTakeInfo_Value(tk, "I_PITCHMODE") }
+            if target ~= 0 then touched = touched + 1 end
         end
     end)
     applied = new_applied
@@ -281,7 +342,8 @@ local function main_loop()
     if t_rate ~= cur.rate or t_semis ~= cur.semis or t_excl ~= cur.excl
             or song_s ~= cur.s then
         set_rate(t_rate)
-        local items = apply_pitch(song, t_semis, t_excl)
+        local stretching = math.abs(t_rate - 1.0) > 0.0005
+        local items = apply_pitch(song, t_semis, t_excl, stretching)
         cur = { rate = t_rate, semis = t_semis, excl = t_excl,
                 s = song_s, e = song and song.e or -1, items = items,
                 name = song and song.name or "" }
@@ -296,14 +358,18 @@ end
 
 local function cleanup()
     set_rate(1.0)
-    apply_pitch(nil, 0, "")
+    apply_pitch(nil, 0, "", false)
     reaper.SetExtState(SEC, "heartbeat", "", false)
     reaper.SetExtState(SEC, "state", "", false)
     reaper.UpdateArrange()
 end
 
 recover_leftovers()
--- Tempo changes must never chipmunk the audio.
+-- Tempo changes must never chipmunk the audio, and must not be smeared by a
+-- low-quality stretcher either.
+local stretch_name = resolve_stretch_mode()
+reaper.ShowConsoleMsg("[ReaSet tempo/key] stretch algorithm: "
+    .. (stretch_name or "build default (no elastique/Rubber Band found)") .. "\n")
 s_pp = ensure_preserve_pitch()
 reaper.ShowConsoleMsg("[ReaSet tempo/key] preserve pitch on master playrate: "
     .. (s_pp == 1 and "ON" or ("COULD NOT ENABLE (state " .. s_pp ..
