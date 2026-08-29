@@ -590,7 +590,11 @@ function doImportLibrary(){
 
 function showReview(rv){
   reviewShown = true;
+  // Kept for the lyric and chart pickers, which need this song's band/title
+  // and the current chart state.
+  window._review = rv;
   $('reviewCard').classList.remove('hide');
+  renderChartNow(rv);
   var list = $('stemList'); list.innerHTML = '';
   rv.stems.forEach(function(st, i){
     var row = document.createElement('div');
