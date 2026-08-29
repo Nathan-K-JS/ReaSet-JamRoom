@@ -4866,23 +4866,34 @@
             }
         }
 
-        // Transpose a chord name by the CONFIRMED semitone offset, for display.
-        var TK_NOTES = ['C','C#','D','D#','E','F','F#','G','G#','A','A#','B'];
-        var TK_FLAT = { 'Db':'C#','Eb':'D#','Gb':'F#','Ab':'G#','Bb':'A#' };
+        // ── Chord transposition ──────────────────────────────────────────────
+        // Every root spelling written out explicitly rather than derived. There
+        // are only 21 of them and this table underpins the key change, the
+        // capo and the chart matching, so it is the wrong place to be clever.
+        var CHORD_ROOT_PC = {
+            'C': 0,  'B#': 0,  'C#': 1,  'Db': 1,
+            'D': 2,  'D#': 3,  'Eb': 3,  'E': 4,  'Fb': 4,
+            'E#': 5, 'F': 5,   'F#': 6,  'Gb': 6,
+            'G': 7,  'G#': 8,  'Ab': 8,  'A': 9,
+            'A#': 10,'Bb': 10, 'B': 11,  'Cb': 11
+        };
+        var CHORD_PC_NAME = ['C','C#','D','D#','E','F','F#','G','G#','A','A#','B'];
+
+        // "F#m7" -> root "F#", rest "m7". A slash bass ("G/B") is handled by
+        // transposing each side, so the bass note moves with the chord.
+        function _transposeOneRoot(seg, semis) {
+            var m = /^([A-G])([#b]?)(.*)$/.exec(String(seg).trim());
+            if (!m) return seg;
+            var pc = CHORD_ROOT_PC[m[1] + m[2]];
+            if (pc === undefined) return seg;
+            return CHORD_PC_NAME[((pc + semis) % 12 + 12) % 12] + m[3];
+        }
         function transposeChordName(name, semis) {
-            if (!semis) return name;
-            return String(name).replace(/([A-G])([#b]?)/g, function (m, root, acc, off, whole) {
-                // Only transpose where it is actually a note: at the start, or
-                // right after a "/" (slash bass). Leave e.g. the D in "sus" alone
-                // — the regex cannot match inside lowercase text, so this is safe.
-                var idx = arguments[3];
-                if (idx !== 0 && whole[idx - 1] !== '/') return m;
-                var n = root + (acc === 'b' ? 'b' : acc);
-                if (TK_FLAT[n]) n = TK_FLAT[n];
-                var i = TK_NOTES.indexOf(n);
-                if (i < 0) return m;
-                return TK_NOTES[(i + (semis % 12) + 12) % 12];
-            });
+            var s = String(name == null ? '' : name);
+            if (!semis || !s.trim()) return s;
+            return s.split('/').map(function (part) {
+                return _transposeOneRoot(part, semis);
+            }).join('/');
         }
 
         function tkRenderPanel() {
