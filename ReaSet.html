@@ -3980,6 +3980,14 @@
                    oninput="setLead(parseInt(this.value)/10)">
             <div class="lead-song" id="leadSong">&nbsp;</div>
         </div>
+        <!-- Reading aid only: shifts the SHAPES shown, never the audio. -->
+        <div class="tk-row" style="margin-bottom:10px">
+            <span class="tk-lab">CAPO</span>
+            <button class="tk-btn" onclick="adjustCapo(-1)">−</button>
+            <span class="tk-val" id="capoValue">off</span>
+            <button class="tk-btn" onclick="adjustCapo(1)">+</button>
+            <button class="tk-btn" onclick="setCapo(0)" title="no capo">⟲</button>
+        </div>
         <!-- legacy single-chord display, used only if the timeline script is off -->
         <div id="chord-display" style="display:none">&#9834;</div>
         <div class="chord-label" id="chord-label" style="display:none"></div>
@@ -4951,6 +4959,35 @@
             host.innerHTML = h;
         }
 
+        // ── Display capo ─────────────────────────────────────────────────────
+        // Purely a reading aid: the audio is untouched. With a capo at fret N
+        // you finger shapes N semitones BELOW the sounding chord, so that is
+        // what gets drawn. Composes with any audio key change: the shown shape
+        // is (sounding chord + key change - capo).
+        var g_capos = {};
+        function _capoKey() { return 'reaset_capo' + _pkSuffix(); }
+        function loadCapos() {
+            try { g_capos = JSON.parse(localStorage.getItem(_capoKey()) || '{}'); }
+            catch (e) { g_capos = {}; }
+        }
+        loadCapos();
+        function getCapo() {
+            var k = currentLeadSongKey();
+            return (typeof g_capos[k] === 'number') ? g_capos[k] : 0;
+        }
+        function setCapo(n) {
+            n = Math.max(0, Math.min(11, n));
+            g_capos[currentLeadSongKey()] = n;
+            localStorage.setItem(_capoKey(), JSON.stringify(g_capos));
+            syncCapoUI();
+            renderChordsView();
+        }
+        function adjustCapo(d) { setCapo(getCapo() + d); }
+        function syncCapoUI() {
+            var v = document.getElementById('capoValue');
+            if (v) v.textContent = getCapo() === 0 ? 'off' : ('fret ' + getCapo());
+        }
+
         // Chord view mode: 'chart' (rows of 4), 'big' (one large + strip),
         // 'timeline' (width proportional to duration).
         var g_chordView = localStorage.getItem('reaset_chord_view') || 'chart';
@@ -5047,7 +5084,7 @@
         setChordView(g_chordView);   // paints the active view tab
         syncLeadSlider();
         // Shown in the sidebar so a stale cached page is obvious after a deploy.
-        var REASET_VERSION = "v1.4 · 2026-08-22";
+        var REASET_VERSION = "v1.5 · 2026-08-29";
         var _rv = document.getElementById("reasetVer");
         if (_rv) _rv.textContent = REASET_VERSION;
         (function () { var t = localStorage.getItem("reasetlist_theme") || "dark"; setTheme(t, true); })();
@@ -8642,6 +8679,7 @@
                 if (lbl) lbl.textContent = txt;
                 if (w) w.textContent = who;
             });
+            syncCapoUI();      // capo is per song too, so follow the song change
         }
 
         // ── Chord views ──────────────────────────────────────────────────────
@@ -8663,8 +8701,10 @@
             var t = currentPos + getLead() * tkRate;
             var cur = clIndexAtOrBefore(list, t);
             if (cur < 0) cur = 0;
-            // Confirmed transpose changes the chord NAMES the musician sees.
-            var X = function (n) { return transposeChordName(n, tkSemis); };
+            // What the player should FINGER: the sounding chord, moved by any
+            // audio key change, then down by the capo fret.
+            var capo = getCapo();
+            var X = function (n) { return transposeChordName(n, tkSemis - capo); };
             // Size text to the LONGEST chord that will be on screen, so "F#m7"
             // stays readable instead of being clipped by a one-character size.
             function cvFontFor(names, big) {
@@ -8731,14 +8771,13 @@
                 html = rows;
             }
             var meta = g_clData.song ? g_clData.song.name : '';
-            var badge = '';
-            if (tkSemis || Math.abs(tkRate - 1) > 0.005) {
-                badge = '<div class="cv-tkbadge">'
-                    + (tkSemis ? 'Key ' + (tkSemis > 0 ? '+' : '') + tkSemis + ' (chords shown transposed)' : '')
-                    + (tkSemis && Math.abs(tkRate - 1) > 0.005 ? ' · ' : '')
-                    + (Math.abs(tkRate - 1) > 0.005 ? 'Tempo ' + Math.round(tkRate * 100) + '%' : '')
-                    + '</div>';
-            }
+            var bits = [];
+            if (tkSemis) bits.push('Key ' + (tkSemis > 0 ? '+' : '') + tkSemis);
+            if (Math.abs(tkRate - 1) > 0.005) bits.push('Tempo ' + Math.round(tkRate * 100) + '%');
+            if (capo) bits.push('Capo ' + capo + ' — shapes to play, sounding '
+                                + transposeChordName(list[cur][2], tkSemis));
+            var badge = bits.length
+                ? '<div class="cv-tkbadge">' + bits.join(' · ') + '</div>' : '';
             host.innerHTML = html + badge + '<div class="cv-meta">' + meta + '</div>';
         }
 
