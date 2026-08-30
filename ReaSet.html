@@ -259,6 +259,10 @@
 
         /* TOP TABS */
         .app-topbar {
+            /* Above every panel (z 200-210) so the tabs stay reachable and you
+               can move straight between screens instead of closing one first. */
+            position: relative;
+            z-index: 400;
             background: rgba(22, 22, 22, 0.95);
             backdrop-filter: blur(32px) saturate(140%);
             -webkit-backdrop-filter: blur(32px) saturate(140%);
@@ -1393,10 +1397,6 @@
             pointer-events: none;
         }
 
-        .t-btn-stop.stop-holding::before {
-            animation: stop-fill 3s linear forwards;
-        }
-
         @keyframes stop-fill {
             from {
                 width: 0%;
@@ -1974,10 +1974,6 @@
             pointer-events: none;
         }
 
-        .lt-stop.stop-holding::before {
-            animation: stop-fill 3s linear forwards;
-        }
-
         .lt-play {
             background: #20D760;
             color: #12001f;
@@ -2185,7 +2181,8 @@
         /* === LYRICS PANEL === */
         #lyrics-panel {
             position: fixed;
-            inset: 0;
+            top: 56px;      /* clear of the top bar */
+            left: 0; right: 0; bottom: 0;
             background: #111111;
             z-index: 200;
             display: none;
@@ -2258,7 +2255,8 @@
         /* === CHORDS PANEL === */
         #chords-panel {
             position: fixed;
-            inset: 0;
+            top: 56px;      /* clear of the top bar */
+            left: 0; right: 0; bottom: 0;
             background: #111111;
             z-index: 210;
             display: none;
@@ -2522,10 +2520,6 @@
             border-radius: inherit;
             pointer-events: none;
             transition: none;
-        }
-
-        .lb-stop.stop-holding::before {
-            animation: stop-fill 3s linear forwards;
         }
 
         @keyframes stop-fill {
@@ -3378,7 +3372,8 @@
 ══════════════════════════════════════════════ */
         #tracks-panel {
             position: fixed;
-            inset: 0;
+            top: 56px;      /* clear of the top bar */
+            left: 0; right: 0; bottom: 0;
             background: var(--bg-app);
             z-index: 200;
             display: none;
@@ -3609,9 +3604,7 @@
         <!-- TRANSPORT FOOTER -->
         <div class="app-transport">
             <button class="t-btn t-btn-play" id="main-play-btn" onclick="togglePlay()">▶ PLAY</button>
-            <button class="t-btn t-btn-stop" id="main-stop-btn" onmousedown="handleMainStopPress(this)"
-                onmouseup="handleMainStopRelease(this)" ontouchstart="handleMainStopPress(this)"
-                ontouchend="handleMainStopRelease(this)" style="user-select:none;-webkit-user-select:none">■
+            <button class="t-btn t-btn-stop" id="main-stop-btn" onclick="smartStop()" style="user-select:none;-webkit-user-select:none">■
                 STOP</button>
             <button id="footer-loop-btn" class="t-btn t-btn-loop" onclick="toggleCurrentLoop()">↻ Loop</button>
             <button class="t-btn t-btn-sync" onclick="wwr_start()">SYNC</button>
@@ -3683,17 +3676,6 @@
                 </label>
                 MIDI Init
                 <button class="help-btn" style="margin-left:auto" onclick="showHelp('initsongmidi')">?</button>
-            </div>
-
-            <div class="toggle-row">
-                <label class="n-switch"><input type="checkbox" id="stopHoldToggle"
-                        onchange="setStopMode(this.checked ? 'hold' : 'tap')">
-                    <div class="n-track">
-                        <div class="n-thumb"></div>
-                    </div>
-                </label>
-                Stop Hold (3s)
-                <button class="help-btn" style="margin-left:auto" onclick="showHelp('stophold')">?</button>
             </div>
 
             <div class="toggle-row" style="border:none">
@@ -4046,9 +4028,7 @@
         </div>
         <div class="live-transport" id="live-transport-bar">
             <button class="lt-btn lt-ghost" onclick="liveNav('prev')">⏮</button>
-            <button class="lt-btn lt-stop" onmousedown="handleMainStopPress(this)"
-                onmouseup="handleMainStopRelease(this)" ontouchstart="handleMainStopPress(this)"
-                ontouchend="handleMainStopRelease(this)" style="user-select:none;-webkit-user-select:none">■
+            <button class="lt-btn lt-stop" onclick="smartStop()" style="user-select:none;-webkit-user-select:none">■
                 STOP</button>
             <button class="lt-btn lt-play" id="live-play-btn" onclick="togglePlay()">▶ PLAY</button>
             <button class="lt-btn lt-ghost" onclick="liveNav('next', event)">⏭</button>
@@ -4192,18 +4172,11 @@
                 <div class="cw-content" id="cw-content-transport">
                     <div class="cw-transport-wrapper" style="display: flex; gap: 8px; justify-content: center;">
                         <button class="lt-btn lt-ghost" onclick="canvasNav('prev')">⏮</button>
-                        <button class="lt-btn lt-stop" id="cw-stop-btn" onmousedown="handleStopPress()"
-                            onmouseup="handleStopRelease()" ontouchstart="handleStopPress()"
-                            ontouchend="handleStopRelease()" style="user-select:none;-webkit-user-select:none">■ STOP
+                        <button class="lt-btn lt-stop" id="cw-stop-btn" onclick="smartStop()" style="user-select:none;-webkit-user-select:none">■ STOP
                             (Hold)</button>
                         <button class="lt-btn lt-play" id="cw-play-btn" onclick="togglePlay()">▶ PLAY</button>
                         <button class="lt-btn lt-ghost" onclick="canvasNav('next')">⏭</button>
                     </div>
-                </div>
-                <div class="cw-toolbar">
-                    <button class="cw-tool-btn" id="cw-stop-mode-btn" onclick="toggleStopMode()"
-                        title="Stop button mode">Mode:
-                        Hold</button>
                 </div>
             </div>
         </div>
@@ -5178,7 +5151,7 @@
         syncLeadSlider();
         tkRenderPanel();             // paints the performance chips on load
         // Shown in the sidebar so a stale cached page is obvious after a deploy.
-        var REASET_VERSION = "v1.6 · 2026-08-30";
+        var REASET_VERSION = "v1.7 · 2026-08-30";
         var _rv = document.getElementById("reasetVer");
         if (_rv) _rv.textContent = REASET_VERSION;
         (function () { var t = localStorage.getItem("reasetlist_theme") || "dark"; setTheme(t, true); })();
@@ -7178,6 +7151,7 @@
             var panel = document.getElementById("lyrics-panel");
             var btn = document.getElementById("lyrics-btn");
             if (lyricsVisible) {
+                closeOtherPanels('lyrics');
                 panel.classList.add("open"); if (btn) btn.classList.add("panel-open");
                 wwr_req("GET/EXTSTATE/XR_Lyrics/text");
             } else {
@@ -7211,6 +7185,7 @@
             var panel = document.getElementById("chords-panel");
             var btn = document.getElementById("chords-btn");
             if (chordsVisible) {
+                closeOtherPanels('chords');
                 panel.classList.add("open"); if (btn) btn.classList.add("panel-open");
             } else {
                 panel.classList.remove("open"); if (btn) btn.classList.remove("panel-open");
@@ -7317,6 +7292,10 @@
         }
 
         // F14: Update top tab active state
+        // A jam-room PC may still carry the old 'hold' preference; drop it so
+        // the removed behaviour cannot come back from localStorage.
+        try { localStorage.removeItem('reaset_stop_mode'); } catch (e) {}
+
         function showMainView() {
             // Close any open panels/overlays and return to main show view
             if (lyricsVisible) toggleLyricsPanel();
@@ -7324,6 +7303,15 @@
             if (tracksPanelOpen) toggleTracksPanel();
             // Live View and Canvas are fullscreen modals — they have their own close buttons
             updateTopTabs();
+        }
+
+        // Only one panel is ever open, so tapping a tab moves straight to that
+        // screen. Closing the current one first was busy-work: the top bar is
+        // always visible now, and these panels are alternatives, not layers.
+        function closeOtherPanels(keep) {
+            if (keep !== 'lyrics' && lyricsVisible) toggleLyricsPanel();
+            if (keep !== 'chords' && chordsVisible) toggleChordsPanel();
+            if (keep !== 'tracks' && tracksPanelOpen) toggleTracksPanel();
         }
 
         function updateTopTabs() {
@@ -7486,15 +7474,6 @@
             if (target) cueRegion(target.start, target.id);
         }
 
-        // F12: Canvas Stop hold (3s)
-        var _stopHoldTimer = null;
-        function startStopHold() {
-            _stopHoldTimer = setTimeout(function () { smartStop(); _stopHoldTimer = null; }, 3000);
-        }
-        function cancelStopHold() {
-            if (_stopHoldTimer) { clearTimeout(_stopHoldTimer); _stopHoldTimer = null; }
-        }
-
         // F12: Canvas widget font size adjuster
         var _cwFontMap = {}; // { elementId: currentPx }
         function cwFontSize(id, delta) {
@@ -7517,85 +7496,11 @@
             saveCanvasPrefs();
         }
 
-        // Stop button Tap/Hold toggle
-        var _stopMode = localStorage.getItem('reaset_stop_mode') || 'hold'; // 'hold' | 'tap'
-        function toggleStopMode() {
-            _stopMode = (_stopMode === 'hold') ? 'tap' : 'hold';
-            localStorage.setItem('reaset_stop_mode', _stopMode);
-            var btn = document.getElementById('cw-stop-mode-btn');
-            var stopBtn = document.getElementById('cw-stop-btn');
-            if (btn) btn.innerText = 'Mode: ' + (_stopMode === 'hold' ? 'Hold' : 'Tap');
-            if (stopBtn) stopBtn.innerText = (_stopMode === 'hold') ? 'STOP (Hold)' : 'STOP';
-        }
-        function handleStopPress() {
-            if (_stopMode === 'tap') { smartStop(); return; }
-            var stopBtn = document.getElementById('cw-stop-btn');
-            if (stopBtn) {
-                // Force animation restart in case it was recently removed
-                stopBtn.classList.remove('stop-holding');
-                void stopBtn.offsetWidth; // trigger reflow to restart animation
-                stopBtn.classList.add('stop-holding');
-            }
-            _stopHoldTimer = setTimeout(function () {
-                _stopHoldTimer = null;
-                var sb = document.getElementById('cw-stop-btn');
-                if (sb) sb.classList.remove('stop-holding');
-                smartStop();
-            }, 3000);
-        }
-        function handleStopRelease() {
-            if (_stopMode === 'tap') return;
-            var stopBtn = document.getElementById('cw-stop-btn');
-            if (stopBtn) stopBtn.classList.remove('stop-holding');
-            cancelStopHold();
-        }
-        // Initialise stop mode UI
-        (function initStopMode() {
-            var btn = document.getElementById('cw-stop-mode-btn');
-            var stopBtn = document.getElementById('cw-stop-btn');
-            if (btn) btn.innerText = 'Mode: ' + (_stopMode === 'hold' ? 'Hold' : 'Tap');
-            if (stopBtn) stopBtn.innerText = (_stopMode === 'hold') ? 'STOP (Hold)' : 'STOP';
-            // Sync sidebar toggle
-            var sidebarToggle = document.getElementById('stopHoldToggle');
-            if (sidebarToggle) sidebarToggle.checked = (_stopMode === 'hold');
-        })();
-
-        // Unified setStopMode — called by sidebar toggle & canvas toggle
-        function setStopMode(mode) {
-            _stopMode = mode;
-            localStorage.setItem('reaset_stop_mode', _stopMode);
-            // Sync canvas widget
-            var cwBtn = document.getElementById('cw-stop-mode-btn');
-            var cwStop = document.getElementById('cw-stop-btn');
-            if (cwBtn) cwBtn.innerText = 'Mode: ' + (_stopMode === 'hold' ? 'Hold' : 'Tap');
-            if (cwStop) cwStop.innerText = (_stopMode === 'hold') ? 'STOP (Hold)' : 'STOP';
-            // Sync sidebar checkbox
-            var sidebarToggle = document.getElementById('stopHoldToggle');
-            if (sidebarToggle) sidebarToggle.checked = (_stopMode === 'hold');
-        }
-
-        // Main bottom-bar Stop button Tap/Hold handlers
-        var _mainStopTimer = null;
-        function handleMainStopPress(btn) {
-            if (_stopMode === 'tap') { smartStop(); return; }
-            if (!btn) btn = document.getElementById('main-stop-btn'); // fallback
-            if (btn) {
-                btn.classList.remove('stop-holding');
-                void btn.offsetWidth; // reflow to restart animation
-                btn.classList.add('stop-holding');
-            }
-            _mainStopTimer = setTimeout(function () {
-                _mainStopTimer = null;
-                if (btn) btn.classList.remove('stop-holding');
-                smartStop();
-            }, 3000);
-        }
-        function handleMainStopRelease(btn) {
-            if (_stopMode === 'tap') return;
-            if (_mainStopTimer) { clearTimeout(_mainStopTimer); _mainStopTimer = null; }
-            if (!btn) btn = document.getElementById('main-stop-btn'); // fallback
-            if (btn) btn.classList.remove('stop-holding');
-        }
+        // STOP is a plain tap, the same as PLAY and PAUSE beside it.
+        // There was a 3-second hold-to-stop guard here, off by default in the
+        // main bar and unlabelled, so pressing STOP normally did nothing at
+        // all and the button read as broken. This is a rehearsal tool, not a
+        // live show desk, so the guard is gone rather than merely relabelled.
 
         // Canvas widget prefs persistence
         function saveCanvasPrefs() {
@@ -9122,6 +9027,7 @@
             tracksPanelOpen = !tracksPanelOpen;
             var panel = document.getElementById('tracks-panel');
             if (tracksPanelOpen) {
+                closeOtherPanels('tracks');
                 panel.classList.add('open');
                 g_jrLastHtml = "";
                 renderTracksPanel();
