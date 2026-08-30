@@ -295,7 +295,7 @@
 <script>
 // Version of THIS page (served fresh from disk). Compared against the version
 // of the running server; a mismatch means the importer needs restarting.
-var UI_BUILD = "v1.8";
+var UI_BUILD = "v1.9";
 
 var picked = null, poller = null, reviewShown = false;
 
@@ -307,7 +307,20 @@ function fmtTime(t){
 }
 
 function refreshChecks(){
-  fetch('/api/checks').then(r=>r.json()).then(function(c){
+  // A dead or slow importer must SAY so. Without this the page sat on
+  // "Checking setup…" for ever: the fetch rejected, nothing caught it, and the
+  // one visible symptom was a screen that never finished loading — which looks
+  // like the update broke the app rather than "the server is not running".
+  var ctl = ('AbortController' in window) ? new AbortController() : null;
+  var timedOut = false;
+  var timer = setTimeout(function(){ timedOut = true; if(ctl) ctl.abort(); }, 15000);
+  fetch('/api/checks', ctl ? {signal: ctl.signal} : undefined)
+   .then(function(r){
+      if(!r.ok) throw new Error('the importer answered HTTP ' + r.status);
+      return r.json();
+   })
+   .then(function(c){
+    clearTimeout(timer);
     var rows = [
       [c.ytdlp,  'yt-dlp installed', 'yt-dlp missing — run JamRoom Setup.bat'],
       [c.ffmpeg, 'ffmpeg installed', 'ffmpeg missing — run JamRoom Setup.bat'],
@@ -354,6 +367,29 @@ function refreshChecks(){
     }
     $('keyBox').classList.toggle('hide', c.key);
     window._splits = c.splits;
+  })
+   .catch(function(err){
+    clearTimeout(timer);
+    var why = timedOut
+      ? 'It did not answer within 15 seconds.'
+      : 'The browser could not reach it (' + (err && err.message || err) + ').';
+    $('checksList').innerHTML =
+      '<div class="check bad">The importer server is not answering.</div>'
+      + '<div class="note">' + why + ' This page is still open from before, '
+      + 'which is why it loaded at all.'
+      + '<br><br>Almost always this means the importer was not restarted after '
+      + 'an update, or its window was closed.'
+      + '<br><br><b>1.</b> Close any <b>Jam Room Importer</b> window.'
+      + '<br><b>2.</b> Double-click <b>JamRoom Importer.bat</b>.'
+      + '<br><b>3.</b> Come back here and press Retry.'
+      + '<br><br>If its window opens and closes immediately, run it from a '
+      + 'terminal to see the error:<br>'
+      + '<code>python tools\\jamroom_importer_server.py</code></div>'
+      + '<button class="small" onclick="refreshChecks()">Retry</button>';
+    var warn = $('staleWarn');
+    if (warn) warn.classList.add('hide');
+    var badge = $('verBadge');
+    if (badge) badge.textContent = 'not connected';
   });
 }
 
@@ -1163,19 +1199,47 @@ function pollStatus(){
       $('importBtn').disabled = false;
       $('applyBtn').disabled = false;
     }
+  }).catch(function(err){
+    // Losing the server mid-import used to leave the page frozen on the last
+    // line of the log, looking like a stuck job rather than a dead process.
+    $('progTitle').innerHTML = '<span class="failed">Lost contact with the '
+      + 'importer</span>';
+    var nl = String.fromCharCode(10);
+    $('log').textContent = ($('log').textContent || '') + nl + nl
+      + '--- the importer stopped answering ('
+      + (err && err.message || err) + ').' + nl
+      + 'The job may still have finished; restart JamRoom Importer.bat and '
+      + 'check the Manage songs list before importing it again. ---';
+    $('log').scrollTop = $('log').scrollHeight;
+    $('importBtn').disabled = false;
   });
 }
+
+// Any request that fails without its own handler still has to be visible:
+// a silent rejection is what made "hangs on Checking setup" so puzzling.
+window.addEventListener('unhandledrejection', function(ev){
+  var w = $('staleWarn');
+  if(!w) return;
+  w.innerHTML = '<b>A request to the importer failed.</b><br>'
+    + String((ev.reason && ev.reason.message) || ev.reason)
+    + '<br><br>If this keeps happening, close the importer window and '
+    + 'double-click <b>JamRoom Importer.bat</b> again.';
+  w.classList.remove('hide');
+});
 
 refreshChecks();
 setInterval(refreshChecks, 10000);
 // If the server is mid-import (page reopened), catch up.
-fetch('/api/status').then(r=>r.json()).then(function(s){
+fetch('/api/status').then(function(r){
+  if(!r.ok) throw new Error('HTTP ' + r.status);
+  return r.json();
+}).then(function(s){
   if(s.state === 'review'){ $('progressCard').classList.remove('hide'); showReview(s.review); }
   else if(s.state === 'preparing' || s.state === 'applying'){
     $('progressCard').classList.remove('hide');
     poller = setInterval(pollStatus, 1000);
   }
-});
+}).catch(function(){ /* refreshChecks() already reports a dead server */ });
 </script>
 </body>
 </html>
