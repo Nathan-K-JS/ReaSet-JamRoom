@@ -18,6 +18,7 @@ Part of ReaSet Jam Room. GPL v3, same as the repo.
 import argparse
 import difflib
 import json
+import math
 import re
 import shutil
 import subprocess
@@ -1810,6 +1811,83 @@ def _activity(wav_path):
     env = np.convolve(env, np.ones(5) / 5, mode="same")
     thr = max(np.percentile(env, 95) * 0.10, 1e-4)
     return env > thr, hop / 22050.0
+
+
+def stem_profile(path, buckets=480, cache=True):
+    """A stem's shape, and how much is actually in it.
+
+    Answers the question that otherwise costs four minutes of listening: is
+    there anything in this track, and where? Fadr's melodic split emits a stem
+    per instrument whether or not the song contains one, so several routinely
+    arrive holding nothing but bleed from the guitars or the edges of a backing
+    vocal. Seeing that at a glance is the difference between curating a song in
+    a minute and playing every stem through.
+
+    Cached beside the audio: the decode is the slow part and stems never change.
+    """
+    path = Path(path)
+    cf = path.with_name(path.name + ".profile.json")
+    try:
+        if cache and cf.exists() and cf.stat().st_mtime >= path.stat().st_mtime:
+            return json.loads(cf.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        pass
+
+    import numpy as np
+    ff = shutil.which("ffmpeg")
+    if not ff:
+        raise RuntimeError("ffmpeg not found on PATH")
+    SR = 8000            # plenty for an envelope, and quick to decode
+    r = subprocess.run([ff, "-v", "error", "-i", str(path), "-ac", "1",
+                        "-ar", str(SR), "-f", "s16le", "-"], capture_output=True)
+    if r.returncode != 0 or not r.stdout:
+        raise RuntimeError("could not decode that stem")
+    x = np.frombuffer(r.stdout, dtype=np.int16).astype(np.float32) / 32768.0
+    if not x.size:
+        raise RuntimeError("that stem is empty")
+
+    edges = np.linspace(0, x.size, buckets + 1).astype(int)
+    peaks, rmss = [], []
+    for a, b in zip(edges[:-1], edges[1:]):
+        seg = x[a:b]
+        if seg.size:
+            peaks.append(float(np.abs(seg).max()))
+            rmss.append(float(np.sqrt((seg ** 2).mean())))
+        else:
+            peaks.append(0.0)
+            rmss.append(0.0)
+
+    def db(v):
+        return round(20.0 * math.log10(max(v, 1e-7)), 1)
+
+    arr = np.asarray(rmss)
+    peak_db = db(max(peaks) if peaks else 0.0)
+    # "Audible" is judged on an ABSOLUTE floor, not relative to this stem's own
+    # peak — otherwise a stem containing nothing but quiet bleed normalises
+    # itself and looks busy.
+    active = float((arr > 10 ** (-45.0 / 20.0)).mean()) * 100.0
+    dur = x.size / SR
+    if peak_db < -35.0:
+        verdict = "silent"
+    elif active < 4.0:
+        verdict = "almost empty"
+    elif active < 25.0:
+        verdict = "sparse"
+    else:
+        verdict = "full"
+    prof = {"peaks": [round(p, 4) for p in peaks],
+            "duration": round(dur, 2),
+            "peak_db": peak_db,
+            "rms_db": db(float(np.sqrt((x ** 2).mean()))),
+            "active_pct": round(active, 1),
+            "loud_seconds": round(active / 100.0 * dur, 1),
+            "verdict": verdict}
+    if cache:
+        try:
+            cf.write_text(json.dumps(prof), encoding="utf-8")
+        except OSError:
+            pass
+    return prof
 
 
 def _vocal_onset(vocal_path, min_voiced=0.5):

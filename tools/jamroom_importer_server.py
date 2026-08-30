@@ -151,12 +151,46 @@ def build_review(job, job_dir, cfg):
     for s in job.get("stems", []):
         slot = prev_slots.get(s["file"]) \
             or slot_map.get(ji.norm_stem_type(s["fadr_name"])) or "SKIP"
+        # What is actually IN this stem, so it can be judged by eye rather than
+        # by playing it end to end.
+        try:
+            prof = ji.stem_profile(_preview_file(job_dir, s["file"]))
+        except Exception as e:  # noqa: BLE001 — a preview aid, never fatal
+            prof = {"error": str(e)}
         stems.append({"file": s["file"], "name": s["fadr_name"],
                       "slot": slot,
                       "label": prev_labels.get(slot)
                                or default_labels.get(slot, ""),
+                      "profile": prof,
                       "audio": "/api/audio?f=" +
                                _preview_file(job_dir, s["file"]).name})
+
+    # How loud a stem is relative to the rest is worth SEEING, but it is not
+    # evidence of bleed: a strings stem carrying nothing but guitar spill is
+    # every bit as loud as a real one. (Correlating stem envelopes to catch
+    # spill was tried and does not work — separation decorrelates them by
+    # construction, and measured across Dreams no pair exceeded 0.41.)
+    # So only genuine emptiness, which IS measurable, suggests skipping.
+    loudest = max((s["profile"].get("peak_db", -99) for s in stems
+                   if not s["profile"].get("error")), default=None)
+    skip_history = _usually_skipped(job_dir)
+    for s in stems:
+        p = s["profile"]
+        if not p.get("error") and loudest is not None:
+            p["below_loudest_db"] = round(loudest - p.get("peak_db", -99), 1)
+        p["empty"] = p.get("verdict") in ("silent", "almost empty")
+        if s["file"] in prev_slots:
+            continue                      # a decision already made always wins
+        if p.get("empty"):
+            s["suggest_skip"] = "there is essentially nothing in this stem"
+            s["slot"] = "SKIP"
+        elif skip_history.get(ji.norm_stem_type(s["name"])):
+            n, tot = skip_history[ji.norm_stem_type(s["name"])]
+            s["suggest_skip"] = (f"you left this stem out of {n} of the last "
+                                 f"{tot} songs")
+            s["slot"] = "SKIP"
+
+
     ly = job.get("lyrics") or {}
     first = next((l for l in ly.get("lines", []) if l["text"]), None)
     align = ly.get("align") or {}
@@ -181,6 +215,40 @@ def build_review(job, job_dir, cfg):
             },
             "vocal_audio": next((s["audio"] for s in stems
                                  if s["slot"] == "LEAD_VOX"), None)}
+
+
+def _usually_skipped(this_job_dir, min_songs=3, ratio=0.7):
+    """Stem types you have consistently chosen not to import.
+
+    Fadr always returns its full melodic set, so the same handful of stems —
+    strings, wind, whatever it calls "melodics other" — get thrown away song
+    after song. Past decisions are already recorded per song; this reads them
+    so the same work is not repeated by hand every time.
+    """
+    counts = {}
+    try:
+        jobs_dir = Path(this_job_dir).resolve().parent
+        for jf in jobs_dir.glob("*/job.json"):
+            if jf.parent.resolve() == Path(this_job_dir).resolve():
+                continue
+            try:
+                job = json.loads(jf.read_text(encoding="utf-8"))
+            except (OSError, ValueError):
+                continue
+            overrides = job.get("slot_overrides") or {}
+            if not overrides:
+                continue
+            by_file = {s["file"]: s.get("fadr_name", "") for s in job.get("stems", [])}
+            for f, slot in overrides.items():
+                nm = ji.norm_stem_type(by_file.get(f, ""))
+                if not nm:
+                    continue
+                tot, sk = counts.get(nm, (0, 0))
+                counts[nm] = (tot + 1, sk + (1 if slot == "SKIP" else 0))
+    except OSError:
+        return {}
+    return {nm: (sk, tot) for nm, (tot, sk) in counts.items()
+            if tot >= min_songs and sk / tot >= ratio}
 
 
 def run_prepare(url, band, title):

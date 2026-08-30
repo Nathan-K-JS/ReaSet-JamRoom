@@ -72,6 +72,10 @@
   .stemrow:last-child { border-bottom: 0; }
   .stemname { font-weight: 600; text-transform: capitalize; }
   .stemrow audio { grid-column: 1 / -1; width: 100%; height: 34px; }
+  .stemrow canvas.wave { grid-column: 1 / -1; width: 100%; height: 46px;
+             border-radius: 6px; background: #12141a; display: block; }
+  .wavenote { grid-column: 1 / -1; color: #9aa0a6; font-size: .75rem;
+              margin-top: -4px; }
   .stemrow input.lbl { grid-column: 1 / -1; font-size: .95rem; padding: 8px 10px; }
   .lblhint { grid-column: 1 / -1; color: #9aa0a6; font-size: .75rem;
              margin-top: -4px; }
@@ -793,6 +797,85 @@ function doImportLibrary(){
   });
 }
 
+// ── Stem content: see what is in a track without playing it through ───────
+function stemBadge(st){
+  var p = st.profile || {};
+  if(p.error) return '';
+  if(p.verdict === 'silent')       return '<span class="libpill warn">nothing here</span>';
+  if(p.verdict === 'almost empty') return '<span class="libpill warn">almost empty</span>';
+  if(p.verdict === 'sparse')       return '<span class="libpill">only in places</span>';
+  return '';
+}
+
+function stemNote(st){
+  var p = st.profile || {};
+  if(p.error) return 'Could not analyse this stem (' + p.error + ').';
+  var bits = [p.loud_seconds + 's of audible content (' + p.active_pct + '% of the song)',
+              'peak ' + p.peak_db + ' dB'];
+  if(p.below_loudest_db >= 6) bits.push(p.below_loudest_db + ' dB below the loudest stem');
+  var s = bits.join(' · ');
+  if(st.suggest_skip) s += ' — set to “don’t import”, because ' + st.suggest_skip
+                         + '. Change it if you disagree.';
+  return s;
+}
+
+function drawWave(cv, st, audio){
+  var p = st.profile || {};
+  var peaks = p.peaks || [];
+  var ctx = cv.getContext('2d');
+  var W = cv.width, H = cv.height, mid = H/2;
+  ctx.clearRect(0,0,W,H);
+  ctx.fillStyle = '#12141a'; ctx.fillRect(0,0,W,H);
+  if(!peaks.length){
+    ctx.fillStyle = '#9aa0a6'; ctx.font = '12px system-ui';
+    ctx.fillText('no waveform', 8, mid+4);
+    return;
+  }
+  // The -45 dB line the "audible" figure is measured against, so the picture
+  // and the numbers below it agree.
+  var floor = Math.pow(10, -45/20);
+  ctx.strokeStyle = '#2c3038'; ctx.beginPath();
+  ctx.moveTo(0, mid - floor*mid); ctx.lineTo(W, mid - floor*mid);
+  ctx.moveTo(0, mid + floor*mid); ctx.lineTo(W, mid + floor*mid); ctx.stroke();
+  ctx.fillStyle = p.empty ? '#5a4a2a' : '#2f6fed';
+  for(var i=0;i<peaks.length;i++){
+    var x = i * W / peaks.length;
+    var h = Math.max(1, peaks[i] * mid);
+    ctx.fillRect(x, mid - h, Math.max(1, W/peaks.length - 0.5), h*2);
+  }
+  cv.style.cursor = 'pointer';
+  cv.onclick = function(ev){
+    var r = cv.getBoundingClientRect();
+    var frac = (ev.clientX - r.left) / r.width;
+    if(audio && p.duration){
+      audio.currentTime = Math.max(0, Math.min(p.duration, frac * p.duration));
+      audio.play();
+    }
+  };
+  // Follow playback with a cursor.
+  if(audio){
+    audio.addEventListener('timeupdate', function(){
+      drawWaveCursor(cv, st, audio.currentTime);
+    });
+  }
+}
+
+function drawWaveCursor(cv, st, t){
+  var p = st.profile || {};
+  if(!p.duration) return;
+  if(!cv._base){ cv._base = cv.toDataURL(); }
+  var ctx = cv.getContext('2d');
+  var img = new Image();
+  img.onload = function(){
+    ctx.clearRect(0,0,cv.width,cv.height);
+    ctx.drawImage(img,0,0);
+    var x = (t / p.duration) * cv.width;
+    ctx.strokeStyle = '#fff'; ctx.beginPath();
+    ctx.moveTo(x,0); ctx.lineTo(x,cv.height); ctx.stroke();
+  };
+  img.src = cv._base;
+}
+
 function showReview(rv){
   reviewShown = true;
   // Kept for the lyric and chart pickers, which need this song's band/title
@@ -810,12 +893,16 @@ function showReview(rv){
       }).join('') + '</select>';
     // st.label carries the name chosen last time this song was reviewed.
     var defLbl = st.label || rv.slot_labels[st.slot] || '';
-    row.innerHTML = '<div class="stemname">' + st.name + '</div>' + sel +
+    row.innerHTML = '<div class="stemname">' + st.name + stemBadge(st) + '</div>' + sel +
+      '<canvas class="wave" width="600" height="46" title="Click to play from there"></canvas>' +
+      '<div class="wavenote">' + stemNote(st) + '</div>' +
       '<input class="lbl" type="text" data-file="' + st.file + '" value="' +
         defLbl.replace(/"/g,'&quot;') + '" placeholder="name shown in ReaSet">' +
       '<div class="lblhint">Display name on ReaSet’s mute screen only — the group above decides the routing and muting.</div>' +
       '<audio controls preload="none" src="' + st.audio + '"></audio>';
     list.appendChild(row);
+    drawWave(row.querySelector('canvas.wave'), st,
+             row.querySelector('audio'));
     var selEl = row.querySelector('select'), lblEl = row.querySelector('input.lbl');
     lblEl.addEventListener('input', function(){ lblEl.dataset.touched = '1'; });
     selEl.addEventListener('change', function(){
