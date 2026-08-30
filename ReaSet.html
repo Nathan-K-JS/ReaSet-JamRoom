@@ -3972,6 +3972,7 @@
             <button class="cv-tab on" data-cv="chart"    onclick="setChordView('chart')">Chart</button>
             <button class="cv-tab"    data-cv="big"      onclick="setChordView('big')">Big</button>
             <button class="cv-tab"    data-cv="timeline" onclick="setChordView('timeline')">Timeline</button>
+            <button class="cv-tab"    data-cv="sheet"    onclick="setChordView('sheet')">+ Lyrics</button>
         </div>
         <div id="chords-live"></div>
         <div class="lead-row">
@@ -4664,6 +4665,23 @@
             + 'line-height:1.4;margin-bottom:8px}'
             + '.cv-tl-cell.on{background:#17304d;color:#fff;outline:2px solid #2f6fed}'
             + '.cv-tl-now{width:2px;height:14px;background:#ef5350;margin-left:12.5%}'
+            // Chord sheet: a whole section at once, chords sitting above the
+            // words they are played on — how a printed chart reads, but
+            // following the song. Left-aligned and scrollable, unlike the
+            // other views, because a section is read as a block.
+            + '#chords-live.sheet{justify-content:flex-start;align-items:stretch;'
+            + 'overflow-y:auto;max-height:64vh;gap:0}'
+            + '.cs-line{padding:2px 4px 8px;border-radius:8px}'
+            + '.cs-line.on{background:#17304d}'
+            + '.cs-chords{position:relative;height:1.45em;font-weight:700;'
+            + 'color:#7fb0ff;white-space:nowrap}'
+            + '.cs-ch{position:absolute;top:0;transform:translateX(-2px)}'
+            + '.cs-ch.on{color:#fff;background:#2f6fed;border-radius:6px;'
+            + 'padding:0 5px;transform:translateX(-5px)}'
+            + '.cs-words{color:#c9ced8;line-height:1.3;white-space:pre-wrap;'
+            + 'overflow-wrap:anywhere}'
+            + '.cs-line.on .cs-words{color:#fff}'
+            + '.cs-instr{color:#9aa0a6;font-style:italic}'
             + '.cv-meta{color:#6b7280;font-size:.75rem;margin-top:4px}'
             + '.cv-empty{color:#9aa0a6;text-align:center;font-size:.95rem;padding:0 12px}'
             + '.lead-row{display:flex;flex-direction:column;align-items:center;'
@@ -5160,7 +5178,7 @@
         syncLeadSlider();
         tkRenderPanel();             // paints the performance chips on load
         // Shown in the sidebar so a stale cached page is obvious after a deploy.
-        var REASET_VERSION = "v1.5 · 2026-08-29";
+        var REASET_VERSION = "v1.6 · 2026-08-30";
         var _rv = document.getElementById("reasetVer");
         if (_rv) _rv.textContent = REASET_VERSION;
         (function () { var t = localStorage.getItem("reasetlist_theme") || "dark"; setTheme(t, true); })();
@@ -8821,6 +8839,66 @@
                 }
                 html = '<div class="cv-tl">' + cells.join('') + '</div>'
                      + '<div class="cv-tl-now"></div>';
+            } else if (g_chordView === 'sheet') {
+                // A whole section at once: each sung line with its chords
+                // above the words they fall on. The importer places chords
+                // against the lyrics, so a chord's position within a line is
+                // real information, not decoration.
+                var lys = (g_clData && g_clData.lyrics) || [];
+                if (!lys.length) {
+                    html = '<div class="cv-empty">This song has no timed lyrics, '
+                         + 'so there is nothing to lay the chords over. The '
+                         + 'Chart view still works.</div>';
+                } else {
+                    var li = clIndexAt(lys, t);
+                    if (li < 0) {          // between lines: hold the one just gone
+                        li = clIndexAtOrBefore(lys, t);
+                        if (li < 0) li = 0;
+                    }
+                    var SHOW_BACK = 2, SHOW_FWD = 7;
+                    var a0 = Math.max(0, li - SHOW_BACK);
+                    var a1 = Math.min(lys.length, li + SHOW_FWD);
+                    var secNames = [];
+                    for (var q = 0; q < list.length; q++) {
+                        if (list[q][1] > lys[a0][0] && list[q][0] < lys[a1 - 1][1]) {
+                            secNames.push(X(list[q][2]));
+                        }
+                    }
+                    var out = [];
+                    // Chords that sound before the first shown line (an intro
+                    // or a solo) would otherwise vanish — announce them.
+                    for (var b = a0; b < a1; b++) {
+                        var ls = lys[b][0], le = lys[b][1], span = Math.max(0.25, le - ls);
+                        var inLine = [];
+                        for (var c2 = 0; c2 < list.length; c2++) {
+                            if (list[c2][0] >= ls - 0.01 && list[c2][0] < le) {
+                                inLine.push([((list[c2][0] - ls) / span) * 100, c2]);
+                            }
+                        }
+                        // A line often begins under a chord that started
+                        // earlier — carried over from the intro, or held
+                        // across the line break. A printed chart still shows
+                        // it at the left, and without this the first line of
+                        // a section appears to have no chord at all.
+                        if (!inLine.length || inLine[0][0] > 1.0) {
+                            var held = clIndexAtOrBefore(list, ls);
+                            if (held >= 0 && list[held][1] > ls) inLine.unshift([0, held]);
+                        }
+                        var chHtml = '';
+                        for (var d2 = 0; d2 < inLine.length; d2++) {
+                            var pctL = Math.max(0, Math.min(92, inLine[d2][0]));
+                            chHtml += '<span class="cs-ch'
+                                + (inLine[d2][1] === cur ? ' on' : '')
+                                + '" style="left:' + pctL.toFixed(1) + '%">'
+                                + X(list[inLine[d2][1]][2]) + '</span>';
+                        }
+                        var words = lys[b][2] || '';
+                        out.push('<div class="cs-line' + (b === li ? ' on' : '') + '">'
+                            + '<div class="cs-chords">' + chHtml + '</div>'
+                            + '<div class="cs-words">' + words + '</div></div>');
+                    }
+                    html = out.join('');
+                }
             } else {   // 'chart' — rows of four, current row plus the next
                 var rowStart = Math.floor(cur / 4) * 4;
                 var shown = [];
@@ -8854,7 +8932,19 @@
                                 + transposeChordName(list[cur][2], tkSemis));
             var badge = bits.length
                 ? '<div class="cv-tkbadge">' + bits.join(' · ') + '</div>' : '';
+            var isSheet = (g_chordView === 'sheet');
+            host.classList.toggle('sheet', isSheet);
+            host.style.fontSize = isSheet ? 'clamp(0.95rem,3.4vw,1.5rem)' : '';
             host.innerHTML = html + badge + '<div class="cv-meta">' + meta + '</div>';
+            // Keep the line being sung in view without yanking the page about
+            // while someone is reading ahead.
+            if (isSheet) {
+                var onLine = host.querySelector('.cs-line.on');
+                if (onLine) {
+                    var top = onLine.offsetTop - host.clientHeight * 0.35;
+                    if (Math.abs(host.scrollTop - top) > 24) host.scrollTop = top;
+                }
+            }
         }
 
         // ── Lyrics view with lookahead ───────────────────────────────────────
