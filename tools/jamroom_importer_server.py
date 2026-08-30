@@ -198,8 +198,16 @@ def build_review(job, job_dir, cfg):
     return {"stems": stems, "slot_choices": SLOT_CHOICES,
             "band": job.get("band", ""), "title": job.get("title", ""),
             "chords_count": len(job.get("chords") or []),
-            "chart": {"url": chart.get("url"), "vocab": chart.get("vocab") or [],
-                      "key": chart.get("key"), "snapped": chart.get("snapped")},
+            # Everything the review screen states about the chart has to come
+            # from here. Omitting these made it report "no timed lyrics" for a
+            # song whose chords had in fact been placed against its lyrics.
+            "chart": {"url": chart.get("url"), "key": chart.get("key"),
+                      "method": chart.get("method"),
+                      "capo": chart.get("capo", 0),
+                      "key_offset": chart.get("key_offset", 0),
+                      "lines_matched": chart.get("lines_matched"),
+                      "chart_lines": chart.get("chart_lines"),
+                      "fallback_reason": chart.get("fallback_reason", "")},
             "lyrics_source": ly.get("source"),
             "slot_labels": {sid: cfg["slot_labels"].get(sid, name)
                             for sid, name in SLOT_CHOICES if sid != "SKIP"},
@@ -532,7 +540,7 @@ def _trigger_reaper_action(cfg, ext_key, receipt, timeout=60):
     return None
 
 
-def rechord_song(name, chart_url, snap=True, force=False):
+def rechord_song(name, chart_url, snap=True, force=False, key_offset=None):
     """Replace an existing song's chords in REAPER from a chosen chart.
 
     Uses the song's own saved job for the chord TIMING (measured from the
@@ -561,7 +569,8 @@ def rechord_song(name, chart_url, snap=True, force=False):
     # pass would anchor to our own previous output instead of the recording.
     if not job.get("chords_detected"):
         job["chords_detected"] = ji.detected_chords(job, job_dir)
-    res = ji.build_chart_chords(job, chart_url, job_dir=job_dir)
+    res = ji.build_chart_chords(job, chart_url, job_dir=job_dir,
+                                key_offset=key_offset)
     if res.get("fallback_reason"):
         _ui_log(f"Could not place chords from the words ({res['fallback_reason']}) "
                 f"— fell back to matching the chart against the detected chords.")
@@ -640,7 +649,7 @@ def _push_song_items(cfg, name, song, chords=None, lyric_lines=None):
     return result
 
 
-def relyric_song(name, record_id):
+def relyric_song(name, record_id=None, offset=None):
     """Give a song already in the project a different set of timed lyrics.
 
     The automatic lyric lookup fails on songs filed under an odd name, and the
@@ -662,7 +671,13 @@ def relyric_song(name, record_id):
 
     if not job.get("chords_detected"):
         job["chords_detected"] = ji.detected_chords(job, job_dir)
-    ji.lyrics_use_record(job, job_dir, record_id)
+    if record_id is not None:
+        ji.lyrics_use_record(job, job_dir, record_id)
+    if offset is not None:
+        # A stated shift overrides the automatic alignment entirely, and is
+        # remembered, so nudging the words does not fight the analyser.
+        job.setdefault("lyrics", {})["offset_override"] = float(offset)
+        _ui_log(f"Lyric timing shifted by {float(offset):+.2f}s by hand.")
     ly = job.get("lyrics") or {}
     if not ly.get("synced"):
         raise RuntimeError("That lyric record has no timings, so it cannot "
@@ -1023,7 +1038,8 @@ class Handler(BaseHTTPRequestHandler):
                     res = rechord_song(body.get("name", ""),
                                        body.get("url", ""),
                                        bool(body.get("snap", True)),
-                                       bool(body.get("force", False)))
+                                       bool(body.get("force", False)),
+                                       key_offset=body.get("key_offset"))
                     self._send(200, {"ok": True, "result": res["result"],
                                      "match": res["match"],
                                      "snapped": res["snapped"],
@@ -1037,7 +1053,8 @@ class Handler(BaseHTTPRequestHandler):
                     return
                 try:
                     STATE["log"] = []
-                    res = relyric_song(body.get("name", ""), body.get("id"))
+                    res = relyric_song(body.get("name", ""), body.get("id"),
+                                       offset=body.get("offset"))
                     self._send(200, {"ok": True, "result": res["result"],
                                      "lines": res["lines"],
                                      "chords": res["chords"],

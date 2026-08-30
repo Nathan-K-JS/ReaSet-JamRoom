@@ -164,6 +164,13 @@
         <input id="rechordUrl" placeholder="…or paste a tabs.ultimate-guitar.com chart link">
         <button id="rechordUrlBtn" class="delbtn" style="white-space:nowrap">Use link</button>
       </div>
+      <label style="margin-top:10px">Key of the chart against the recording</label>
+      <select id="rechordKey">
+        <option value="">Work it out automatically (almost always right)</option>
+      </select>
+      <div class="note">Charts are often written in an easier key than the
+        record, and that shift is detected from the audio. If it lands in the
+        wrong key, say so here and it will be used instead.</div>
       <div id="rechordResults"></div>
       <div id="rechordLog" class="note"></div>
     </div>
@@ -179,6 +186,14 @@
         <button id="relyricSearchBtn" class="delbtn" style="white-space:nowrap">Search</button>
       </div>
       <div id="relyricResults"></div>
+      <label style="margin-top:12px">Or keep these lyrics and just shift their
+        timing (seconds — positive shows them later)</label>
+      <div style="display:flex;gap:8px">
+        <input type="number" id="relyricOffset" step="0.1" value="0" style="max-width:130px">
+        <button id="relyricShiftBtn" class="delbtn" style="white-space:nowrap">Shift timing</button>
+      </div>
+      <div class="note">Overrides the automatic alignment and is remembered.
+        The chords move with the words, since they are placed against them.</div>
       <div id="relyricLog" class="note"></div>
     </div>
 
@@ -501,6 +516,15 @@ function openRechord(s){
   var artist = i > 0 ? s.name.slice(0, i) : '';
   var title  = i > 0 ? s.name.slice(i + 3) : s.name;
   $('rechordQuery').value = (artist ? artist + ' ' : '') + title;
+  var ks = $('rechordKey');
+  if(ks.options.length < 2){
+    for(var k = -6; k <= 6; k++){
+      if(k === 0) continue;
+      ks.add(new Option((k>0?'+':'') + k + ' semitone' + (Math.abs(k)===1?'':'s'), String(k)));
+    }
+    ks.add(new Option('Same key as the recording', '0'));
+  }
+  ks.value = '';
   $('rechordSearchBtn').onclick = function(){ searchRechord($('rechordQuery').value); };
   $('rechordUrlBtn').onclick = function(){
     var u = ($('rechordUrl').value || '').trim();
@@ -548,7 +572,9 @@ function doRechord(url, btn){
   btn.disabled = true; btn.style.opacity = '.6';
   $('rechordLog').textContent = 'Rewriting chords in REAPER…';
   fetch('/api/rechord', {method:'POST', headers:{'Content-Type':'application/json'},
-    body: JSON.stringify({name: g_rechordSong.name, url: url, snap: true})})
+    body: JSON.stringify({name: g_rechordSong.name, url: url, snap: true,
+                          key_offset: $('rechordKey').value === ''
+                                      ? null : parseInt($('rechordKey').value, 10)})})
   .then(r=>r.json()).then(function(d){
     btn.disabled = false; btn.style.opacity = '';
     if(d.error){
@@ -573,6 +599,11 @@ function openRelyric(s){
   $('relyricQuery').value = i > 0 ? s.name.slice(0, i) + ' ' + s.name.slice(i+3)
                                   : s.name;
   $('relyricSearchBtn').onclick = function(){ searchRelyric(); };
+  $('relyricShiftBtn').onclick = function(){
+    var v = parseFloat($('relyricOffset').value);
+    if(isNaN(v)){ $('relyricLog').textContent = 'Enter a number of seconds.'; return; }
+    applyRelyric({name: g_relyricSong.name, offset: v}, $('relyricShiftBtn'));
+  };
   searchRelyric();
 }
 
@@ -612,11 +643,15 @@ function searchRelyric(){
 }
 
 function doRelyric(id, btn){
+  applyRelyric({name: g_relyricSong.name, id: id}, btn);
+}
+
+function applyRelyric(payload, btn){
   if(!g_relyricSong) return;
   btn.disabled = true; btn.style.opacity = '.6';
   $('relyricLog').textContent = 'Rewriting lyrics and chords in REAPER…';
   fetch('/api/relyric', {method:'POST', headers:{'Content-Type':'application/json'},
-    body: JSON.stringify({name: g_relyricSong.name, id: id})})
+    body: JSON.stringify(payload)})
   .then(r=>r.json()).then(function(d){
     btn.disabled = false; btn.style.opacity = '';
     if(d.error){
@@ -989,12 +1024,15 @@ function renderChartNow(rv){
   var el = $('chartNow');
   if(!el) return;
   if(c.url){
+    // Never state a reason we were not told. An unknown method means the
+    // chart is linked but how it was timed was not reported.
     var how = c.method === 'lyrics'
       ? ('placed on the words — ' + c.lines_matched + ' of ' + c.chart_lines
          + ' chart lines matched to sung lines')
-      : ('no timed lyrics to place against, so the chart was matched to the '
-         + 'detected chords instead'
-         + (c.fallback_reason ? ' (' + c.fallback_reason + ')' : ''));
+      : c.method === 'detected'
+      ? ('timed against the detected chords'
+         + (c.fallback_reason ? ' — ' + c.fallback_reason : ''))
+      : 'chart linked';
     el.innerHTML = 'Using this chart' + (c.key ? ' (key ' + c.key + ')' : '')
       + (c.capo ? ' · capo ' + c.capo + ' converted to sounding pitch' : '')
       + (c.key_offset ? ' · transposed ' + (c.key_offset>0?'+':'')

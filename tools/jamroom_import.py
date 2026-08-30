@@ -1298,7 +1298,7 @@ def _finish_chords(placed, song_end, min_show=0.30):
     return [c for c in out if c["end"] > c["start"]]
 
 
-def chords_from_lyrics(job, url, song_end=None, job_dir=None):
+def chords_from_lyrics(job, url, song_end=None, job_dir=None, key_offset=None):
     """Place the chart's chords using the WORDS they are printed above.
 
     A chord chart is not a bare list of chords: each chord sits over the exact
@@ -1329,6 +1329,11 @@ def chords_from_lyrics(job, url, song_end=None, job_dir=None):
     flat = [c for b in blocks for c, _ in b["chords"]]
     offset, fit = _best_chart_offset(_collapse_detected(detected), flat) \
         if detected else (0, 0.0)
+    # A stated key always beats the detector's guess. Automatic detection is
+    # right almost every time, and when it is not there has to be a way to say
+    # so without re-importing the song.
+    if key_offset is not None:
+        offset, fit = int(key_offset) % 12, 1.0
 
     # Which chart lines correspond to which sung lines.
     have = [k for k, b in enumerate(blocks) if _norm_lyric(b["lyric"])]
@@ -1445,7 +1450,7 @@ def chords_from_lyrics(job, url, song_end=None, job_dir=None):
     }
 
 
-def chords_from_chart(job, url, min_len=0.0, job_dir=None):
+def chords_from_chart(job, url, min_len=0.0, job_dir=None, key_offset=None):
     """Build a chord list that shows the CHART's chords, timed from the audio.
 
     The chart supplies which chords exist and in what order; the recording
@@ -1467,6 +1472,8 @@ def chords_from_chart(job, url, min_len=0.0, job_dir=None):
 
     # Put the chart into the recording's key before trying to match anything.
     offset, fit = _best_chart_offset(detected, seq)
+    if key_offset is not None:
+        offset, fit = int(key_offset) % 12, 1.0
     if offset:
         seq = [transpose_chord(c, offset) for c in seq]
 
@@ -1549,7 +1556,7 @@ def chords_from_chart(job, url, min_len=0.0, job_dir=None):
     }
 
 
-def build_chart_chords(job, url, job_dir=None):
+def build_chart_chords(job, url, job_dir=None, key_offset=None):
     """The chart's chords, timed against this recording.
 
     Timing comes from the sung words wherever timed lyrics exist, because a
@@ -1558,9 +1565,11 @@ def build_chart_chords(job, url, job_dir=None):
     fall back to anchoring against the chord detector, which is less reliable.
     """
     try:
-        return chords_from_lyrics(job, url, job_dir=job_dir)
+        return chords_from_lyrics(job, url, job_dir=job_dir,
+                                  key_offset=key_offset)
     except RuntimeError as why:
-        res = chords_from_chart(job, url, job_dir=job_dir)
+        res = chords_from_chart(job, url, job_dir=job_dir,
+                                key_offset=key_offset)
         res["fallback_reason"] = str(why)
         return res
 
