@@ -83,5 +83,10 @@ what's there.
 - **Commit at natural checkpoints** (plan approved, data model in place, UI built,
   bridge built, etc.) rather than one large commit at the end, so we can roll back
   cleanly if a step goes wrong.
+- **Push at every checkpoint too** (`git push origin <branch>`). The jam room PC
+  gets its code from `JamRoom Update.bat`, which is a bare `git pull` — so a
+  commit that has not been pushed is not delivered. Never report work as
+  finished, and never say "run the update", while commits are still local:
+  either push them, or say plainly that they are local only.
 - **Be direct about tradeoffs and risks**, including anything you're unsure REAPER's
   API can actually support — don't paper over uncertainty.
