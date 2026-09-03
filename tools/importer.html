@@ -46,6 +46,7 @@
   .libpill { font-size: .7rem; padding: 2px 7px; border-radius: 999px;
              background: #24303f; color: #9fd0ff; margin-left: 6px; }
   .libpill.warn { background: #3a2f1c; color: #f0b429; }
+  .libpill.ok { background: #173b2c; color: #77d9a8; }
   .songrow { display: flex; align-items: center; gap: 10px; padding: 10px 2px;
              border-bottom: 1px solid #2c3038; }
   .songrow:last-child { border-bottom: 0; }
@@ -54,6 +55,16 @@
   .delbtn { width: auto; margin: 0; background: #2c3038; color: #ef9a96;
             border: 1px solid #5a3330; font-size: .8rem; padding: 8px 12px; }
   .delbtn:hover { background: #4a2320; color: #fff; }
+  .repairbtn { width: auto; margin: 0; background: #17304d; color: #d9eaff;
+               border: 1px solid #2f6fed; font-size: .82rem; padding: 9px 12px; }
+  .songrow { flex-wrap: wrap; }
+  .repair-actions { display: grid; grid-template-columns: 1fr; gap: 8px;
+                    margin-top: 10px; }
+  .repair-actions button { margin: 0; text-align: left; background: #23262d;
+                           border: 1px solid #363b45; }
+  .repair-actions button.primary { background: #2f6fed; border-color: #2f6fed; }
+  .repair-actions small { display: block; color: #b4bac3; margin-top: 3px;
+                          font-size: .75rem; font-weight: 400; }
   #delOverlay { position: fixed; inset: 0; background: rgba(0,0,0,.72);
                 display: flex; align-items: center; justify-content: center;
                 padding: 16px; z-index: 50; }
@@ -115,7 +126,7 @@
     <div class="srctabs">
       <button class="srctab on" id="srcYt"  onclick="setSource('yt')">New song from YouTube</button>
       <button class="srctab"    id="srcLib" onclick="setSource('lib')">Already split on Fadr — free</button>
-      <button class="srctab"    id="srcMan" onclick="setSource('man')">Manage songs</button>
+      <button class="srctab"    id="srcMan" onclick="setSource('man')">Song library</button>
     </div>
   </div>
 
@@ -137,13 +148,42 @@
   </div>
 
   <div class="card hide" id="manCard">
-    <label>Songs in the REAPER project — remove one to re-import it cleanly</label>
+    <label>Songs in the REAPER project — review or repair existing words and chords</label>
     <button class="small" onclick="loadSongs(true)">Refresh list</button>
     <div id="manList"><div class="note">Loading…</div></div>
-    <div class="note" style="margin-top:10px">Deleting removes the song's region
+    <div class="note" style="margin-top:10px">Repairs keep the song's audio,
+      stems, routing and setlists exactly as they are. Deleting removes the song's region
       and its stems, lyrics and chords from the project. Your PB and
       <b>[JR:…]</b> buses, every other song, and the paid-for split on Fadr are
       all left alone — and one <b>Ctrl+Z in REAPER</b> puts the song back.</div>
+
+    <div id="repairBox" class="hide">
+      <label id="repairFor">Review or repair</label>
+      <div class="note">Choose what is getting in the way. Timing repair opens
+        beside the playing song so you can simply tell JamRoom what should be
+        showing now.</div>
+      <div class="repair-actions">
+        <button class="primary" id="repairTimingBtn" onclick="openLiveTimingRepair()">
+          Fix timing while the song plays
+          <small>Handles a simple early/late shift, gradual drift, and individual bad sections.</small>
+        </button>
+        <button onclick="openRelyricFromRepair()">
+          Change the lyrics
+          <small>Pick a different timed version without touching the stems.</small>
+        </button>
+        <button onclick="openRechordFromRepair()">
+          Change the chord chart
+          <small>Choose the chart you actually play without re-importing audio.</small>
+        </button>
+      </div>
+      <details style="margin-top:10px">
+        <summary class="note" style="cursor:pointer">More options</summary>
+        <div class="note">A full audio re-import is only needed when the wrong
+          recording or bad stems were imported. Words, chords and timing can all
+          be repaired here without paying for another split.</div>
+      </details>
+      <div id="repairLaunchLog" class="note"></div>
+    </div>
 
     <div id="rechordBox" class="hide">
       <label id="rechordFor">Chord charts</label>
@@ -295,7 +335,7 @@
 <script>
 // Version of THIS page (served fresh from disk). Compared against the version
 // of the running server; a mismatch means the importer needs restarting.
-var UI_BUILD = "v1.9";
+var UI_BUILD = "v2.0";
 
 var picked = null, poller = null, reviewShown = false;
 
@@ -465,25 +505,19 @@ function loadSongs(){
       var m = Math.floor(s.duration/60), sec = ('0'+Math.round(s.duration%60)).slice(-2);
       var row = document.createElement('div');
       row.className = 'songrow';
+      var status = s.review_status || 'Needs timing review';
+      var statusClass = (status.indexOf('Timing adjusted') === 0
+                      || status.indexOf('Timing checked') === 0) ? ' ok' : ' warn';
       row.innerHTML = '<div class="sname">' + s.name + '<br><small>' + m + ':' + sec
         + (s.folder_mb ? ' · ' + s.folder_mb + ' MB on disk' : ' · no local files')
-        + '</small></div>';
+        + '</small><br><span class="libpill' + statusClass + '">' + status
+        + '</span></div>';
       var fx = document.createElement('button');
-      fx.className = 'delbtn';
-      fx.style.color = '#9fd0ff'; fx.style.borderColor = '#2f6fed';
-      fx.textContent = 'Fix chords…';
-      fx.title = 'Replace this song\'s chords from a chord chart, keeping the '
-               + 'timing measured from the audio. No re-import, no charge.';
-      fx.onclick = function(){ openRechord(s); };
+      fx.className = 'repairbtn';
+      fx.textContent = 'Review or repair';
+      fx.title = 'Fix timing, lyrics or chords without re-importing the audio.';
+      fx.onclick = function(){ openRepair(s); };
       row.appendChild(fx);
-      var lx = document.createElement('button');
-      lx.className = 'delbtn';
-      lx.style.color = '#9fd0ff'; lx.style.borderColor = '#2f6fed';
-      lx.textContent = 'Fix lyrics…';
-      lx.title = 'Give this song different timed lyrics and re-place its '
-               + 'chords against them. No re-import, no charge.';
-      lx.onclick = function(){ openRelyric(s); };
-      row.appendChild(lx);
       var b = document.createElement('button');
       b.className = 'delbtn'; b.textContent = 'Delete…';
       b.onclick = function(){ askDelete(s); };
@@ -492,6 +526,60 @@ function loadSongs(){
     });
   });
   loadOrphans();
+}
+
+// ── One clear maintenance entry for an existing song ─────────────────────
+var g_repairSong = null;
+
+function openRepair(s){
+  g_repairSong = s;
+  $('repairBox').classList.remove('hide');
+  $('rechordBox').classList.add('hide');
+  $('relyricBox').classList.add('hide');
+  $('repairFor').textContent = 'Review or repair “' + s.name + '”';
+  $('repairLaunchLog').textContent = '';
+  $('repairBox').scrollIntoView({behavior:'smooth', block:'start'});
+}
+
+function openRelyricFromRepair(){
+  if(!g_repairSong) return;
+  $('repairBox').classList.add('hide');
+  openRelyric(g_repairSong);
+}
+
+function openRechordFromRepair(){
+  if(!g_repairSong) return;
+  $('repairBox').classList.add('hide');
+  openRechord(g_repairSong);
+}
+
+function openLiveTimingRepair(){
+  if(!g_repairSong) return;
+  // Open immediately from the tap so popup blockers cannot mistake the later
+  // network response for an unsolicited window.
+  var target = window.open('about:blank', '_blank');
+  $('repairTimingBtn').disabled = true;
+  $('repairLaunchLog').textContent = 'Opening the song in JamRoom…';
+  fetch('/api/cue_repair', {method:'POST', headers:{'Content-Type':'application/json'},
+    body: JSON.stringify({name:g_repairSong.name, start:g_repairSong.start})})
+  .then(r=>r.json()).then(function(d){
+    $('repairTimingBtn').disabled = false;
+    if(d.error){
+      if(target) target.close();
+      $('repairLaunchLog').innerHTML = '<span class="check bad">'+d.error+'</span>';
+      return;
+    }
+    var url = location.protocol + '//' + location.hostname + ':' + d.reaper_port
+            + '/ReaSet.html?repair=' + (g_repairSong.repair_scope || 'lyrics');
+    if(target) target.location = url; else window.location.href = url;
+    $('repairLaunchLog').innerHTML = '<span class="check ok">Song selected. '
+      + 'Use the JamRoom window to mark what should be showing.</span>';
+  }).catch(function(e){
+    $('repairTimingBtn').disabled = false;
+    if(target) target.close();
+    $('repairLaunchLog').innerHTML = '<span class="check bad">Could not open JamRoom: '
+      + e + '</span>';
+  });
 }
 
 // Songs downloaded here but not in the project: with their audio still on
@@ -1209,7 +1297,7 @@ function pollStatus(){
       + '--- the importer stopped answering ('
       + (err && err.message || err) + ').' + nl
       + 'The job may still have finished; restart JamRoom Importer.bat and '
-      + 'check the Manage songs list before importing it again. ---';
+      + 'check the Song library before importing it again. ---';
     $('log').scrollTop = $('log').scrollHeight;
     $('importBtn').disabled = false;
   });

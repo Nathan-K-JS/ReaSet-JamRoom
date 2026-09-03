@@ -3931,7 +3931,10 @@
     <div id="lyrics-panel">
         <div class="panel-header">
             <span class="panel-title" id="lyrics-song-title">Lyrics</span>
-            <span class="panel-close-btn" onclick="toggleLyricsPanel()">✕</span>
+            <span class="panel-header-actions">
+                <button class="timing-fix-btn" onclick="openTimingRepair('lyrics')">Fix timing</button>
+                <span class="panel-close-btn" onclick="toggleLyricsPanel()">✕</span>
+            </span>
         </div>
         <div class="lyrics-content" id="lyrics-content">
             <div class="lyrics-no-data">Enable the "X-Raym Convert Lyrics" Lua script in REAPER to see live lyrics.
@@ -3950,6 +3953,7 @@
     <!-- CHORDS PANEL -->
     <div id="chords-panel">
         <span class="chord-close-btn" onclick="toggleChordsPanel()">✕</span>
+        <button class="timing-fix-btn chords-fix-btn" onclick="openTimingRepair('chords')">Fix timing</button>
         <div class="cv-tabs">
             <button class="cv-tab on" data-cv="chart"    onclick="setChordView('chart')">Chart</button>
             <button class="cv-tab"    data-cv="big"      onclick="setChordView('big')">Big</button>
@@ -3966,6 +3970,42 @@
         <!-- legacy single-chord display, used only if the timeline script is off -->
         <div id="chord-display" style="display:none">&#9834;</div>
         <div class="chord-label" id="chord-label" style="display:none"></div>
+    </div>
+
+    <!-- Timing repair stays out of the normal performance view. It is opened
+         deliberately from Lyrics/Chords and speaks in musical, not technical,
+         terms; offsets and interpolation remain implementation details. -->
+    <div id="timing-repair" class="hide" role="dialog" aria-modal="true"
+         aria-labelledby="tr-title">
+        <div class="tr-head">
+            <div><div id="tr-title">Fix timing</div><div id="tr-song"></div></div>
+            <button class="tr-close" onclick="closeTimingRepair()" aria-label="Close">✕</button>
+        </div>
+        <div class="tr-help">Play or pause where a line or chord should begin,
+            then choose what should be showing at that moment.</div>
+        <button class="tr-nearby" onclick="repairRefreshChoices()">Show choices near the playhead</button>
+        <div id="tr-choices"></div>
+        <button id="tr-mark" class="tr-primary" onclick="repairMarkNow()" disabled>
+            This should start now
+        </button>
+        <div id="tr-status" aria-live="polite"></div>
+        <div id="tr-summary"></div>
+        <button class="tr-nearby" onclick="repairReviewed()">
+            Timing looks right — mark as checked
+        </button>
+        <details class="tr-more">
+            <summary>More controls</summary>
+            <label class="tr-link"><input type="checkbox" id="tr-precise"
+                    onchange="setPreciseFollow(this.checked)">
+                Highlight each change precisely</label>
+            <div class="tr-option-note">Leave this off until the song has been
+                checked. Jam Room will show a readable passage instead of
+                making an unreliable word or chord look exact.</div>
+            <label class="tr-link"><input type="checkbox" id="tr-link" checked>
+                Keep chords and lyrics together</label>
+            <div id="tr-points"></div>
+            <button class="tr-reset" onclick="repairReset()">Reset to imported timing</button>
+        </details>
     </div>
 
     <!-- JAM ROOM TRACKS PANEL -->
@@ -4222,7 +4262,7 @@
         // Jam Room bridge (ReaSet_JamRoom.lua): tiny status poll only —
         // payload chunks are burst-fetched on demand when meta's generation changes
         wwr_req_recur("GET/EXTSTATE/ReaSetJR/heartbeat;GET/EXTSTATE/ReaSetJR/meta", 500);
-        wwr_req_recur("GET/EXTSTATE/ReaSetCL/heartbeat;GET/EXTSTATE/ReaSetCL/meta", 500);
+        wwr_req_recur("GET/EXTSTATE/ReaSetCL/heartbeat;GET/EXTSTATE/ReaSetCL/meta;GET/EXTSTATE/ReaSetCL/repair", 500);
         wwr_req_recur("GET/EXTSTATE/ReaSetTK/heartbeat;GET/EXTSTATE/ReaSetTK/state", 500);
         // Jam Room: live per-track mute state straight from REAPER (mute = flags & 8)
         wwr_req_recur("TRACK", 500);
@@ -4273,7 +4313,8 @@
         function _projectStorageNames(key) {
             var s = key ? '_' + key : '';
             return ['reaper_setlists_v9' + s, 'reaper_current_setlist' + s,
-                    'reaset_song_overrides' + s, 'reaset_autosort' + s];
+                    'reaset_song_overrides' + s, 'reaset_autosort' + s,
+                    'reaset_precise_follow' + s];
         }
 
         // Copy-only: never deletes, never overwrites existing data at the target.
@@ -4331,6 +4372,7 @@
             if (!setlists[currentSetlistName]) currentSetlistName = "Default";
             try { autoSortSetlists = JSON.parse(localStorage.getItem(_autoSortKey()) || '{}'); }
             catch(e) { autoSortSetlists = {}; }
+            if (typeof loadPreciseSettings === 'function') loadPreciseSettings();
             displayList = []; initialized = false;
             updateSetlistDropdown();
         }
@@ -4667,6 +4709,56 @@
             + '.lv-next{color:#8b9199;font-size:clamp(.95rem,4vw,1.5rem);'
             + 'margin-top:10px;line-height:1.3}'
             + '.lv-gap{min-height:1.2em}'
+            + '.lv-block{text-align:left;width:min(100%,720px);margin:0 auto;'
+            + 'font-size:clamp(1rem,4.2vw,1.75rem);line-height:1.42}'
+            + '.lv-block-line{padding:3px 0;color:#e1e4e8}'
+            // Timing repair is deliberately a compact drawer, not another
+            // always-visible control surface competing with the chart.
+            + '.panel-header-actions{display:flex;align-items:center;gap:12px}'
+            + '.timing-fix-btn{width:auto;margin:0;background:#23262d;color:#cfe3ff;'
+            + 'border:1px solid #3a4658;border-radius:999px;padding:7px 13px;'
+            + 'font-size:.78rem;font-weight:650;cursor:pointer}'
+            + '.chords-fix-btn{position:absolute;top:12px;left:14px;z-index:2}'
+            + '#timing-repair{position:fixed;z-index:15000;left:50%;bottom:0;'
+            + 'transform:translateX(-50%);width:min(680px,100%);max-height:88vh;'
+            + 'overflow-y:auto;background:#171a20;border:1px solid #3a4658;'
+            + 'border-bottom:0;border-radius:18px 18px 0 0;padding:16px;'
+            + 'box-shadow:0 -12px 40px rgba(0,0,0,.7)}'
+            + '.tr-head{display:flex;justify-content:space-between;align-items:flex-start;'
+            + 'border-bottom:1px solid #2c3038;padding-bottom:10px;margin-bottom:10px}'
+            + '#tr-title{font-size:1.15rem;font-weight:750;color:#fff}'
+            + '#tr-song{font-size:.76rem;color:#8b9199;margin-top:2px}'
+            + '.tr-close{width:auto;margin:0;background:transparent;color:#9aa0a6;'
+            + 'font-size:1.25rem;padding:4px 8px;border:0;cursor:pointer}'
+            + '.tr-help{color:#c9ced8;font-size:.9rem;line-height:1.4;margin:8px 0}'
+            + '.tr-nearby,.tr-reset{width:100%;background:#23262d;color:#c9ced8;'
+            + 'border:1px solid #363b45;border-radius:10px;padding:10px;'
+            + 'margin:6px 0;cursor:pointer}'
+            + '.tr-choice{display:block;width:100%;text-align:left;background:#12141a;'
+            + 'color:#c9ced8;border:1px solid #303640;border-radius:10px;padding:10px 12px;'
+            + 'margin:6px 0;cursor:pointer;white-space:normal}'
+            + '.tr-choice.on{background:#17304d;border-color:#2f6fed;color:#fff}'
+            + '.tr-choice small{display:block;color:#7f8791;margin-top:2px}'
+            + '.tr-primary{display:block;width:100%;background:#2f6fed;color:#fff;'
+            + 'border:0;border-radius:10px;padding:13px;margin:10px 0 6px;'
+            + 'font-size:1rem;font-weight:700;cursor:pointer}'
+            + '.tr-primary:disabled{background:#30343c;color:#777;cursor:default}'
+            + '#tr-status{min-height:1.3em;text-align:center;font-size:.82rem;'
+            + 'color:#9aa0a6;margin:5px 0}'
+            + '#tr-status.ok{color:#69db7c}#tr-status.bad{color:#ff8787}'
+            + '#tr-summary{background:#12141a;border-radius:9px;padding:9px 11px;'
+            + 'color:#c9ced8;font-size:.84rem;margin-top:7px}'
+            + '.tr-more{margin-top:9px;border-top:1px solid #2c3038;padding-top:9px}'
+            + '.tr-more summary{color:#9aa0a6;font-size:.82rem;cursor:pointer;padding:5px}'
+            + '.tr-link{display:flex;gap:8px;align-items:center;color:#c9ced8;'
+            + 'font-size:.84rem;margin:9px 3px}.tr-link input{width:auto}'
+            + '.tr-option-note{color:#8b9199;font-size:.76rem;line-height:1.4;'
+            + 'margin:-5px 3px 12px 27px}'
+            + '.tr-point{display:flex;align-items:center;justify-content:space-between;'
+            + 'gap:8px;padding:7px 3px;border-bottom:1px solid #292d34;'
+            + 'font-size:.78rem;color:#9aa0a6}'
+            + '.tr-point button{width:auto;margin:0;padding:5px 8px;background:#2c3038;'
+            + 'color:#ffaaa5;border:0;border-radius:7px;cursor:pointer}'
             + '#tk-panel{border-top:1px solid #2c3038;margin-top:10px;padding:10px 12px 14px}'
             + '.tk-row{display:flex;align-items:center;gap:8px;justify-content:center;'
             + 'flex-wrap:wrap;margin:6px 0}'
@@ -4729,6 +4821,205 @@
         var g_clData = null;          // {song:{...}, chords:[[s,e,txt]], lyrics:[...]}
         var g_clDataGen = null;
         var g_clFetch = null;
+
+        // ── Human timing repair ─────────────────────────────────────────────
+        // The UI records simple correspondences ("this imported event starts
+        // now"). Lua confirms and persists them in the project; it performs
+        // the actual drift correction before publishing a new timeline.
+        var g_tr = { open: false, scope: 'lyrics', selected: -1,
+                     songId: null, pending: null };
+        var g_trAutoScope = (function () {
+            var m = String(location.search || '').match(/[?&]repair=(lyrics|chords)/);
+            return m ? m[1] : null;
+        })();
+        var g_trAutoOpening = false;
+
+        function trEsc(s) {
+            return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) {
+                return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c];
+            });
+        }
+        function trTime(t) {
+            t = Math.max(0, Number(t) || 0);
+            var m = Math.floor(t / 60), s = Math.round(t - m * 60);
+            return m + ':' + (s < 10 ? '0' : '') + s;
+        }
+        function trList() {
+            return g_clData && g_clData[g_tr.scope] ? g_clData[g_tr.scope] : [];
+        }
+        function trSetStatus(text, cls) {
+            var el = document.getElementById('tr-status');
+            if (!el) return;
+            el.textContent = text || '';
+            el.className = cls || '';
+        }
+        function openTimingRepair(scope, quiet) {
+            if (!g_clData || !g_clData.song || !clAlive()) {
+                if (!quiet) alert('Timing repair needs the chord/lyric timeline script. Run ReaSet_Startup.lua in REAPER, then try again.');
+                return false;
+            }
+            g_tr.open = true;
+            g_tr.scope = scope === 'chords' ? 'chords' : 'lyrics';
+            g_tr.songId = Number(g_clData.song.id);
+            g_tr.selected = -1;
+            document.getElementById('tr-link').checked = true;
+            document.getElementById('tr-precise').checked = g_preciseFollow;
+            var panel = document.getElementById('timing-repair');
+            if (panel) panel.classList.remove('hide');
+            document.getElementById('tr-title').textContent =
+                'Fix ' + (g_tr.scope === 'lyrics' ? 'lyric' : 'chord') + ' timing';
+            document.getElementById('tr-song').textContent = g_clData.song.name;
+            trSetStatus('', '');
+            repairRefreshChoices();
+            repairRenderSummary();
+            return true;
+        }
+        function repairTryAutoOpen(scope, attempts) {
+            if (openTimingRepair(scope, true)) {
+                g_trAutoScope = null;
+                g_trAutoOpening = false;
+                return;
+            }
+            if (attempts < 12 && g_trAutoScope) {
+                setTimeout(function () { repairTryAutoOpen(scope, attempts + 1); }, 500);
+            } else if (g_trAutoScope) {
+                g_trAutoScope = null;
+                g_trAutoOpening = false;
+                alert('Jam Room opened the song, but its timing helper is not running. Run ReaSet_Startup.lua in REAPER, then tap Fix timing.');
+            }
+        }
+        function closeTimingRepair() {
+            g_tr.open = false; g_tr.selected = -1; g_tr.pending = null;
+            var panel = document.getElementById('timing-repair');
+            if (panel) panel.classList.add('hide');
+        }
+        function repairRefreshChoices() {
+            if (!g_tr.open || !g_clData || !g_clData.song) return;
+            var list = trList(), host = document.getElementById('tr-choices');
+            g_tr.selected = -1;
+            document.getElementById('tr-mark').disabled = true;
+            if (!list.length) {
+                host.innerHTML = '<div class="tr-help">This song has no '
+                    + g_tr.scope + ' to choose from.</div>';
+                return;
+            }
+            var cur = clIndexAtOrBefore(list, currentPos);
+            if (cur < 0) cur = 0;
+            var radius = g_tr.scope === 'lyrics' ? 3 : 5;
+            var a = Math.max(0, cur - radius), b = Math.min(list.length, cur + radius + 1);
+            var html = '';
+            for (var i = a; i < b; i++) {
+                var raw = list[i].length > 3 ? list[i][3] : null;
+                var rel = raw == null ? list[i][0] : raw;
+                rel -= g_clData.song.start;
+                html += '<button class="tr-choice" data-tr-index="' + i
+                    + '" onclick="repairSelectChoice(' + i + ')">'
+                    + trEsc(list[i][2]) + '<small>around ' + trTime(rel)
+                    + ' in the song</small></button>';
+            }
+            host.innerHTML = html;
+            if (list[0].length < 4) {
+                trSetStatus('REAPER is still running the older timeline script. Restart ReaSet_Startup.lua to enable repair.', 'bad');
+            }
+        }
+        function repairSelectChoice(index) {
+            var list = trList();
+            if (!list[index] || list[index].length < 4) return;
+            g_tr.selected = index;
+            var buttons = document.querySelectorAll('#tr-choices .tr-choice');
+            for (var i = 0; i < buttons.length; i++) {
+                buttons[i].classList.toggle('on', Number(buttons[i].getAttribute('data-tr-index')) === index);
+            }
+            document.getElementById('tr-mark').disabled = false;
+            trSetStatus('Pause or tap the button at the exact moment it should begin.', '');
+        }
+        function repairCommand(action, scope, source, actual) {
+            if (!g_clData || !g_clData.song || Number(g_clData.song.id) !== g_tr.songId) {
+                trSetStatus('The song changed. Open Fix timing again for this song.', 'bad');
+                return;
+            }
+            var nonce = String(Date.now());
+            g_tr.pending = nonce;
+            document.getElementById('tr-mark').disabled = true;
+            var fields = [nonce, action, g_tr.songId, scope];
+            if (source != null) fields.push(Number(source).toFixed(3));
+            if (actual != null) fields.push(Number(actual).toFixed(3));
+            trSetStatus('Saving in REAPER…', '');
+            wwr_req('SET/EXTSTATE/ReaSetCL/want/' + encodeURIComponent(fields.join('|')));
+            setTimeout(function () {
+                if (g_tr.pending !== nonce) return;
+                g_tr.pending = null;
+                document.getElementById('tr-mark').disabled = g_tr.selected < 0;
+                trSetStatus('REAPER did not confirm the change. Check that ReaSet_Startup.lua is running, then try again.', 'bad');
+            }, 5000);
+        }
+        function repairMarkNow() {
+            var list = trList(), item = list[g_tr.selected];
+            if (!item || item.length < 4 || !g_clData || !g_clData.song) return;
+            var source = Number(item[3]) - g_clData.song.start;
+            var actual = currentPos - g_clData.song.start;
+            var linked = document.getElementById('tr-link').checked;
+            repairCommand('add', linked ? 'both' : g_tr.scope, source, actual);
+        }
+        function repairReset() {
+            if (!confirm('Reset the saved timing corrections for this song?')) return;
+            var linked = document.getElementById('tr-link').checked;
+            repairCommand('clear', linked ? 'both' : g_tr.scope, null, null);
+        }
+        function repairReviewed() {
+            var linked = document.getElementById('tr-link').checked;
+            repairCommand('review', linked ? 'both' : g_tr.scope, null, null);
+        }
+        function repairDelete(scope, source) {
+            repairCommand('delete', scope, source, null);
+        }
+        function repairDeletePoint(source) {
+            var linked = document.getElementById('tr-link').checked;
+            repairDelete(linked ? 'both' : g_tr.scope, source);
+        }
+        function repairHandleReply(val) {
+            var p = String(val || '').split('|');
+            if (p.length < 3 || !g_tr.open || p[0] !== g_tr.pending) return;
+            g_tr.pending = null;
+            trSetStatus(p.slice(2).join(' '), p[1] === 'ok' ? 'ok' : 'bad');
+            if (p[1] === 'ok') {
+                g_tr.selected = -1;
+                document.getElementById('tr-mark').disabled = true;
+            } else {
+                document.getElementById('tr-mark').disabled = g_tr.selected < 0;
+            }
+        }
+        function repairRenderSummary() {
+            if (!g_tr.open || !g_clData || !g_clData.song) return;
+            if (Number(g_clData.song.id) !== g_tr.songId) {
+                closeTimingRepair(); return;
+            }
+            var repair = g_clData.repair || {};
+            var points = repair[g_tr.scope] || [];
+            var reviewed = repair.reviewed && repair.reviewed[g_tr.scope];
+            var summary = document.getElementById('tr-summary');
+            if (!points.length && reviewed) {
+                summary.textContent = 'Timing checked — no correction is currently needed.';
+            } else if (!points.length) {
+                summary.textContent = 'Using the imported timing. Add a checkpoint to correct it.';
+            } else if (points.length === 1) {
+                summary.textContent = 'The starting shift is fixed. Check a line near the end; add it too if the timing has drifted.';
+            } else if (points.length === 2) {
+                summary.textContent = 'Two checkpoints saved — timing drift is corrected between them.';
+            } else {
+                summary.textContent = points.length + ' checkpoints saved — local timing changes are corrected too.';
+            }
+            var host = document.getElementById('tr-points'), html = '';
+            for (var i = 0; i < points.length; i++) {
+                var shift = points[i][1] - points[i][0];
+                html += '<div class="tr-point"><span>' + trTime(points[i][0])
+                    + ' now appears at ' + trTime(points[i][1])
+                    + ' (' + (shift >= 0 ? '+' : '') + shift.toFixed(1) + 's)</span>'
+                    + '<button onclick="repairDeletePoint('
+                    + Number(points[i][0]).toFixed(3) + ')">Remove</button></div>';
+            }
+            host.innerHTML = html || '<div class="tr-point"><span>No saved checkpoints</span></div>';
+        }
 
         function clAlive() {
             return g_clHb.val !== null && (Date.now() - g_clHb.changedAt) < 5000;
@@ -5056,8 +5347,57 @@
 
         // Chord view mode: 'chart' (rows of 4), 'big' (one large + strip),
         // 'timeline' (width proportional to duration).
+        var g_preciseBySong = {};
+        function _preciseKey() { return 'reaset_precise_follow' + _pkSuffix(); }
+        function loadPreciseSettings() {
+            try { g_preciseBySong = JSON.parse(localStorage.getItem(_preciseKey()) || '{}'); }
+            catch (e) { g_preciseBySong = {}; }
+        }
+        loadPreciseSettings();
+        var g_preciseFollow = g_preciseBySong[currentLeadSongKey()] === true;
         var g_chordView = localStorage.getItem('reaset_chord_view') || 'chart';
+        // Big and Timeline make a moment look exact. Do not silently restore
+        // either from an older session unless the performer opted into exact
+        // following; the broad chart is the honest default for unreviewed data.
+        if (!g_preciseFollow && (g_chordView === 'big' || g_chordView === 'timeline')) {
+            g_chordView = 'chart';
+        }
+        function setPreciseFollow(on) {
+            g_preciseFollow = !!on;
+            g_preciseBySong[currentLeadSongKey()] = g_preciseFollow;
+            localStorage.setItem(_preciseKey(), JSON.stringify(g_preciseBySong));
+            var cb = document.getElementById('tr-precise');
+            if (cb) cb.checked = g_preciseFollow;
+            if (!g_preciseFollow && (g_chordView === 'big' || g_chordView === 'timeline')) {
+                g_chordView = 'chart';
+                localStorage.setItem('reaset_chord_view', g_chordView);
+                document.querySelectorAll('.cv-tab').forEach(function (b) {
+                    b.classList.toggle('on', b.getAttribute('data-cv') === g_chordView);
+                });
+            }
+            renderChordsView();
+            renderLyricsView();
+        }
+        function syncPreciseFollowSong() {
+            g_preciseFollow = g_preciseBySong[currentLeadSongKey()] === true;
+            var cb = document.getElementById('tr-precise');
+            if (cb) cb.checked = g_preciseFollow;
+            if (!g_preciseFollow && (g_chordView === 'big' || g_chordView === 'timeline')) {
+                g_chordView = 'chart';
+                localStorage.setItem('reaset_chord_view', g_chordView);
+                document.querySelectorAll('.cv-tab').forEach(function (b) {
+                    b.classList.toggle('on', b.getAttribute('data-cv') === g_chordView);
+                });
+            }
+        }
         function setChordView(mode) {
+            if ((mode === 'big' || mode === 'timeline') && !g_preciseFollow) {
+                g_preciseFollow = true;
+                g_preciseBySong[currentLeadSongKey()] = true;
+                localStorage.setItem(_preciseKey(), JSON.stringify(g_preciseBySong));
+                var precise = document.getElementById('tr-precise');
+                if (precise) precise.checked = true;
+            }
             g_chordView = mode;
             localStorage.setItem('reaset_chord_view', mode);
             document.querySelectorAll('.cv-tab').forEach(function (b) {
@@ -5151,7 +5491,7 @@
         syncLeadSlider();
         tkRenderPanel();             // paints the performance chips on load
         // Shown in the sidebar so a stale cached page is obvious after a deploy.
-        var REASET_VERSION = "v1.7 · 2026-08-30";
+        var REASET_VERSION = "v1.8 · 2026-09-04";
         var _rv = document.getElementById("reasetVer");
         if (_rv) _rv.textContent = REASET_VERSION;
         (function () { var t = localStorage.getItem("reasetlist_theme") || "dark"; setTheme(t, true); })();
@@ -8628,6 +8968,8 @@
                 } else if (val !== g_clHb.val) {
                     g_clHb.val = val; g_clHb.changedAt = Date.now();
                 }
+            } else if (key === 'repair') {
+                repairHandleReply(val);
             } else if (key === 'meta') {
                 if (val === '') return;
                 var parts = val.split(':');
@@ -8656,7 +8998,19 @@
                             g_clData = d.song ? d : null;
                         } catch (e) { g_clData = null; }
                         syncLeadSlider();
+                        syncPreciseFollowSong();
                         renderChordsView(); renderLyricsView();
+                        repairRenderSummary();
+                        if (g_trAutoScope && g_clData && !g_trAutoOpening) {
+                            var autoScope = g_trAutoScope;
+                            // REAPER's heartbeat and timeline chunks can arrive
+                            // in either order on first load. Give the bridge a
+                            // few seconds rather than opening a false error.
+                            g_trAutoOpening = true;
+                            setTimeout(function () {
+                                repairTryAutoOpen(autoScope, 0);
+                            }, 50);
+                        }
                     }
                 }
             }
@@ -8738,7 +9092,7 @@
                     var s2 = list[j2][0], e2 = list[j2][1];
                     if (e2 < from || s2 > from + WIN) continue;
                     var w = Math.max(2, ((Math.min(e2, from + WIN) - Math.max(s2, from)) / WIN) * 100);
-                    cells.push('<div class="cv-tl-cell' + (j2 === cur ? ' on' : '')
+                    cells.push('<div class="cv-tl-cell' + (g_preciseFollow && j2 === cur ? ' on' : '')
                         + '" style="width:' + w.toFixed(2) + '%;font-size:' + tlFont
                         + '">' + tlNames[ci++] + '</div>');
                 }
@@ -8793,12 +9147,12 @@
                         for (var d2 = 0; d2 < inLine.length; d2++) {
                             var pctL = Math.max(0, Math.min(92, inLine[d2][0]));
                             chHtml += '<span class="cs-ch'
-                                + (inLine[d2][1] === cur ? ' on' : '')
+                                + (g_preciseFollow && inLine[d2][1] === cur ? ' on' : '')
                                 + '" style="left:' + pctL.toFixed(1) + '%">'
                                 + X(list[inLine[d2][1]][2]) + '</span>';
                         }
                         var words = lys[b][2] || '';
-                        out.push('<div class="cs-line' + (b === li ? ' on' : '') + '">'
+                        out.push('<div class="cs-line' + (g_preciseFollow && b === li ? ' on' : '') + '">'
                             + '<div class="cs-chords">' + chHtml + '</div>'
                             + '<div class="cs-words">' + words + '</div></div>');
                     }
@@ -8821,7 +9175,7 @@
                         if (idx >= list.length) { cellsHtml += '<div class="cv-cell empty"></div>'; continue; }
                         var fs = (r === 1)
                             ? 'calc(' + aheadFont + ' * 0.6)' : nowFont;
-                        cellsHtml += '<div class="cv-cell' + (idx === cur ? ' on' : '')
+                        cellsHtml += '<div class="cv-cell' + (g_preciseFollow && idx === cur ? ' on' : '')
                             + (r === 1 ? ' ahead' : '') + '" style="font-size:' + fs
                             + '">' + X(list[idx][2]) + '</div>';
                     }
@@ -8835,6 +9189,7 @@
             if (Math.abs(tkRate - 1) > 0.005) bits.push('Tempo ' + Math.round(tkRate * 100) + '%');
             if (capo) bits.push('Capo ' + capo + ' — shapes to play, sounding '
                                 + transposeChordName(list[cur][2], tkSemis));
+            if (!g_preciseFollow) bits.push('Passage view');
             var badge = bits.length
                 ? '<div class="cv-tkbadge">' + bits.join(' · ') + '</div>' : '';
             var isSheet = (g_chordView === 'sheet');
@@ -8861,7 +9216,24 @@
             var t = currentPos + getLead() * ((g_tkState && g_tkState.rate) || 1.0);
             var cur = clIndexAt(list, t);
             var out = '';
-            if (cur < 0) {
+            if (!g_preciseFollow) {
+                // Four-line blocks change at section-sized intervals and never
+                // single out a line as exact. This is intentionally the safe
+                // default for imported timing that has not been checked.
+                var nearby = cur;
+                if (nearby < 0) {
+                    for (var n = 0; n < list.length; n++) {
+                        if (list[n][0] > t) { nearby = n; break; }
+                    }
+                }
+                if (nearby < 0) nearby = list.length - 1;
+                var blockStart = Math.floor(nearby / 4) * 4;
+                var block = [];
+                for (var b = blockStart; b < Math.min(blockStart + 4, list.length); b++) {
+                    block.push('<div class="lv-block-line">' + trEsc(list[b][2]) + '</div>');
+                }
+                out = '<div class="lv-block">' + block.join('') + '</div>';
+            } else if (cur < 0) {
                 var nxt = -1;
                 for (var i = 0; i < list.length; i++) { if (list[i][0] > t) { nxt = i; break; } }
                 out = '<div class="lv-gap">&nbsp;</div>'

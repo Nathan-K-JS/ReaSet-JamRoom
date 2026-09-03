@@ -34,8 +34,8 @@ import requests
 # what is on disk — the importer server holds its modules in memory, so this is
 # how you tell "did the update take effect?" from "is the old process still up?"
 # BUMP THIS whenever the importer changes, and quote it when handing over.
-BUILD = "v1.9"
-BUILD_DATE = "2026-08-30"
+BUILD = "v2.0"
+BUILD_DATE = "2026-09-04"
 
 # Fadr's S3 throttles each connection independently, so several transfers at
 # once finish far sooner than one at a time. Overridable via config.

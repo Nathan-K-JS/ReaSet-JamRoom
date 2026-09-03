@@ -21,6 +21,7 @@ import time
 import webbrowser
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
+from urllib.parse import urlparse
 
 import requests
 
@@ -302,6 +303,71 @@ def _dir_size(p):
         return 0
 
 
+def _repair_states(web, region_ids):
+    """region id -> saved checkpoint count and human-review state.
+
+    Project extstate is authoritative (the live repair drawer writes it), so
+    the optional importer never invents a separate review database.
+    """
+    commands = []
+    for rid in region_ids:
+        commands.extend([
+            f"GET/PROJEXTSTATE/ReaSetCLRepair/song:{rid}:lyrics",
+            f"GET/PROJEXTSTATE/ReaSetCLRepair/song:{rid}:chords",
+            f"GET/PROJEXTSTATE/ReaSetCLRepair/song:{rid}:lyrics:reviewed",
+            f"GET/PROJEXTSTATE/ReaSetCLRepair/song:{rid}:chords:reviewed",
+        ])
+    if not commands:
+        return {}
+    try:
+        txt = requests.get(f"{web}/_/" + ";".join(commands), timeout=5).text
+    except requests.RequestException:
+        return {}
+    states = {int(rid): {"count": 0, "lyrics_reviewed": False,
+                         "chords_reviewed": False} for rid in region_ids}
+    for line in txt.splitlines():
+        fields = line.split("\t")
+        if len(fields) < 3 or fields[1] != "ReaSetCLRepair":
+            continue
+        m = re.match(r"song:(\d+):(lyrics|chords)(:reviewed)?$", fields[2])
+        if not m:
+            continue
+        blob = fields[3].strip() if len(fields) > 3 else ""
+        rid = int(m.group(1))
+        state = states.setdefault(rid, {"count": 0, "lyrics_reviewed": False,
+                                        "chords_reviewed": False})
+        if m.group(3):
+            key = f"{m.group(2)}_reviewed"
+            state[key] = state[key] or blob == "1"
+        else:
+            n = len([p for p in blob.split(",") if "=" in p])
+            state["count"] = max(state["count"], n)
+    return states
+
+
+def _clear_repairs(web, region_id, scopes):
+    """Discard correction curves whose underlying source timing was replaced."""
+    commands = [
+        command
+        for scope in scopes
+        for command in (
+            f"SET/PROJEXTSTATE/ReaSetCLRepair/song:{int(region_id)}:{scope}/",
+            f"SET/PROJEXTSTATE/ReaSetCLRepair/song:{int(region_id)}:{scope}:reviewed/",
+        )
+    ]
+    if not commands:
+        return
+    try:
+        response = requests.get(f"{web}/_/" + ";".join(commands), timeout=5)
+        response.raise_for_status()
+    except requests.RequestException as exc:
+        raise RuntimeError(
+            "The new words were installed, but their old timing adjustments "
+            "could not be cleared. Open Fix timing and choose Reset before "
+            "reviewing the song."
+        ) from exc
+
+
 def project_songs():
     """Songs currently in the REAPER project (its regions), each with the size
     of its local import folder so the operator can see what deleting frees."""
@@ -319,15 +385,29 @@ def project_songs():
         if name == "ReaSet Loop":
             continue
         try:
-            start, end = float(f[3]), float(f[4])
+            region_id, start, end = int(f[2]), float(f[3]), float(f[4])
         except ValueError:
             continue
         folder = jobs_dir / ji.sanitize_filename(name)
         size = _dir_size(folder) if folder.is_dir() else 0
-        songs.append({"name": name, "start": start, "end": end,
+        status = "Needs timing review"
+        repair_scope = "lyrics"
+        if folder.is_dir():
+            job = ji.load_job(folder)
+            has_lyrics = bool((job.get("lyrics") or {}).get("synced"))
+            has_chords = bool(job.get("chords"))
+            if not has_lyrics and not has_chords:
+                status = "No timed words or chords"
+            elif not has_lyrics:
+                status = "No timed lyrics"
+                repair_scope = "chords"
+            elif not (job.get("chart") or {}).get("url"):
+                status = "Needs timing review · no chart selected"
+        songs.append({"id": region_id, "name": name, "start": start, "end": end,
                       "duration": round(end - start, 1),
                       "folder": str(folder) if folder.is_dir() else None,
-                      "folder_mb": round(size / 1e6) if size else 0})
+                      "folder_mb": round(size / 1e6) if size else 0,
+                      "review_status": status, "repair_scope": repair_scope})
     # Nested regions (song sections) are not songs; drop anything contained
     # in another region, matching how ReaSet and the bridges discover songs.
     tops = []
@@ -335,8 +415,46 @@ def project_songs():
         if not any(o is not s and o["start"] <= s["start"] and o["end"] >= s["end"]
                    and (o["start"] < s["start"] or o["end"] > s["end"]) for o in songs):
             tops.append(s)
+    repaired = _repair_states(web, [s["id"] for s in tops])
+    for s in tops:
+        state = repaired.get(s["id"], {})
+        n = state.get("count", 0)
+        if n:
+            if n == 1:
+                s["review_status"] = "Timing adjusted · 1 checkpoint"
+            elif n == 2:
+                s["review_status"] = "Timing adjusted · drift corrected"
+            else:
+                s["review_status"] = f"Timing adjusted · {n} checkpoints"
+        elif state.get("lyrics_reviewed") and state.get("chords_reviewed"):
+            s["review_status"] = "Timing checked · no correction needed"
+        elif state.get("lyrics_reviewed"):
+            s["review_status"] = "Lyric timing checked"
+        elif state.get("chords_reviewed"):
+            s["review_status"] = "Chord timing checked"
     tops.sort(key=lambda s: s["start"])
     return tops
+
+
+def cue_song_for_repair(name, start):
+    """Put REAPER safely inside a requested song and return its web port.
+
+    The browser opens ReaSet itself, where the always-running timeline bridge
+    owns repair. Keeping timing edits out of this optional importer server is
+    what makes the same workflow available during an ordinary rehearsal.
+    """
+    song = next((s for s in project_songs()
+                 if s["name"] == name and abs(s["start"] - start) < 0.05), None)
+    if not song:
+        raise RuntimeError("That song moved or is no longer in this project. "
+                           "Refresh the Song library and try again.")
+    cfg = ji.load_config(None)
+    web = _reaper_web(cfg)
+    r = requests.get(f"{web}/_/SET/POS/{song['start'] + 0.01:.3f}", timeout=5)
+    if r.status_code != 200:
+        raise RuntimeError("REAPER did not accept the song selection.")
+    parsed = urlparse(web)
+    return parsed.port or (443 if parsed.scheme == "https" else 80)
 
 
 def delete_song(name, start, end, delete_files):
@@ -711,6 +829,11 @@ def relyric_song(name, record_id=None, offset=None):
 
     result = _push_song_items(cfg, name, song, chords=chords,
                               lyric_lines=lyric_items)
+    # These checkpoints describe the old source timestamps. Applying them to
+    # newly selected lyric timings would double-correct the song. Chord timing
+    # is only cleared when the chords were re-placed as part of this operation.
+    scopes = ["lyrics"] + (["chords"] if chords is not None else [])
+    _clear_repairs(_reaper_web(cfg), song["id"], scopes)
     return {"result": result, "lines": len(lyric_items),
             "chords": len(chords or []), "source": ly.get("source")}
 
@@ -899,6 +1022,13 @@ class Handler(BaseHTTPRequestHandler):
             body = self._body()
             if self.path == "/api/search":
                 self._send(200, {"results": search(body.get("query", ""))})
+            elif self.path == "/api/cue_repair":
+                try:
+                    port = cue_song_for_repair(body.get("name", ""),
+                                               float(body.get("start", 0)))
+                    self._send(200, {"ok": True, "reaper_port": port})
+                except Exception as e:  # noqa: BLE001
+                    self._send(500, {"error": str(e)})
             elif self.path == "/api/setkey":
                 set_key(body.get("key", ""))
                 self._send(200, {"ok": True})

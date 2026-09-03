@@ -35,7 +35,7 @@ ReaSet's Lyrics/Chords views. One command per song, then a short review pass.
 
 ## Removing a song
 
-Importer page → **Manage songs**. Lists everything in the REAPER project with
+Importer page → **Song library**. Lists everything in the REAPER project with
 its length and how much disk its local audio uses. **Delete…** requires typing
 the song's name to enable the button, and asks separately whether to remove the
 downloaded audio.
@@ -175,6 +175,12 @@ simpler 4-stem import (vocals/bass/drums/other).
 **Chords** come from Fadr's own analysis of the uploaded audio
 (`chord,start,end` CSV in seconds), so their timing is measured from the
 actual recording; notation is converted to musician form (F:maj→F, A:min→Am).
+That analysis is useful timing evidence, but it is not trusted as the chart:
+on the review screen, choose the Ultimate Guitar chart the band actually uses
+(search results are never selected automatically, and a chart URL can be
+pasted directly). JamRoom takes chord names and order from that chart and
+places them against matched lyric lines, with the recording analysis as the
+fallback when the words cannot be matched safely.
 **Lyric timing** is auto-checked: the tool cross-correlates singing activity
 in the separated vocal stem against the lyric-line timeline and applies a
 global shift if (and only if) they clearly disagree; a flat/ambiguous match
@@ -184,13 +190,29 @@ overrides manually.
 Cost: US$0.05 per input minute per separation task; Fadr Plus includes
 $10/month of credit (≈15–50 songs/month depending on sub-splits).
 
-## After each import — 2-minute review
+## After each import — timing review
 
 1. Play the song in REAPER; check stem quality and slot placement.
-2. Skim the `chords` items — automatic chord recognition is ~80–85% right;
-   fix the odd wrong chord by editing the item note.
-3. If lyrics came back "plain only" or "none", the song had no synced lyrics
-   on LRCLIB — paste/fix by hand, or wait for the forced-alignment upgrade.
+2. In ReaSet, open Lyrics or Chords and tap **Fix timing**. At a known moment,
+   choose the line/chord that should begin and tap **This should start now**.
+   One checkpoint moves the whole song; a later checkpoint corrects gradual
+   drift; further checkpoints repair only the intervening parts. Corrections
+   are saved in the REAPER project and can be removed individually or reset to
+   the imported timing without rewriting the source items. If it is already
+   correct, choose **Timing looks right — mark as checked** so the Song Library
+   records that it was actually reviewed.
+3. Exact highlighting is deliberately off by default. JamRoom shows a readable
+   passage until **More controls → Highlight each change precisely** is enabled.
+   Choosing the Big or Timeline chord view also enables precise following.
+4. If the words or chart themselves are wrong, use importer → **Song library →
+   Review or repair**. **Change the lyrics** selects another timed LRCLIB record;
+   **Change the chord chart** searches or accepts a pasted chart URL. This keeps
+   stems, routing and setlists intact. Replacing source timings clears their old
+   correction checkpoints so a previous adjustment cannot be applied twice.
+
+This same Song library workflow works for songs imported before this feature;
+there is no need to delete and re-import a song just to repair words, chords or
+timing.
 
 ## Setlist order
 
@@ -231,7 +253,10 @@ it off again, with a notice.
 
 - YouTube audio is lossy (~130 kbps Opus) — fine for rehearsal backing.
   Downloading from YouTube is against YouTube's ToS; private use, your call.
-- Chord accuracy ~80–85%; extensions often simplified.
+- Fadr chord detection is timing evidence, not a dependable final chart.
+  Correctness depends on selecting a suitable published chart and reviewing the
+  result against the actual recording; unusual arrangements can still require
+  local timing checkpoints.
 - Fadr's chord-file format is parsed defensively; if a song yields
   "no parseable chord file", keep the job folder and report it — the parser
   may need a tweak once more real responses have been seen.
