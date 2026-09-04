@@ -95,6 +95,14 @@
          overflow-y: auto; white-space: pre-wrap; margin-top: 10px; }
   .done { color: #4caf50; font-weight: 600; }
   .failed { color: #ef5350; font-weight: 600; }
+  #receiptCard { border-color: #285c43; background: #17261f; }
+  #receiptCard.bad { border-color: #6b302c; background: #2b1b1a; }
+  #receiptTitle { font-size: 1rem; font-weight: 700; color: #77d9a8; }
+  #receiptCard.bad #receiptTitle { color: #ffaaa5; }
+  #receiptDetail { margin-top: 5px; line-height: 1.45; }
+  #receiptLog { white-space: pre-wrap; max-height: 180px; overflow:auto;
+                background:#0d0f12; border-radius:8px; padding:8px;
+                font: .74rem Consolas, monospace; margin-top:7px; }
   .cost { color: #f0b429; font-size: .85rem; margin-top: 6px; }
   .note { color: #9aa0a6; font-size: .82rem; margin-top: 6px; }
   .firstline { background: #12141a; border-radius: 8px; padding: 10px;
@@ -128,6 +136,16 @@
       <button class="srctab"    id="srcLib" onclick="setSource('lib')">Already split on Fadr — free</button>
       <button class="srctab"    id="srcMan" onclick="setSource('man')">Song library</button>
     </div>
+  </div>
+
+  <div class="card hide" id="receiptCard" role="status" aria-live="polite">
+    <div id="receiptTitle">Finished</div>
+    <div class="note" id="receiptDetail"></div>
+    <details class="hide" id="receiptLogWrap">
+      <summary class="note" style="cursor:pointer">Technical details</summary>
+      <div id="receiptLog"></div>
+    </details>
+    <button class="small" onclick="dismissReceipt()">Dismiss</button>
   </div>
 
   <div class="card" id="searchCard">
@@ -335,15 +353,122 @@
 <script>
 // Version of THIS page (served fresh from disk). Compared against the version
 // of the running server; a mismatch means the importer needs restarting.
-var UI_BUILD = "v2.0";
+var UI_BUILD = "v2.1";
 
 var picked = null, poller = null, reviewShown = false;
+var pipelineActive = false, g_timingLaunchedSong = null;
+var searchGeneration = 0, maintenanceGeneration = 0, pollGeneration = 0;
 
 function $(id){ return document.getElementById(id); }
 function fmtTime(t){
   if(t == null) return '?';
   var m = Math.floor(t/60), s = (t - m*60).toFixed(1);
   return m + ':' + (s < 10 ? '0' : '') + s;
+}
+
+// ── One task lifecycle for every importer operation ───────────────────────
+function stopPolling(){
+  pollGeneration++;
+  if(poller){ clearInterval(poller); poller = null; }
+}
+
+function setPipelineActive(on){
+  pipelineActive = !!on;
+  ['srcYt','srcLib','srcMan'].forEach(function(id){ $(id).disabled = pipelineActive; });
+  document.querySelectorAll('#searchCard button,#libCard button,#manCard button,#confirmCard button')
+    .forEach(function(b){
+      if(pipelineActive && !b.disabled){ b.dataset.pipelineDisabled = '1'; b.disabled = true; }
+      else if(!pipelineActive && b.dataset.pipelineDisabled){
+        delete b.dataset.pipelineDisabled; b.disabled = false;
+      }
+    });
+}
+
+function resetReviewPanel(){
+  reviewShown = false;
+  window._review = null;
+  $('reviewCard').classList.add('hide');
+  document.querySelectorAll('#reviewCard audio').forEach(function(a){
+    try { a.pause(); } catch(e) {}
+    a.removeAttribute('src');
+    try { a.load(); } catch(e) {}
+  });
+  $('stemList').innerHTML = '';
+  $('lyricInfo').innerHTML = '';
+  $('firstLine').textContent = ''; $('firstLine').classList.add('hide');
+  $('vocalCheck').classList.add('hide');
+  $('lyrOffset').value = '0';
+  $('lyrPick').classList.add('hide');
+  $('lyrQuery').value = ''; $('lyrResults').innerHTML = '';
+  $('ugQuery').value = ''; $('ugUrl').value = ''; $('ugResults').innerHTML = '';
+  $('chartNow').textContent = '';
+  $('applyBtn').disabled = false;
+}
+
+function resetMaintenancePanels(){
+  maintenanceGeneration++;
+  ['repairBox','rechordBox','relyricBox'].forEach(function(id){ $(id).classList.add('hide'); });
+  g_repairSong = null; g_rechordSong = null; g_relyricSong = null;
+  $('repairLaunchLog').textContent = '';
+  $('rechordResults').innerHTML = ''; $('rechordLog').textContent = '';
+  $('rechordQuery').value = ''; $('rechordUrl').value = '';
+  $('relyricResults').innerHTML = ''; $('relyricLog').textContent = '';
+  $('relyricQuery').value = ''; $('relyricOffset').value = '0';
+}
+
+function resetReadyState(){
+  stopPolling();
+  setPipelineActive(false);
+  resetReviewPanel();
+  resetMaintenancePanels();
+  $('progressCard').classList.add('hide');
+  $('finalNote').classList.add('hide');
+  $('progTitle').textContent = 'Working…'; $('log').textContent = '';
+  $('confirmCard').classList.add('hide');
+  picked = null; g_libPicked = null;
+  document.querySelectorAll('.result.sel').forEach(function(x){ x.classList.remove('sel'); });
+  $('band').value = ''; $('title').value = ''; $('cost').textContent = '';
+  $('libExtra').classList.add('hide'); $('allowSplits').checked = true;
+  $('importBtn').disabled = false;
+  $('importBtn').textContent = g_source === 'lib' ? 'Import this song' : 'Download & split this song';
+  $('searchBtn').disabled = false; $('searchBtn').textContent = 'Search';
+  $('q').value = ''; $('results').innerHTML = '';
+  if(g_source === 'man') loadSongs();
+  else if(g_source === 'lib' && g_library) renderLibrary();
+}
+
+function dismissReceipt(){ $('receiptCard').classList.add('hide'); }
+
+function showReceipt(title, detail, logLines, acknowledge, failed){
+  resetReadyState();
+  var card = $('receiptCard');
+  card.classList.toggle('bad', !!failed);
+  $('receiptTitle').textContent = title;
+  $('receiptDetail').textContent = detail || '';
+  var lines = Array.isArray(logLines) ? logLines : [];
+  $('receiptLogWrap').classList.toggle('hide', !lines.length);
+  $('receiptLog').textContent = lines.join('\n');
+  card.classList.remove('hide');
+  card.scrollIntoView({behavior:'smooth', block:'start'});
+  if(acknowledge) fetch('/api/ack', {method:'POST'}).catch(function(){});
+}
+
+function beginPipeline(title){
+  dismissReceipt();
+  stopPolling();
+  setPipelineActive(true);
+  $('confirmCard').classList.add('hide');
+  $('progressCard').classList.remove('hide');
+  $('finalNote').classList.add('hide');
+  $('log').textContent = '';
+  $('progTitle').textContent = title;
+}
+
+function startPolling(){
+  stopPolling();
+  var generation = pollGeneration;
+  pollStatus(generation);
+  poller = setInterval(function(){ pollStatus(generation); }, 1000);
 }
 
 function refreshChecks(){
@@ -440,6 +565,8 @@ function saveKey(){
 }
 
 function doSearch(){
+  dismissReceipt();
+  var generation = ++searchGeneration;
   var q = $('q').value.trim();
   if(!q) return;
   $('searchBtn').disabled = true; $('searchBtn').textContent = 'Searching…';
@@ -447,6 +574,7 @@ function doSearch(){
   fetch('/api/search', {method:'POST', headers:{'Content-Type':'application/json'},
     body: JSON.stringify({query:q})})
   .then(r=>r.json()).then(function(d){
+    if(generation !== searchGeneration) return;
     $('searchBtn').disabled = false; $('searchBtn').textContent = 'Search';
     if(d.error){ $('results').innerHTML = '<div class="check bad">'+d.error+'</div>'; return; }
     d.results.forEach(function(row){
@@ -458,6 +586,7 @@ function doSearch(){
       $('results').appendChild(b);
     });
   }).catch(function(e){
+    if(generation !== searchGeneration) return;
     $('searchBtn').disabled = false; $('searchBtn').textContent = 'Search';
     $('results').innerHTML = '<div class="check bad">'+e+'</div>';
   });
@@ -478,6 +607,15 @@ function pick(row, btn){
 var g_library = null, g_libPicked = null, g_source = 'yt';
 
 function setSource(s){
+  if(pipelineActive){
+    alert('Finish or cancel the current import before starting another task.');
+    return;
+  }
+  dismissReceipt();
+  searchGeneration++; maintenanceGeneration++;
+  resetReviewPanel();
+  resetMaintenancePanels();
+  $('progressCard').classList.add('hide'); $('log').textContent = '';
   g_source = s;
   $('srcYt').classList.toggle('on', s === 'yt');
   $('srcLib').classList.toggle('on', s === 'lib');
@@ -487,6 +625,10 @@ function setSource(s){
   $('manCard').classList.toggle('hide', s !== 'man');
   $('confirmCard').classList.add('hide');
   picked = null; g_libPicked = null;
+  $('band').value = ''; $('title').value = ''; $('cost').textContent = '';
+  $('q').value = ''; $('results').innerHTML = '';
+  $('searchBtn').disabled = false; $('searchBtn').textContent = 'Search';
+  document.querySelectorAll('.result.sel').forEach(function(x){ x.classList.remove('sel'); });
   if(s === 'lib' && !g_library) loadLibrary();
   if(s === 'man') loadSongs();
 }
@@ -524,6 +666,10 @@ function loadSongs(){
       row.appendChild(b);
       $('manList').appendChild(row);
     });
+  }).catch(function(e){
+    g_songs = null;
+    $('manList').innerHTML = '<div class="check bad">Could not refresh the Song Library: '
+      + e + '</div>';
   });
   loadOrphans();
 }
@@ -532,6 +678,8 @@ function loadSongs(){
 var g_repairSong = null;
 
 function openRepair(s){
+  dismissReceipt();
+  maintenanceGeneration++;
   g_repairSong = s;
   $('repairBox').classList.remove('hide');
   $('rechordBox').classList.add('hide');
@@ -571,6 +719,7 @@ function openLiveTimingRepair(){
     }
     var url = location.protocol + '//' + location.hostname + ':' + d.reaper_port
             + '/ReaSet.html?repair=' + (g_repairSong.repair_scope || 'lyrics');
+    g_timingLaunchedSong = g_repairSong.name;
     if(target) target.location = url; else window.location.href = url;
     $('repairLaunchLog').innerHTML = '<span class="check ok">Song selected. '
       + 'Use the JamRoom window to mark what should be showing.</span>';
@@ -603,7 +752,7 @@ function loadOrphans(){
       if(j.has_audio){
         b.style.color = '#9fd0ff'; b.style.borderColor = '#2f6fed';
         b.textContent = 'Re-add now';
-        b.onclick = function(){ doReadd(j.name); };
+        b.onclick = function(){ doReadd(j.name, b); };
       } else {
         b.textContent = 'No audio';
         b.disabled = true;
@@ -611,19 +760,28 @@ function loadOrphans(){
       row.appendChild(b);
       $('orphanList').appendChild(row);
     });
+  }).catch(function(e){
+    $('orphanWrap').classList.remove('hide');
+    $('orphanList').innerHTML = '<div class="check bad">Could not refresh saved songs: '
+      + e + '</div>';
   });
 }
 
-function doReadd(name){
+function doReadd(name, btn){
+  dismissReceipt();
   reviewShown = false;
+  setPipelineActive(true);
+  if(btn) btn.disabled = true;
   fetch('/api/readd', {method:'POST', headers:{'Content-Type':'application/json'},
     body: JSON.stringify({name: name})})
   .then(r=>r.json()).then(function(d){
-    if(d.error){ alert(d.error); return; }
-    $('progressCard').classList.remove('hide');
-    $('finalNote').classList.add('hide');
-    $('progTitle').textContent = 'Re-adding ' + name + ' from local files…';
-    poller = setInterval(pollStatus, 1000);
+    if(d.error){ setPipelineActive(false); if(btn) btn.disabled = false; alert(d.error); return; }
+    beginPipeline('Re-adding ' + name + ' from local files…');
+    startPolling();
+  }).catch(function(e){
+    setPipelineActive(false);
+    if(btn) btn.disabled = false;
+    alert('Could not start the re-add: ' + e);
   });
 }
 
@@ -664,10 +822,12 @@ function openRechord(s){
 }
 
 function searchRechord(free, artist, title){
+  var generation = ++maintenanceGeneration;
   $('rechordResults').innerHTML = '<div class="note">Searching Ultimate Guitar…</div>';
   fetch('/api/ug_search', {method:'POST', headers:{'Content-Type':'application/json'},
     body: JSON.stringify({artist: artist||'', title: title||'', free: free||''})})
   .then(r=>r.json()).then(function(d){
+    if(generation !== maintenanceGeneration) return;
     if(d.error){ $('rechordResults').innerHTML = '<div class="check bad">'+d.error+'</div>'; return; }
     var rows = d.charts || [];
     if(!rows.length){
@@ -688,11 +848,17 @@ function searchRechord(free, artist, title){
       b.onclick = function(){ doRechord(c.url, b); };
       $('rechordResults').appendChild(b);
     });
+  }).catch(function(e){
+    if(generation !== maintenanceGeneration) return;
+    $('rechordResults').innerHTML = '<div class="check bad">Search failed: '
+      + e + '</div>';
   });
 }
 
 function doRechord(url, btn){
   if(!g_rechordSong) return;
+  dismissReceipt();
+  var songName = g_rechordSong.name;
   btn.disabled = true; btn.style.opacity = '.6';
   $('rechordLog').textContent = 'Rewriting chords in REAPER…';
   fetch('/api/rechord', {method:'POST', headers:{'Content-Type':'application/json'},
@@ -705,10 +871,12 @@ function doRechord(url, btn){
       $('rechordLog').innerHTML = '<span class="check bad">' + d.error + '</span>';
       return;
     }
-    var s = d.snapped || {};
-    $('rechordLog').innerHTML = '<span class="check ok">Chords replaced.</span>'
-      + '<br>' + (d.log || []).join('<br>');
-  }).catch(function(e){ $('rechordLog').textContent = 'Failed: ' + e; });
+    showReceipt('Chords replaced', songName + ' now uses the selected chart. '
+      + 'The stems and routing were left unchanged.', d.log || [], false, false);
+  }).catch(function(e){
+    btn.disabled = false; btn.style.opacity = '';
+    $('rechordLog').textContent = 'Failed: ' + e;
+  });
 }
 
 // ── Give an existing song different lyrics (and re-place its chords) ──────
@@ -732,11 +900,13 @@ function openRelyric(s){
 }
 
 function searchRelyric(){
+  var generation = ++maintenanceGeneration;
   $('relyricResults').innerHTML = '<div class="note">Searching…</div>';
   fetch('/api/lyrics_search', {method:'POST', headers:{'Content-Type':'application/json'},
     body: JSON.stringify({free: $('relyricQuery').value || '',
                           duration: g_relyricSong ? g_relyricSong.duration : 0})})
   .then(r=>r.json()).then(function(d){
+    if(generation !== maintenanceGeneration) return;
     if(d.error){ $('relyricResults').innerHTML = '<div class="check bad">'+d.error+'</div>'; return; }
     var rows = (d.results || []).filter(function(c){ return c.synced; });
     if(!rows.length){
@@ -763,6 +933,10 @@ function searchRelyric(){
       b.onclick = function(){ doRelyric(c.id, b); };
       $('relyricResults').appendChild(b);
     });
+  }).catch(function(e){
+    if(generation !== maintenanceGeneration) return;
+    $('relyricResults').innerHTML = '<div class="check bad">Search failed: '
+      + e + '</div>';
   });
 }
 
@@ -772,6 +946,8 @@ function doRelyric(id, btn){
 
 function applyRelyric(payload, btn){
   if(!g_relyricSong) return;
+  dismissReceipt();
+  var songName = g_relyricSong.name;
   btn.disabled = true; btn.style.opacity = '.6';
   $('relyricLog').textContent = 'Rewriting lyrics and chords in REAPER…';
   fetch('/api/relyric', {method:'POST', headers:{'Content-Type':'application/json'},
@@ -783,13 +959,17 @@ function applyRelyric(payload, btn){
         + '<br>' + (d.log || []).join('<br>');
       return;
     }
-    $('relyricLog').innerHTML = '<span class="check ok">' + d.lines
-      + ' lyric lines and ' + d.chords + ' chords replaced.</span><br>'
-      + (d.log || []).join('<br>');
-  }).catch(function(e){ $('relyricLog').textContent = 'Failed: ' + e; });
+    showReceipt('Lyrics replaced', songName + ': ' + d.lines
+      + ' timed lyric lines and ' + d.chords + ' chords replaced. '
+      + 'The stems and routing were left unchanged.', d.log || [], false, false);
+  }).catch(function(e){
+    btn.disabled = false; btn.style.opacity = '';
+    $('relyricLog').textContent = 'Failed: ' + e;
+  });
 }
 
 function askDelete(s){
+  dismissReceipt();
   g_delTarget = s;
   var m = Math.floor(s.duration/60), sec = ('0'+Math.round(s.duration%60)).slice(-2);
   $('delWhat').innerHTML = '<div class="note">This removes <b>' + s.name
@@ -829,6 +1009,7 @@ function closeDelete(){
 function doDelete(){
   if(!g_delTarget) return;
   var t = g_delTarget;
+  var removedFiles = $('delFiles').checked;
   $('delGo').disabled = true; $('delGo').textContent = 'Deleting…';
   fetch('/api/delete_song', {method:'POST', headers:{'Content-Type':'application/json'},
     body: JSON.stringify({name:t.name, start:t.start, end:t.end,
@@ -836,9 +1017,10 @@ function doDelete(){
   .then(r=>r.json()).then(function(d){
     closeDelete();
     if(d.error){ alert('Delete failed:\\n\\n' + d.error); loadSongs(); return; }
-    $('manList').innerHTML = '<div class="check ok">Deleted: ' + t.name
-      + '<br><small>' + (d.result||'') + '</small></div>';
-    setTimeout(loadSongs, 600);
+    showReceipt('Song deleted', t.name + ' was removed from the REAPER project.'
+      + (removedFiles ? ' Its downloaded audio was also removed.'
+                      : ' Its downloaded files were kept for an instant re-add.'),
+      d.result ? [d.result] : [], false, false);
   }).catch(function(e){ closeDelete(); alert('Delete failed: ' + e); });
 }
 
@@ -918,19 +1100,40 @@ function pickLibrary(s, btn){
   $('confirmCard').classList.remove('hide');
 }
 
-function doImport(){
+function doImport(rebuild){
   if(g_source === 'lib'){ return doImportLibrary(); }
   if(!picked) return;
+  if(!$('band').value.trim() || !$('title').value.trim()){
+    alert('Please give this song a Band and Song title.'); return;
+  }
+  var importUrl = picked.url;
+  var importBand = $('band').value.trim();
+  var importTitle = $('title').value.trim();
+  dismissReceipt();
   $('importBtn').disabled = true;
+  setPipelineActive(true);
   reviewShown = false;
   fetch('/api/import', {method:'POST', headers:{'Content-Type':'application/json'},
-    body: JSON.stringify({url:picked.url, band:$('band').value, title:$('title').value})})
+    body: JSON.stringify({url:importUrl, band:importBand,
+                          title:importTitle, rebuild:!!rebuild})})
   .then(r=>r.json()).then(function(d){
-    if(d.error){ alert(d.error); $('importBtn').disabled = false; return; }
-    $('progressCard').classList.remove('hide');
-    $('finalNote').classList.add('hide');
-    $('progTitle').textContent = 'Downloading & splitting ' + $('band').value + ' - ' + $('title').value + ' …';
-    poller = setInterval(pollStatus, 1000);
+    if(d.error){
+      setPipelineActive(false);
+      $('importBtn').disabled = false;
+      if(d.code === 'cached_recording' && !rebuild){
+        if(confirm(d.error + '\n\nReplace all cached audio, stems, lyrics and chord analysis with the newly selected recording? This can incur a new Fadr charge.')){
+          doImport(true);
+        }
+      } else alert(d.error);
+      return;
+    }
+    beginPipeline((rebuild ? 'Rebuilding ' : 'Downloading & splitting ')
+      + importBand + ' - ' + importTitle + ' …');
+    startPolling();
+  }).catch(function(e){
+    setPipelineActive(false);
+    $('importBtn').disabled = false;
+    alert('Could not start the import: ' + e);
   });
 }
 
@@ -940,19 +1143,26 @@ function doImportLibrary(){
     alert('Please give this song a Band and a Song title — that becomes the region name in REAPER.');
     return;
   }
+  var importAsset = g_libPicked;
+  var importBand = $('band').value.trim();
+  var importTitle = $('title').value.trim();
   $('importBtn').disabled = true;
+  dismissReceipt();
+  setPipelineActive(true);
   reviewShown = false;
   fetch('/api/import_library', {method:'POST', headers:{'Content-Type':'application/json'},
-    body: JSON.stringify({id: g_libPicked.id, band: $('band').value,
-                          title: $('title').value, duration: g_libPicked.duration,
-                          allow_new_splits: (g_libPicked.subsplits_done >= 2)
+    body: JSON.stringify({id: importAsset.id, band: importBand,
+                          title: importTitle, duration: importAsset.duration,
+                          allow_new_splits: (importAsset.subsplits_done >= 2)
                               || $('allowSplits').checked})})
   .then(r=>r.json()).then(function(d){
-    if(d.error){ alert(d.error); $('importBtn').disabled = false; return; }
-    $('progressCard').classList.remove('hide');
-    $('finalNote').classList.add('hide');
-    $('progTitle').textContent = 'Fetching ' + $('band').value + ' - ' + $('title').value + ' from Fadr…';
-    poller = setInterval(pollStatus, 1000);
+    if(d.error){ setPipelineActive(false); alert(d.error); $('importBtn').disabled = false; return; }
+    beginPipeline('Fetching ' + importBand + ' - ' + importTitle + ' from Fadr…');
+    startPolling();
+  }).catch(function(e){
+    setPipelineActive(false);
+    $('importBtn').disabled = false;
+    alert('Could not start the Fadr import: ' + e);
   });
 }
 
@@ -1036,6 +1246,7 @@ function drawWaveCursor(cv, st, t){
 }
 
 function showReview(rv){
+  resetReviewPanel();
   reviewShown = true;
   // Kept for the lyric and chart pickers, which need this song's band/title
   // and the current chart state.
@@ -1253,41 +1464,57 @@ function doApply(){
   .then(r=>r.json()).then(function(d){
     if(d.error){ alert(d.error); $('applyBtn').disabled = false; return; }
     $('progTitle').textContent = 'Adding to REAPER…';
-    poller = setInterval(pollStatus, 1000);
+    startPolling();
+  }).catch(function(e){
+    $('applyBtn').disabled = false;
+    alert('Could not confirm whether Apply started: ' + e);
+    startPolling();
   });
 }
 
 function doCancel(){
-  fetch('/api/cancel', {method:'POST'}).then(function(){
-    $('reviewCard').classList.add('hide');
-    $('progressCard').classList.add('hide');
-    $('importBtn').disabled = false;
-    reviewShown = false;
-  });
+  fetch('/api/cancel', {method:'POST'}).then(r=>r.json()).then(function(d){
+    if(d.error){ alert(d.error); return; }
+    showReceipt('Import cancelled', 'Nothing was added to REAPER.', [], false, false);
+  }).catch(function(e){ alert('Could not cancel the import: ' + e); });
 }
 
-function pollStatus(){
+function completedTitle(s){
+  return s.operation === 'readd' ? 'Song re-added to REAPER'
+       : s.operation === 'import_library' ? 'Fadr song added to REAPER'
+       : 'Song added to REAPER';
+}
+function failedTitle(s){
+  return s.operation === 'readd' ? 'Re-add failed'
+       : s.operation === 'import_library' ? 'Fadr import failed'
+       : 'Import failed';
+}
+
+function pollStatus(generation){
   fetch('/api/status').then(r=>r.json()).then(function(s){
-    $('log').textContent = s.log.join('\n');
+    if(generation !== pollGeneration) return;
+    $('log').textContent = (s.log || []).join('\n');
     $('log').scrollTop = $('log').scrollHeight;
-    if(s.state === 'review' && !reviewShown){
-      clearInterval(poller);
-      $('progTitle').textContent = 'Ready for review ↓';
+    if(s.state === 'review'){
+      stopPolling();
+      $('progTitle').innerHTML = s.summary
+        ? '<span class="failed">Apply needs attention: ' + s.summary + '</span>'
+        : 'Ready for review ↓';
       showReview(s.review);
       window.scrollTo(0, $('reviewCard').offsetTop - 10);
     } else if(s.state === 'done' || s.state === 'failed'){
-      clearInterval(poller);
-      $('progTitle').innerHTML = s.state === 'done'
-        ? '<span class="done">✔ Imported: ' + s.song + '</span>'
-        : '<span class="failed">✘ Failed: ' + s.summary + '</span>';
+      stopPolling();
       if(s.state === 'done'){
-        $('finalNote').classList.remove('hide');
-        $('reviewCard').classList.add('hide');
+        showReceipt(completedTitle(s), s.song + ' is ready. Review it in REAPER, '
+          + 'then save the project.', s.log || [], true, false);
+      } else {
+        showReceipt(failedTitle(s), s.summary || 'The task did not finish.',
+          s.log || [], true, true);
       }
-      $('importBtn').disabled = false;
-      $('applyBtn').disabled = false;
     }
   }).catch(function(err){
+    if(generation !== pollGeneration) return;
+    stopPolling();
     // Losing the server mid-import used to leave the page frozen on the last
     // line of the log, looking like a stuck job rather than a dead process.
     $('progTitle').innerHTML = '<span class="failed">Lost contact with the '
@@ -1299,7 +1526,6 @@ function pollStatus(){
       + 'The job may still have finished; restart JamRoom Importer.bat and '
       + 'check the Song library before importing it again. ---';
     $('log').scrollTop = $('log').scrollHeight;
-    $('importBtn').disabled = false;
   });
 }
 
@@ -1315,6 +1541,17 @@ window.addEventListener('unhandledrejection', function(ev){
   w.classList.remove('hide');
 });
 
+window.addEventListener('focus', function(){
+  if(!g_timingLaunchedSong) return;
+  var name = g_timingLaunchedSong;
+  g_timingLaunchedSong = null;
+  setTimeout(function(){
+    showReceipt('Timing review returned', name + ' has been refreshed from REAPER. '
+      + 'Its Song Library badge shows whether timing was checked or adjusted.',
+      [], false, false);
+  }, 150);
+});
+
 refreshChecks();
 setInterval(refreshChecks, 10000);
 // If the server is mid-import (page reopened), catch up.
@@ -1322,11 +1559,23 @@ fetch('/api/status').then(function(r){
   if(!r.ok) throw new Error('HTTP ' + r.status);
   return r.json();
 }).then(function(s){
-  if(s.state === 'review'){ $('progressCard').classList.remove('hide'); showReview(s.review); }
-  else if(s.state === 'preparing' || s.state === 'applying'){
+  if(s.state === 'review'){
+    setPipelineActive(true);
     $('progressCard').classList.remove('hide');
-    poller = setInterval(pollStatus, 1000);
+    $('progTitle').innerHTML = s.summary
+      ? '<span class="failed">Apply needs attention: ' + s.summary + '</span>'
+      : 'Ready for review ↓';
+    $('log').textContent = (s.log || []).join('\n');
+    showReview(s.review);
   }
+  else if(s.state === 'preparing' || s.state === 'applying'){
+    beginPipeline(s.state === 'applying' ? 'Adding to REAPER…' : 'Resuming import…');
+    startPolling();
+  }
+  else if(s.state === 'done') showReceipt(completedTitle(s), s.song
+    + ' is ready. Review it in REAPER, then save the project.', s.log || [], true, false);
+  else if(s.state === 'failed') showReceipt(failedTitle(s),
+    s.summary || 'The task did not finish.', s.log || [], true, true);
 }).catch(function(){ /* refreshChecks() already reports a dead server */ });
 </script>
 </body>

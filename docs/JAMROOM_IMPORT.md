@@ -133,6 +133,8 @@ shown on the page (same trusted-LAN model as REAPER's own web interface):
    unless REAPER confirmed it — and the apply refuses to run if the
    active REAPER project tab isn't the Jam Room project (no PB buses),
    telling you to switch tabs and try again.
+   A persistent receipt names the completed action, then the working panels,
+   audio players, selections and logs reset immediately for the next task.
 6. Setup problems (missing key, REAPER not running, missing tools) show as
    red ✘ checks at the top of the page with what to do.
 
@@ -144,6 +146,13 @@ Each song lives in `imports/Band - Title/` (audio, stems, `job.json`) —
 re-running the command resumes/skips completed steps, and a song that's
 already applied is refused until you delete its region (protects against
 double-imports).
+
+The browser checks this earlier, before starting a potentially paid split. If
+the same `Band - Song` is already in REAPER it directs you to **Song library**.
+If that region was removed but a *different* recording is cached under the same
+name, it asks whether to rebuild everything. Confirming replaces cached audio,
+stems, lyric timing and chord analysis while retaining the routing labels you
+chose; declining leaves the saved version untouched.
 
 **Keep the `imports/` folder.** The REAPER items reference the stem files
 inside it — deleting or moving a song's folder silences that song's tracks.
