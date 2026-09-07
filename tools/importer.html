@@ -168,6 +168,22 @@
   <div class="card hide" id="manCard">
     <label>Songs in the REAPER project — review or repair existing words and chords</label>
     <button class="small" onclick="loadSongs(true)">Refresh list</button>
+    <button class="primary" onclick="openUpdates()">Update lyrics &amp; chords…</button>
+    <div id="updatesBox" class="hide" style="margin:18px 0;padding:16px;border:1px solid #8885;border-radius:12px">
+      <label>Update existing songs</label>
+      <p class="note">Rebuild lyrics and charts using the latest importer. Your audio, routing and setlists stay in place. Previous versions are saved for restore.</p>
+      <select id="updateScope" onchange="updateSelection={};loadUpdates()"><option value="list">Current setlist</option><option value="all">All songs in this project</option></select>
+      <button class="small" onclick="chooseUpdates(true)">Select eligible</button>
+      <button class="small" onclick="chooseUpdates(false)">Deselect all</button>
+      <div id="updateSongs"></div>
+      <label class="note"><input type="checkbox" id="replaceTiming"> Replace old timing fixes and local chart edits on selected songs</label>
+      <button id="updateStart" class="primary" onclick="startUpdates(false,false)">Update selected</button>
+      <button onclick="startUpdates(true,false)">Resume / retry batch</button>
+      <button onclick="pauseUpdates()">Pause after this song</button>
+      <button onclick="startUpdates(false,true)">Restore selected songs</button>
+      <button onclick="restoreBatch()">Restore last batch</button>
+      <div id="updateProgress" class="note" aria-live="polite"></div>
+    </div>
     <div id="manList"><div class="note">Loading…</div></div>
     <div class="note" style="margin-top:10px">Repairs keep the song's audio,
       stems, routing and setlists exactly as they are. Deleting removes the song's region
@@ -205,13 +221,12 @@
 
     <div id="rechordBox" class="hide">
       <label id="rechordFor">Chord charts</label>
-      <div class="note">Replaces the song's chords with the <b>chart's own
-        chords</b>, in the chart's order — the auto-detected chords are
-        discarded, not renamed, because their fault is inventing changes that
-        were never played. Timing comes from the <b>words</b>: each chord is
-        placed on the lyric line it is printed above. Capo charts and charts
-        written in another key are converted to what actually sounds.
-        One Ctrl+Z in REAPER restores the old chords.</div>
+      <div class="note">Builds readable <b>song sections</b> from the selected chart
+        and timed lyrics, including instrumental passages and repeated choruses.
+        Printed chord positions stay attached to matching words; uncertain changes
+        remain a visible progression. Individual timings are used only when the
+        audio evidence supports the complete progression. You can fix section
+        boundaries and content in ReaSet. One Ctrl+Z undoes the REAPER change.</div>
       <div class="note">Wrong song listed below? Search for it yourself, or
         paste the chart's address straight from Ultimate Guitar.</div>
       <div style="display:flex;gap:8px;margin-top:8px">
@@ -224,7 +239,7 @@
       </div>
       <label style="margin-top:10px">Key of the chart against the recording</label>
       <select id="rechordKey">
-        <option value="">Work it out automatically (almost always right)</option>
+        <option value="">Automatic — keep chart key unless evidence supports a shift</option>
       </select>
       <div class="note">Charts are often written in an easier key than the
         record, and that shift is detected from the audio. If it lands in the
@@ -635,6 +650,52 @@ function setSource(s){
 
 // ── Manage / delete songs in the project ──────────────────────────────────
 var g_songs = null, g_delTarget = null;
+
+var updateSelection={}, updateSongs=[], updateBatch=null, updateTimer=null, updateProject=null;
+var updateScopeIds=location.hash.indexOf('#updates=')===0?decodeURIComponent(location.hash.slice(9)).split(',').map(Number):null;
+function updateEsc(x){return String(x==null?'':x).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');}
+function updateApi(path,body){return fetch('/api/updates'+path,body===undefined?{}:{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)}).then(function(r){return r.json();}).then(function(d){if(d.error)throw Error(d.error);return d;});}
+function openUpdates(){
+  $('updatesBox').classList.remove('hide');
+  if(!updateScopeIds){$('updateScope').value='all';$('updateScope').options[0].disabled=true;}
+  loadUpdates();
+}
+function loadUpdates(){
+  clearTimeout(updateTimer);
+  updateApi('').then(function(d){
+    if(updateProject && updateProject!==d.project)updateSelection={};
+    updateProject=d.project;updateSongs=d.songs||[];updateBatch=d.batch;
+    var shown=updateSongs.filter(function(s){return $('updateScope').value==='all'||!updateScopeIds||updateScopeIds.indexOf(s.id)>=0;});
+    $('updateSongs').innerHTML='';
+    shown.forEach(function(s){
+      if(updateSelection[s.id]===undefined)updateSelection[s.id]=s.eligible;
+      if(s.protected)updateSelection[s.id]=false;
+      var row=document.createElement('div');row.className='songrow';
+      var box=document.createElement('input');box.type='checkbox';box.checked=!!updateSelection[s.id];box.disabled=s.protected;
+      box.setAttribute('aria-label','Select '+s.name);box.onchange=function(){updateSelection[s.id]=box.checked;};row.appendChild(box);
+      var text=document.createElement('div');text.className='sname';text.textContent=s.name+' · '+s.update_status;row.appendChild(text);
+      var keep=document.createElement('label');keep.className='note';var protect=document.createElement('input');protect.type='checkbox';protect.checked=s.protected;
+      protect.onchange=function(){updateApi('/protect',{id:s.id,name:s.name,keep:protect.checked,project:updateProject}).then(loadUpdates).catch(updateError);};
+      keep.appendChild(protect);keep.appendChild(document.createTextNode('Keep this version'));row.appendChild(keep);$('updateSongs').appendChild(row);
+    });
+    if(d.batch){
+      var b=d.batch,done=b.songs.filter(function(x){return x.status==='done';}).length;
+      $('updateProgress').innerHTML=updateEsc(b.status)+' · '+done+'/'+b.songs.length+' finished'+(b.status==='paused'?' · stop REAPER playback, then resume':'')+'<br>'+b.songs.map(function(x){return updateEsc(x.name+': '+x.status+(x.message?' — '+x.message:''));}).join('<br>');
+      $('updateStart').disabled=b.status==='running';
+      if(b.status==='running')updateTimer=setTimeout(loadUpdates,2000);
+    }
+  }).catch(updateError);
+}
+function updateError(e){$('updateProgress').textContent=e.message||String(e);$('updateStart').disabled=false;}
+function chooseUpdates(on){updateSongs.forEach(function(s){updateSelection[s.id]=on&&s.eligible;});loadUpdates();}
+function startUpdates(resume,restore,ids){
+  ids=ids||updateSongs.filter(function(s){return updateSelection[s.id]&&($('updateScope').value==='all'||!updateScopeIds||updateScopeIds.indexOf(s.id)>=0);}).map(function(s){return s.id;});
+  if(!resume&&!ids.length)return updateError('Select at least one song.');
+  $('updateStart').disabled=true;$('updateProgress').textContent=restore?'Restoring saved versions…':'Preparing song updates…';
+  updateApi('/start',{ids:ids,resume:resume,restore:restore,project:updateProject,replace_edits:$('replaceTiming').checked}).then(loadUpdates).catch(updateError);
+}
+function pauseUpdates(){updateApi('/pause',{}).then(loadUpdates).catch(updateError);}
+function restoreBatch(){if(updateBatch)startUpdates(false,true,updateBatch.songs.filter(function(s){return s.status==='done';}).map(function(s){return s.id;}));}
 
 function loadSongs(){
   $('manList').innerHTML = '<div class="note">Reading the REAPER project…</div>';
@@ -1553,6 +1614,7 @@ window.addEventListener('focus', function(){
 });
 
 refreshChecks();
+if(updateScopeIds){setSource('man');openUpdates();}
 setInterval(refreshChecks, 10000);
 // If the server is mid-import (page reopened), catch up.
 fetch('/api/status').then(function(r){

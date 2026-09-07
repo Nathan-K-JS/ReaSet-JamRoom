@@ -251,8 +251,14 @@ if song_len == 0 then
     return fail("no stems placed and no duration in job — nothing to import")
 end
 
-reaper.AddProjectMarker2(0, true, song_pos, song_pos + song_len,
+local song_id = reaper.AddProjectMarker2(0, true, song_pos, song_pos + song_len,
                          job.region_name, -1, 0)
+if job.document then
+    local J = dofile(script_dir .. "../Requirements/ReaSet_JSON.lua")
+    local doc = J.decode(job.document)
+    reaper.SetProjExtState(0, "ReaSetSong", "song:" .. song_id .. ":document", job.document)
+    reaper.SetProjExtState(0, "ReaSetSong", "song:" .. song_id .. ":revision", doc.revision or "")
+end
 log(string.format("region \"%s\" at %.1fs-%.1fs", job.region_name, song_pos,
                   song_pos + song_len))
 
@@ -266,6 +272,9 @@ end
 -- Lyrics: one note-item per synced line, extended to the next line's
 -- timestamp (empty lines act as gap terminators only). Plain fallback: one
 -- item spanning the song.
+-- Structured songs may deliberately contain no measured chord events.
+-- Keep the utility tracks available for subsequent updates regardless.
+if job.document then util_track("lyrics"); util_track("chords") end
 local nlyr = 0
 if job.lyrics_lines and #job.lyrics_lines > 0 then
     local tr = util_track("lyrics")

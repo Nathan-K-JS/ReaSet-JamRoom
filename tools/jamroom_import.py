@@ -30,12 +30,14 @@ from pathlib import Path
 
 import requests
 
+import jamroom_chart as chart_model
+
 # Stamped into the CODE, so it reports what is actually running rather than
 # what is on disk — the importer server holds its modules in memory, so this is
 # how you tell "did the update take effect?" from "is the old process still up?"
 # BUMP THIS whenever the importer changes, and quote it when handing over.
-BUILD = "v2.1"
-BUILD_DATE = "2026-09-04"
+BUILD = "v3.0"
+BUILD_DATE = "2026-09-07"
 
 # Fadr's S3 throttles each connection independently, so several transfers at
 # once finish far sooner than one at a time. Overridable via config.
@@ -824,7 +826,7 @@ def lyrics_search(artist="", title="", free="", duration=0):
     return out
 
 
-def lyrics_use_record(job, job_dir, record_id):
+def lyrics_use_record(job, job_dir, record_id, persist=True):
     """Adopt a specific LRCLIB record chosen by the operator."""
     hdr = {"User-Agent": USER_AGENT}
     try:
@@ -844,17 +846,18 @@ def lyrics_use_record(job, job_dir, record_id):
         lyr["plain"] = rec["plainLyrics"]
     job["lyrics"] = lyr
     job["stages"]["lyrics"] = True
-    save_job(job_dir, job)
+    if persist:
+        save_job(job_dir, job)
     log(f"Using lyrics: {rec.get('artistName')} - {rec.get('trackName')} "
         f"({'synced, ' + str(len(lyr['lines'])) + ' lines' if lyr['synced'] else 'plain text'})")
     # Re-check the timing against the vocal stem for the new lyrics.
-    stage_lyrics_align(job, job_dir, True)
+    stage_lyrics_align(job, job_dir, True, persist=persist)
     return lyr
 
 
 # ── Ultimate Guitar: chord charts ────────────────────────────────────────────
-# Only CHORD SYMBOLS and the key are read from a chart. The lyric text on those
-# pages is not ours to copy — lyrics come from LRCLIB, which is built for it.
+# Selected chart templates retain printed wording for chord-column matching.
+# Recording-relative lyric timing comes from the selected LRCLIB record.
 UG_UA = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
                        "AppleWebKit/537.36 (KHTML, like Gecko) "
                        "Chrome/120.0 Safari/537.36"}
@@ -1557,21 +1560,66 @@ def chords_from_chart(job, url, min_len=0.0, job_dir=None, key_offset=None):
 
 
 def build_chart_chords(job, url, job_dir=None, key_offset=None):
-    """The chart's chords, timed against this recording.
+    """Build a structured chart; uncertain passages remain readable."""
+    cached = job.get("chart_source") or {}
+    if cached.get("url") == url and cached.get("templates"):
+        templates, capo, key = cached["templates"], cached.get("capo", 0), cached.get("key", "")
+    else:
+        data = _ug_page_data(url)
+        page = data.get("store", {}).get("page", {}).get("data", {})
+        view = page.get("tab_view") or {}
+        content = (view.get("wiki_tab") or {}).get("content") or ""
+        capo = int(view.get("capo") or 0)
+        key = transpose_chord((page.get("tab") or {}).get("tonality_name") or "", capo)
+        templates = chart_model.parse_chart(content, lambda c: transpose_chord(c, capo))
+        if not any(r["anchors"] for t in templates for r in t["rows"]):
+            raise RuntimeError("This chart has no supported chord symbols. Choose another chart.")
+        job["chart_source"] = {"url": url, "templates": templates, "capo": capo, "key": key}
+    detected = detected_chords(job, job_dir)
+    if detected and not job.get("chords_detected"):
+        job["chords_detected"] = detected
+    seq = [a["symbol"] for t in templates for r in t["rows"] for a in r["anchors"]]
+    offset, fit = _best_chart_offset(detected, seq) if detected else (0, 0)
+    if key_offset is not None:
+        offset = int(key_offset) % 12
+    else:
+        # Root overlap is weak evidence: retain chart pitch unless the proposed
+        # shift has substantial support beyond the unshifted chart.
+        roots = {_root_index(_chord_parts(c)[0]) for c in seq}
+        total = sum(max(0, c["end"]-c["start"]) for c in detected) or 1
+        baseline = sum(max(0, c["end"]-c["start"]) for c in detected
+                       if _root_index(_chord_parts(c["chord"])[0]) in roots) / total
+        if fit < .85 or fit - baseline < .2:
+            offset = 0
+    doc, events = chart_model.build_document(job, templates, detected,
+                            lambda c: transpose_chord(c, offset))
+    chart_model.validate_document(doc)
+    job["chart_document"] = doc
+    matched = sum(r.get("template") is not None for t in doc["sections"] for r in t["rows"] if "template" in r)
+    return {"chords": events, "document": doc, "method": "sections",
+            "capo": capo, "key": transpose_chord(key, offset), "key_offset": offset,
+            "key_fit_pct": round(100*fit), "lines_matched": matched,
+            "chart_lines": sum(bool(r["text"]) for t in templates for r in t["rows"])}
 
-    Timing comes from the sung words wherever timed lyrics exist, because a
-    chart states exactly which word each chord falls on. Only when that is
-    impossible — an instrumental, or a song with no synced lyrics — does it
-    fall back to anchoring against the chord detector, which is less reliable.
-    """
-    try:
-        return chords_from_lyrics(job, url, job_dir=job_dir,
-                                  key_offset=key_offset)
-    except RuntimeError as why:
-        res = chords_from_chart(job, url, job_dir=job_dir,
-                                key_offset=key_offset)
-        res["fallback_reason"] = str(why)
-        return res
+
+def prepare_chart_document(job, job_dir):
+    """Shared generation path for fresh imports, repairs and bulk upgrades."""
+    url = (job.get("chart") or {}).get("url")
+    if url:
+        result = build_chart_chords(job, url, job_dir,
+                    key_offset=(job.get("chart") or {}).get("key_override"))
+        job["chords"] = result["chords"]
+        job["chart"].update({k: result[k] for k in ("method", "key", "key_offset", "lines_matched", "chart_lines")})
+    else:
+        detected = detected_chords(job, job_dir)
+        if detected:
+            job["chords_detected"] = detected
+        doc, events = chart_model.build_document(job, [], detected)
+        chart_model.validate_document(doc)
+        job["chart_document"], job["chords"] = doc, events
+    job["generation"] = {"generator": chart_model.GENERATOR,
+                         "revision": job["chart_document"]["revision"]}
+    return job["chart_document"]
 
 
 def chart_match_report(job, voc):
@@ -1815,8 +1863,9 @@ def _activity(wav_path):
     n = max(0, (len(x) - win) // hop)
     if n < 100:
         return None, None
-    idx = np.arange(n)[:, None] * hop + np.arange(win)[None, :]
-    env = np.sqrt((x[idx] ** 2).mean(axis=1))
+    energy = np.concatenate(([0.0], np.cumsum(x.astype(np.float64) ** 2)))
+    starts = np.arange(n) * hop
+    env = np.sqrt(np.maximum(0, (energy[starts + win] - energy[starts]) / win))
     env = np.convolve(env, np.ones(5) / 5, mode="same")
     thr = max(np.percentile(env, 95) * 0.10, 1e-4)
     return env > thr, hop / 22050.0
@@ -1924,7 +1973,7 @@ def _vocal_onset(vocal_path, min_voiced=0.5):
     return None
 
 
-def stage_lyrics_align(job, job_dir, force):
+def stage_lyrics_align(job, job_dir, force, persist=True):
     """Cross-correlate sung-vocal activity (from the separated vocal stem)
     against the lyric-line activity timeline (from the LRC timestamps) to find
     the offset at which they line up best. A clear off-zero peak means the
@@ -1933,8 +1982,11 @@ def stage_lyrics_align(job, job_dir, force):
     ly = job.get("lyrics") or {}
     if not ly.get("synced") or not ly.get("lines"):
         return
-    if ly.get("align") and not force:
+    if (ly.get("align") or {}).get("generator") == chart_model.GENERATOR and not force:
         return
+    # A legacy automatic shift is not evidence. Retain explicit human offsets,
+    # but do not carry an obsolete estimate when re-analysis is unavailable.
+    ly.pop("align", None)
     vocal = None
     for s in job.get("stems", []):
         if s.get("slot") == "LEAD_VOX" or s.get("fadr_name") in ("vocals lead", "vocals"):
@@ -1968,7 +2020,7 @@ def stage_lyrics_align(job, job_dir, force):
     scores = np.array([np.dot(au[max(0, -l):n - max(0, l)],
                               lrc[max(0, l):n - max(0, -l)]) for l in lags])
     best_i = int(np.argmax(scores))
-    offset = round(int(lags[best_i]) * hop_s, 3)   # +ve: lines should move later
+    offset = round(-int(lags[best_i]) * hop_s, 3)   # +ve: lines should move later
     peak = float(scores[best_i])
     # Sharpness: how much the fit worsens 2s either side of the peak. Applying
     # a big shift needs a real peak; concluding "already aligned" does not.
@@ -1987,16 +2039,12 @@ def stage_lyrics_align(job, job_dir, force):
                     if onset is not None and first_line is not None else None)
 
     shift = 0.0
-    if onset_offset is not None and abs(offset - onset_offset) > 1.5:
-        # The two disagree. Believe the landmark, and say so rather than
-        # silently picking one.
+    disagreement = onset_offset is not None and abs(offset - onset_offset) > 1.5
+    if disagreement:
         log(f"Lyric-align: the correlation says {offset:+.2f}s but the first "
             f"sung line lands at {onset:.2f}s, which needs {onset_offset:+.2f}s. "
-            f"Trusting the vocal entry — the correlation can lock onto a "
-            f"plausible but wrong peak.")
-        offset = onset_offset
-        drop = max(drop, 0.10)
-    if abs(offset) <= CORRECT_ABOVE:
+            f"Keeping the source lyric timing because those estimates disagree.")
+    elif abs(offset) <= CORRECT_ABOVE:
         log(f"Lyric-align: OK — lyric timing matches the sung vocals "
             f"(best offset {offset:+.2f}s); no correction needed.")
     elif drop >= 0.10:
@@ -2008,10 +2056,11 @@ def stage_lyrics_align(job, job_dir, force):
             f"correlation is too flat (only {drop * 100:.0f}% drop by ±2s) to "
             f"apply safely; lyrics may be for a different version. Review "
             f"timing manually.")
-    ly["align"] = {"offset": offset, "peak_drop_2s": round(drop, 3),
+    ly["align"] = {"generator": chart_model.GENERATOR, "offset": offset, "peak_drop_2s": round(drop, 3),
                    "vocal_onset": onset, "onset_offset": onset_offset,
-                   "shift": shift}
-    save_job(job_dir, job)
+                   "disagreement": disagreement, "shift": shift}
+    if persist:
+        save_job(job_dir, job)
 
 
 # ---------------------------------------------------------------- mixdown
@@ -2080,6 +2129,7 @@ def lua_quote(s):
 def write_reaper_job(job, job_dir):
     """Emit job_for_reaper.lua — a plain Lua data file so the apply script
     needs no JSON parser. Paths are absolute with forward slashes."""
+    prepare_chart_document(job, job_dir)
     jd = str(job_dir.resolve()).replace("\\", "/")
     L = ["-- generated by jamroom_import.py — do not edit", "return {",
          f"  schema = 1,",
@@ -2087,6 +2137,7 @@ def write_reaper_job(job, job_dir):
          f"  duration = {job.get('duration') or 0},",
          f"  tempo = {((job.get('fadr') or {}).get('tempo')) or 'nil'},",
          f"  job_dir = {lua_quote(jd)},",
+         f"  document = {lua_quote(json.dumps(job.get("chart_document"), ensure_ascii=True))},",
          "  slots = {"]
     for s in job.get("slots", []):
         L.append(f"    {{ slot = {lua_quote(s['slot'])}, "
@@ -2112,6 +2163,7 @@ def write_reaper_job(job, job_dir):
     L.append("}")
     with open(job_dir / "job_for_reaper.lua", "w", encoding="utf-8") as f:
         f.write("\n".join(L) + "\n")
+    save_job(job_dir, job)
 
 
 def stage_apply(job, job_dir, cfg, force):

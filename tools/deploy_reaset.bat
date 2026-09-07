@@ -7,7 +7,9 @@ set DEPLOYED=0
 for %%D in ("%APPDATA%\REAPER\reaper_www_root" "%APPDATA%\REAPER\Plugins\reaper_www_root") do (
   if exist "%%~D" (
     copy /Y "%REPO%\ReaSet.html" "%%~D\ReaSet.html" >nul
+    if errorlevel 1 exit /b 1
     copy /Y "%REPO%\Sortable.min.js" "%%~D\Sortable.min.js" >nul
+    if errorlevel 1 exit /b 1
     echo   updated %%~D
     set DEPLOYED=1
   )
@@ -15,7 +17,9 @@ for %%D in ("%APPDATA%\REAPER\reaper_www_root" "%APPDATA%\REAPER\Plugins\reaper_
 if "%DEPLOYED%"=="0" (
   mkdir "%APPDATA%\REAPER\reaper_www_root" 2>nul
   copy /Y "%REPO%\ReaSet.html" "%APPDATA%\REAPER\reaper_www_root\ReaSet.html" >nul
+    if errorlevel 1 exit /b 1
   copy /Y "%REPO%\Sortable.min.js" "%APPDATA%\REAPER\reaper_www_root\Sortable.min.js" >nul
+    if errorlevel 1 exit /b 1
   echo   created %APPDATA%\REAPER\reaper_www_root and copied files there
   echo   NOTE: if ReaSet already worked from a different folder, check
   echo         REAPER: Options - Preferences - Control/OSC/web for the web root

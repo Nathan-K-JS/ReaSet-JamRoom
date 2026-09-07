@@ -1,0 +1,4 @@
+requests
+numpy
+lupa==2.8
+playwright==1.62.0

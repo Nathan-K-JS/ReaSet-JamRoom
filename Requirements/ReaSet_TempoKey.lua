@@ -100,12 +100,18 @@ local function item_guid(it)
     return g
 end
 
+local function take_guid(tk)
+    local _,g=reaper.GetSetMediaItemTakeInfo_String(tk,"GUID","",false)
+    return "take:" .. g
+end
+
 -- ─── Applied-offset bookkeeping (with project-extstate mirror) ───────────────
 
 -- guid -> { off = semitones, pp = original B_PPITCH, pm = original I_PITCHMODE }
 -- We must own three things per item, not one: the pitch offset, the
 -- "preserve pitch when changing rate" flag, and the stretch algorithm.
 local applied = {}
+local owner = reaper.EnumProjects(-1, "")
 
 -- Which time-stretch algorithm to force while tempo is changed. REAPER's
 -- project default is SoundTouch (DEFPITCHMODE 0), which smears and wobbles
@@ -140,7 +146,7 @@ end
 local function persist_applied()
     local parts = {}
     for g, rec in pairs(applied) do
-        if rec.off ~= 0 then parts[#parts + 1] = g .. "=" .. rec.off end
+        parts[#parts + 1] = g .. "=" .. rec.off .. "," .. rec.pp .. "," .. rec.pm
     end
     reaper.SetProjExtState(0, SEC, "applied", table.concat(parts, ";"))
 end
@@ -150,8 +156,11 @@ local function all_audio_items(fn)
         local tr = reaper.GetTrack(0, ti)
         for ii = 0, reaper.CountTrackMediaItems(tr) - 1 do
             local it = reaper.GetTrackMediaItem(tr, ii)
-            local tk = reaper.GetActiveTake(it)
-            if tk and not reaper.TakeIsMIDI(tk) then fn(it, tk, ti) end
+            local active = reaper.GetActiveTake(it)
+            for n=0,reaper.CountTakes(it)-1 do
+                local tk=reaper.GetTake(it,n)
+                if tk and not reaper.TakeIsMIDI(tk) then fn(it,tk,ti,tk==active) end
+            end
         end
     end
 end
@@ -162,13 +171,19 @@ local function recover_leftovers()
     if not blob or blob == "" then return end
     local leftover = {}
     for pair in blob:gmatch("[^;]+") do
-        local g, off = pair:match("^(.-)=(-?[%d%.]+)$")
-        if g and tonumber(off) then leftover[g] = tonumber(off) end
+        local g, values = pair:match("^(.-)=(.*)$")
+        if g then
+            local off, pp, pm=values:match("^(-?[%d%.]+),(-?[%d%.]+),(-?[%d%.]+)$")
+            leftover[g]={off=tonumber(off or values) or 0,pp=tonumber(pp),pm=tonumber(pm)}
+        end
     end
     local n = 0
     all_audio_items(function(it, tk)
-        local off = leftover[item_guid(it)]
-        if off and off ~= 0 then
+        local rec = leftover[take_guid(tk)] or (tk==reaper.GetActiveTake(it) and leftover[item_guid(it)])
+        if rec then
+            local off = rec.off
+            if rec.pp then reaper.SetMediaItemTakeInfo_Value(tk,"B_PPITCH",rec.pp) end
+            if rec.pm then reaper.SetMediaItemTakeInfo_Value(tk,"I_PITCHMODE",rec.pm) end
             reaper.SetMediaItemTakeInfo_Value(tk, "D_PITCH",
                 reaper.GetMediaItemTakeInfo_Value(tk, "D_PITCH") - off)
             n = n + 1
@@ -229,11 +244,11 @@ local function apply_pitch(song, semis, excl_csv, stretching)
     local slots = slot_by_trackidx()
     local touched = 0
     local new_applied = {}
-    all_audio_items(function(it, tk, tidx)
-        local g = item_guid(it)
+    all_audio_items(function(it, tk, tidx, active)
+        local g = take_guid(tk)
         local rec = applied[g]
         local in_song = false
-        if song then
+        if song and active then
             local p = reaper.GetMediaItemInfo_Value(it, "D_POSITION")
             local l = reaper.GetMediaItemInfo_Value(it, "D_LENGTH")
             in_song = (p < song.e and (p + l) > song.s)
@@ -300,6 +315,7 @@ end
 
 local s_hb, s_hb_next = 0, 0
 local s_last_want = nil
+local s_last_csc = -1
 
 local function main_loop()
     -- Remote shutdown (tooling/updates): fire-and-forget quit flag lets a new
@@ -307,6 +323,18 @@ local function main_loop()
     if reaper.GetExtState(SEC, "quit") == "1" then
         reaper.SetExtState(SEC, "quit", "", false)
         return   -- atexit runs cleanup
+    end
+    local active_project = reaper.EnumProjects(-1, "")
+    if active_project ~= owner then
+        if reaper.ValidatePtr(owner, "ReaProject*") then
+            reaper.SelectProjectInstance(owner)
+            set_rate(1.0); apply_pitch(nil, 0, "", false)
+            reaper.SelectProjectInstance(active_project)
+        end
+        applied = {}; owner = active_project
+        recover_leftovers()
+        cur = { rate = 1, semis = 0, excl = "", s = -1, e = -1, items = 0 }
+        reaper.SetExtState(SEC, "want", "", false)
     end
     local now = reaper.time_precise()
     if now >= s_hb_next then
@@ -320,6 +348,20 @@ local function main_loop()
     local song = song_at(pos)
 
     local want = reaper.GetExtState(SEC, "want")
+    local _, project_id = reaper.GetProjExtState(0,"ReaSet","projectId")
+    local settings_key = song and ("settings:" .. string.format("%.3f:%.3f",song.s,song.e))
+    if want ~= "" then
+        local payload, target_project = want:match("^(.*)|([^|]+)$")
+        if target_project == project_id and payload and settings_key then
+            local ss = payload:match("^[^|]+|[^|]+|[^|]*|([^|]+)|")
+            if tonumber(ss) and math.abs(tonumber(ss)-song.s)<.001 then
+                reaper.SetProjExtState(0,SEC,settings_key,payload)
+                reaper.MarkProjectDirty(0)
+            end
+        end
+        reaper.SetExtState(SEC,"want","",false)
+    end
+    if settings_key then local _,saved=reaper.GetProjExtState(0,SEC,settings_key); want=saved else want="" end
     local w_rate, w_semis, w_excl, w_s, w_e = 1.0, 0, "", nil, nil
     if want ~= "" then
         local r, sm, ex, ss, se =
@@ -332,7 +374,7 @@ local function main_loop()
 
     -- The want only applies while ITS song is the active one; anywhere else
     -- everything is neutral. Song identity is by time, tolerating tiny drift.
-    local active_matches = song and w_s and math.abs(song.s - w_s) < 0.05
+    local active_matches = song and w_s and w_e and math.abs(song.s - w_s) < 0.05 and math.abs(song.e-w_e)<0.05
     local t_rate  = active_matches and w_rate or 1.0
     local t_semis = active_matches and w_semis or 0
     local t_excl  = active_matches and w_excl or ""
@@ -340,7 +382,7 @@ local function main_loop()
 
     local song_s = song and song.s or -1
     if t_rate ~= cur.rate or t_semis ~= cur.semis or t_excl ~= cur.excl
-            or song_s ~= cur.s then
+            or song_s ~= cur.s or reaper.GetProjectStateChangeCount(0) ~= s_last_csc then
         set_rate(t_rate)
         local stretching = math.abs(t_rate - 1.0) > 0.0005
         local items = apply_pitch(song, t_semis, t_excl, stretching)
@@ -349,6 +391,7 @@ local function main_loop()
                 name = song and song.name or "" }
         publish_state()
         if t_semis ~= 0 or next(applied) then reaper.UpdateArrange() end
+        s_last_csc = reaper.GetProjectStateChangeCount(0)
     end
 
     reaper.defer(main_loop)
@@ -357,8 +400,12 @@ end
 -- ─── Boot / exit ─────────────────────────────────────────────────────────────
 
 local function cleanup()
+    local active_project = reaper.EnumProjects(-1, "")
+    if not reaper.ValidatePtr(owner, "ReaProject*") then return end
+    reaper.SelectProjectInstance(owner)
     set_rate(1.0)
     apply_pitch(nil, 0, "", false)
+    reaper.SelectProjectInstance(active_project)
     reaper.SetExtState(SEC, "heartbeat", "", false)
     reaper.SetExtState(SEC, "state", "", false)
     reaper.UpdateArrange()

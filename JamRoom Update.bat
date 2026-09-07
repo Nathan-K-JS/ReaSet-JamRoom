@@ -23,7 +23,7 @@ if "%BEFORE%"=="" (
 )
 
 echo Fetching the latest Jam Room version...
-git pull
+git pull --ff-only
 if errorlevel 1 (
   echo.
   echo UPDATE FAILED - see the message above. Nothing was changed, and your
@@ -46,13 +46,18 @@ echo Updated files:
 type "%TEMP%\jr_changed.txt"
 
 findstr /i /c:"ReaSet.html" /c:"Sortable.min.js" "%TEMP%\jr_changed.txt" >nul && set NEED_BROWSER=1
-findstr /i /c:"Requirements/ReaSet_JamRoom.lua" /c:"Requirements/ReaSet_NativeLoop.lua" /c:"Requirements/X-Raym" /c:"Requirements/ReaSet_Startup.lua" "%TEMP%\jr_changed.txt" >nul && set NEED_REAPER=1
+findstr /i /c:"Requirements/" /c:"tools/jamroom_" "%TEMP%\jr_changed.txt" >nul && set NEED_REAPER=1
 findstr /i /c:"tools/" "%TEMP%\jr_changed.txt" >nul && set NEED_IMPORTER=1
 
 :nochange
 echo.
 echo Deploying ReaSet to REAPER's web interface...
 call "%CD%\tools\deploy_reaset.bat"
+if errorlevel 1 (
+  echo Web deployment failed. Check the copy error above before refreshing ReaSet.
+  pause
+  exit /b 1
+)
 echo.
 echo Updating yt-dlp (YouTube changes break downloading every few weeks)...
 yt-dlp -U

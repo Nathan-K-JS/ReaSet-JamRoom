@@ -32,10 +32,12 @@
 --   ReaSetCLRepair/song:<regionId>:<scope>:reviewed = "1" after human check
 -- ─────────────────────────────────────────────────────────────────────────────
 
+local dir = debug.getinfo(1,"S").source:match("@?(.*[\\/])") or ""
+local J = dofile(dir .. "ReaSet_JSON.lua")
 local SEC        = "ReaSetCL"
 local REPAIR_SEC = "ReaSetCLRepair"
 local CHUNK_SIZE = 800
-local MAX_CHUNKS = 64          -- ~51 KB: ample for one song
+local MAX_CHUNKS = 256          -- ~51 KB: ample for one song
 local HB_PERIOD  = 1.0
 local LOOP_RGN   = "ReaSet Loop"
 
@@ -238,12 +240,26 @@ local function build_json()
     end
     local lyrics_json = table.concat(parts, ",")
 
+    local _, document = reaper.GetProjExtState(0, "ReaSetSong", "song:" .. song.id .. ":document")
+    local _, project = reaper.GetProjExtState(0, "ReaSet", "projectId")
+    local chart_json = "null"
+    if document ~= "" then
+        local doc = J.decode(document)
+        -- Legacy checkpoint repairs apply consistently to the displayed words.
+        for _, section in ipairs(doc.sections or {}) do
+            for _, row in ipairs(section.rows or {}) do
+                if row.start then row.start = mapped_relative(row.start, ly_anchors, song.e-song.s) end
+                if row["end"] then row["end"] = mapped_relative(row["end"], ly_anchors, song.e-song.s) end
+            end
+        end
+        chart_json = J.encode(doc)
+    end
     return string.format(
         '{"schema":1,"song":{"id":%d,"name":"%s","start":%.3f,"end":%.3f},'
         .. '"chords":[%s],"lyrics":[%s],'
-        .. '"repair":{"chords":%s,"lyrics":%s,'
+        .. '"document":%s,"project":"%s","repair":{"chords":%s,"lyrics":%s,'
         .. '"reviewed":{"chords":%s,"lyrics":%s}}}',
-        song.id, jesc(song.name), song.s, song.e, chords_json, lyrics_json,
+        song.id, jesc(song.name), song.s, song.e, chords_json, lyrics_json, chart_json, jesc(project),
         anchors_json(ch_anchors), anchors_json(ly_anchors),
         load_reviewed(song.id, "chords") and "true" or "false",
         load_reviewed(song.id, "lyrics") and "true" or "false")
@@ -308,6 +324,68 @@ local function changed_anchors(song, scope, action, src, actual)
     return anchors
 end
 
+local function section_command(f, song)
+    local key = "song:" .. song.id .. ":"
+    local _, project = reaper.GetProjExtState(0,"ReaSet","projectId")
+    if project ~= f[11] then return repair_reply(f[1],false,"Project changed; reopen repair.") end
+    local _, blob = reaper.GetProjExtState(0,"ReaSetSong",key .. "document")
+    local doc = J.decode(blob)
+    if doc.revision ~= f[10] then return repair_reply(f[1],false,"Chart changed; reopen repair.") end
+    local index, a, b = tonumber(f[4]), tonumber(f[5]), tonumber(f[6])
+    local section = index and doc.sections[index]
+    if not section or not a or not b or a < 0 or b <= a or b > song.e-song.s then
+        return repair_reply(f[1],false,"Choose valid section boundaries.")
+    end
+    local previous, following = doc.sections[index-1], doc.sections[index+1]
+    if (previous and a <= previous.start) or (following and b >= following["end"]) then
+        return repair_reply(f[1],false,"That boundary would cross another section.")
+    end
+    local old_a, old_b = section.start, section["end"]
+    local function retime(part, start, finish)
+        local before, length = part.start, part["end"]-part.start
+        for _,row in ipairs(part.rows or {}) do
+            if row.start then row.start=start+(row.start-before)/length*(finish-start) end
+            if row["end"] then row["end"]=start+(row["end"]-before)/length*(finish-start) end
+        end
+        part.start,part["end"]=start,finish
+    end
+    if previous and (math.abs(previous["end"]-old_a)<.01 or a<previous["end"]) then retime(previous,previous.start,a) end
+    if following and (math.abs(following.start-old_b)<.01 or b>following.start) then retime(following,b,following["end"]) end
+    retime(section,a,b)
+    section.label = (f[7] and f[7] ~= "") and f[7] or section.label
+    local template = tonumber(f[8]); local pattern = f[12] or ""
+    if template and template > 0 and doc.templates[template] then
+        local t=doc.templates[template]; section.progression=J.array()
+        for _,row in ipairs(t.rows or {}) do
+            for repeat_index=1,(row["repeat"] or 1) do
+                for _,anchor in ipairs(row.anchors or {}) do
+                    section.progression[#section.progression+1]=anchor.symbol
+                end
+            end
+        end
+        -- New progression cannot imply word positions on different lyrics.
+        for _,row in ipairs(section.rows or {}) do row.anchors=J.array(); row.progression=nil end
+        section.evidence="chart"
+    end
+    if pattern ~= "" then
+        section.progression=J.array()
+        for symbol in pattern:gmatch("[^,%s]+") do section.progression[#section.progression+1]=symbol end
+        for _,row in ipairs(section.rows or {}) do row.anchors=J.array(); row.progression=nil end
+        section.evidence="manual"
+    end
+    section["repeat"] = math.floor(math.max(1,math.min(32,tonumber(f[9]) or 1)))
+    section.confidence="section checked"; section.event_timing="unresolved"
+    doc.revision=doc.revision .. ":" .. tostring(reaper.time_precise())
+    doc.manual=true
+    reaper.Undo_BeginBlock()
+    reaper.SetProjExtState(0,"ReaSetSong",key .. "document",J.encode(doc))
+    reaper.SetProjExtState(0,"ReaSetSong",key .. "revision",doc.revision)
+    reaper.MarkProjectDirty(0)
+    reaper.Undo_EndBlock("Edit chart section: " .. section.label,-1)
+    repair_reply(f[1],true,"Section saved. Other passages retained.")
+    return true
+end
+
 local function process_repair_command(want, song)
     local f = command_fields(want)
     local nonce, action, song_id, scope = f[1], f[2], tonumber(f[3]), f[4]
@@ -316,6 +394,7 @@ local function process_repair_command(want, song)
         return repair_reply(nonce, false,
             "Open the song you want to repair, then try again.")
     end
+    if action == "section" then return section_command(f,song) end
     if scope ~= "lyrics" and scope ~= "chords" and scope ~= "both" then
         return repair_reply(nonce, false, "Choose lyrics, chords, or both.")
     end
@@ -354,9 +433,17 @@ local function process_repair_command(want, song)
 end
 
 -- ─── Publishing (same chunked pattern as the Jam Room bridge) ────────────────
-local s_gen, s_last_json, s_last_chunks = 0, nil, 0
+local s_gen, s_last_json, s_last_chunks = math.floor(reaper.time_precise()*1000), nil, 0
 
 local function publish(json)
+    json = json:gsub("[\128-\255]+", function(part)
+        local out={}
+        for _, cp in utf8.codes(part) do
+            if cp < 65536 then out[#out+1]=string.format("\\u%04x",cp)
+            else cp=cp-65536; out[#out+1]=string.format("\\u%04x\\u%04x",55296+math.floor(cp/1024),56320+cp%1024) end
+        end
+        return table.concat(out)
+    end)
     s_gen = s_gen + 1
     local n = math.ceil(#json / CHUNK_SIZE)
     if n > MAX_CHUNKS then
@@ -403,7 +490,9 @@ local function main_loop()
     local want = reaper.GetExtState(SEC, "want")
     if want ~= "" and want ~= s_last_want then
         s_last_want = want
-        s_force = process_repair_command(want, song) and true or false
+        local ok, result = pcall(process_repair_command,want,song)
+        if not ok then repair_reply(command_fields(want)[1],false,"Chart could not be edited; reopen repair.") end
+        s_force = ok and result and true or false
         -- Consume the command. This prevents an interrupted/restarted script
         -- from replaying a stale request while leaving the separate confirmed
         -- reply available for the browser to read.
@@ -415,7 +504,8 @@ local function main_loop()
         s_force = false
         s_last_csc, s_last_proj, s_last_song = csc, proj, song_id
         local ok, json = pcall(build_json)
-        if ok and json ~= s_last_json then
+        if not ok then reaper.ShowConsoleMsg(tostring(json) .. "\n"); json = '{"schema":1,"song":null,"error":"Chart could not be read; check the REAPER console"}' end
+        if json ~= s_last_json then
             s_last_json = json
             publish(json)
         end

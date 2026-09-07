@@ -3527,6 +3527,13 @@
             font-family: var(--font-mono);
         }
 
+        .structured-chart {font-size:clamp(18px,2.4vw,30px)!important;text-align:left;overflow:auto;padding:16px!important;}
+        .structured-chart h2{margin:16px 0;font-size:1.3em}.sc-line{margin:18px 0;white-space:pre-wrap;line-height:1.5}
+        .sc-word{display:inline-flex;flex-direction:column;vertical-align:bottom;max-width:100%}.sc-word b{color:var(--accent,#8edbcc);font-size:.9em}
+        .sc-progression{display:flex;gap:18px;flex-wrap:wrap;font-weight:bold;margin:12px 0}.sc-progression span{padding:8px;border:1px solid #8886;border-radius:8px}
+        .sc-nav{display:flex;gap:8px;justify-content:space-between}.sc-note,.sc-next{font-size:.65em;opacity:.75;margin:14px 0}
+        #section-editor{display:grid;gap:8px}#section-editor.hide{display:none}#section-editor label{display:flex;justify-content:space-between;gap:8px}
+        #section-editor input,#section-editor select{min-width:0;max-width:65%;font-size:16px;padding:8px}
     </style>
 </head>
 
@@ -3975,6 +3982,7 @@
     <!-- Timing repair stays out of the normal performance view. It is opened
          deliberately from Lyrics/Chords and speaks in musical, not technical,
          terms; offsets and interpolation remain implementation details. -->
+    <button onclick="openSongUpdates()" style="position:fixed;bottom:8px;right:8px;z-index:900;font-size:12px">Update song charts</button>
     <div id="timing-repair" class="hide" role="dialog" aria-modal="true"
          aria-labelledby="tr-title">
         <div class="tr-head">
@@ -3984,6 +3992,17 @@
         <div class="tr-help">Play or pause where a line or chord should begin,
             then choose what should be showing at that moment.</div>
         <button class="tr-nearby" onclick="repairRefreshChoices()">Show choices near the playhead</button>
+        <div id="section-editor" class="hide">
+            <label>Section <select id="section-choice" onchange="sectionEditorSelect()"></select></label>
+            <label>Name <input id="section-label"></label>
+            <label>Starts (seconds) <input id="section-start" type="number" min="0" step="0.1"></label>
+            <button onclick="sectionMarkNow()">This section starts now</button>
+            <label>Ends (seconds) <input id="section-end" type="number" min="0" step="0.1"></label>
+            <select id="section-template"></select>
+            <label>Progression (optional) <input id="section-pattern" placeholder="Am F C G"></label>
+            <label>Repeats <input id="section-repeat" type="number" min="1" max="32" value="1"></label>
+            <button class="tr-primary" onclick="sectionSave()">Save section</button>
+        </div>
         <div id="tr-choices"></div>
         <button id="tr-mark" class="tr-primary" onclick="repairMarkNow()" disabled>
             This should start now
@@ -4251,7 +4270,7 @@
         wwr_req_recur("REGION", 1000);
         wwr_req_recur("MARKER", 1000);
         // X-Raym exact approach: poll PROJEXTSTATE every 10ms batched
-        wwr_req_recur("GET/PROJEXTSTATE/XR_Lyrics/text;GET/PROJEXTSTATE/XR_Lyrics/next", 10);
+        wwr_req_recur("GET/PROJEXTSTATE/XR_Lyrics/text;GET/PROJEXTSTATE/XR_Lyrics/next", 250);
         wwr_req_recur("GET/PROJEXTSTATE/XR_Chords/text", 200);
         // Auto-detect ReaSet_NativeLoop.lua: one-shot probe, plus refresh every 10s
         wwr_req("GET/EXTSTATE/ReaSet/nativeLoopReady");
@@ -4347,7 +4366,8 @@
             }
             // Project has no ID yet — stamp one. Requires the project to be SAVED
             // to persist; until then this session still behaves correctly.
-            if (g_stableId || !g_lastFingerprint || _projectIdWriting) return;
+            if (g_stableId) { g_stableId = null; g_projectKey = null; g_tkSongKey = null; }
+            if (!g_lastFingerprint || _projectIdWriting) return;
             _projectIdWriting = true;
             var id = 'x' + Date.now().toString(36) +
                      Math.floor(Math.random() * 1679616).toString(36);
@@ -4372,6 +4392,7 @@
             if (!setlists[currentSetlistName]) currentSetlistName = "Default";
             try { autoSortSetlists = JSON.parse(localStorage.getItem(_autoSortKey()) || '{}'); }
             catch(e) { autoSortSetlists = {}; }
+            if (typeof tkLoadSettings === "function") tkLoadSettings();
             if (typeof loadPreciseSettings === 'function') loadPreciseSettings();
             displayList = []; initialized = false;
             updateSetlistDropdown();
@@ -4872,6 +4893,9 @@
             trSetStatus('', '');
             repairRefreshChoices();
             repairRenderSummary();
+            sectionEditorOpen(true);
+            document.getElementById("tr-choices").classList.toggle("hide", !!g_clData.document);
+            document.getElementById("tr-mark").classList.toggle("hide", !!g_clData.document);
             return true;
         }
         function repairTryAutoOpen(scope, attempts) {
@@ -4904,7 +4928,7 @@
                 return;
             }
             var cur = clIndexAtOrBefore(list, currentPos);
-            if (cur < 0) cur = 0;
+            if(cur<0)cur=0;
             var radius = g_tr.scope === 'lyrics' ? 3 : 5;
             var a = Math.max(0, cur - radius), b = Math.min(list.length, cur + radius + 1);
             var html = '';
@@ -5089,7 +5113,7 @@
             if (!song) return;
             var st = tkGet(song);
             var val = st.rate.toFixed(4) + '|' + st.semis + '|' + st.excl.join(',')
-                    + '|' + song.start.toFixed(3) + '|' + song.end.toFixed(3);
+                    + '|' + song.start.toFixed(3) + '|' + song.end.toFixed(3) + '|' + (g_stableId || '');
             wwr_req('SET/EXTSTATE/ReaSetTK/want/' + encodeURIComponent(val));
             tkRenderPanel();
         }
@@ -5155,6 +5179,10 @@
                               g_tkState.bpm !== st.bpm ||
                               g_tkState.pp !== st.pp;
                 g_tkState = st;
+                var activeSong=tkActiveSong();
+                if(activeSong && Math.abs(activeSong.start-st.songStart)<.05){
+                    var setting=tkGet(activeSong);setting.rate=st.rate;setting.semis=st.semis;setting.excl=st.excl.split(',').filter(Boolean);
+                }
                 if (changed) { tkRenderPanel(); renderChordsView(); }
             }
         }
@@ -5164,7 +5192,7 @@
             var k = song ? (song.displayName || song.name) : null;
             if (k !== g_tkSongKey) {
                 g_tkSongKey = k;
-                if (song) tkSendWant();
+                // Observing a song never sends this tablet's old musical settings.
                 tkRenderPanel();
             }
         }
@@ -5654,7 +5682,7 @@
             // Prefer the full timeline (lookahead + lead time); the X-Raym
             // single-item path below is the fallback when it is not running.
             var lyricsContent = document.getElementById("lyrics-content");
-            if (lyricsContent && g_clData && g_clData.lyrics && g_clData.lyrics.length) {
+            if (lyricsContent && g_clData && (g_clData.document || g_clData.lyrics && g_clData.lyrics.length)) {
                 if (!document.getElementById('lyrics-live')) {
                     lyricsContent.innerHTML = '<div id="lyrics-live"></div>';
                 }
@@ -8974,9 +9002,10 @@
                 if (val === '') return;
                 var parts = val.split(':');
                 var gen = parts[0], count = parseInt(parts[1]);
-                if (isNaN(count)) return;
+                if (!Number.isInteger(count) || count < 1 || count > 256) return;
+                if (g_clFetch && Date.now() - g_clFetch.at > 3000) g_clFetch = null;
                 if (gen !== g_clDataGen && (!g_clFetch || g_clFetch.gen !== gen)) {
-                    g_clFetch = { gen: gen, count: count, chunks: [], got: 0 };
+                    g_clFetch = { gen: gen, count: count, chunks: [], got: 0, at: Date.now() };
                     var req = [];
                     for (var i = 0; i < count; i++) req.push('GET/EXTSTATE/ReaSetCL/d' + i);
                     if (req.length) wwr_req(req.join(';'));
@@ -8994,6 +9023,7 @@
                         var f = g_clFetch; g_clFetch = null;
                         try {
                             var d = JSON.parse(f.chunks.join(''));
+                            if (d.schema !== 1 || (d.song && (!Array.isArray(d.chords) || !Array.isArray(d.lyrics)))) throw Error("Invalid timeline");
                             g_clDataGen = f.gen;
                             g_clData = d.song ? d : null;
                         } catch (e) { g_clData = null; }
@@ -9001,6 +9031,7 @@
                         syncPreciseFollowSong();
                         renderChordsView(); renderLyricsView();
                         repairRenderSummary();
+                        if (g_tr.open && g_clData && g_clData.document) sectionEditorOpen(false);
                         if (g_trAutoScope && g_clData && !g_trAutoOpening) {
                             var autoScope = g_trAutoScope;
                             // REAPER's heartbeat and timeline chunks can arrive
@@ -9036,9 +9067,88 @@
         }
 
         // ── Chord views ──────────────────────────────────────────────────────
+        var g_sectionBrowse = null;
+        function chartSectionIndex(doc) {
+            var t=currentPos-g_clData.song.start+getLead()*((g_tkState && g_tkState.rate)||1);
+            for(var i=0;i<doc.sections.length;i++) if(t>=doc.sections[i].start && t<doc.sections[i].end) return i;
+            return t<doc.sections[0].start?0:doc.sections.length-1;
+        }
+        function chartNavigate(delta) {
+            var doc=g_clData && g_clData.document;if(!doc)return;
+            g_sectionBrowse=Math.max(0,Math.min(doc.sections.length-1,(g_sectionBrowse===null?chartSectionIndex(doc):g_sectionBrowse)+delta));
+            renderChordsView();renderLyricsView();
+        }
+        function chartFollow(){g_sectionBrowse=null;renderChordsView();renderLyricsView();}
+        function renderStructuredChart(host, lyricsOnly) {
+            var doc=g_clData.document;if(!doc || !doc.sections || !doc.sections.length)return false;
+            if(host.dataset.song!==String(g_clData.song.id)){g_sectionBrowse=null;host.dataset.song=String(g_clData.song.id);}
+            var index=g_sectionBrowse===null?chartSectionIndex(doc):Math.min(g_sectionBrowse,doc.sections.length-1), section=doc.sections[index];
+            var semis=(g_tkState && tkAlive() && Math.abs(g_tkState.songStart-g_clData.song.start)<.05?g_tkState.semis:0)-getCapo();
+            function chord(x){return trEsc(transposeChordName(x,semis));}
+            function progression(seq){return '<div class="sc-progression">'+(seq||[]).map(function(x){return '<span>'+chord(x)+'</span>';}).join('')+'</div>';}
+            var html='<div class="sc-nav"><button onclick="chartNavigate(-1)">← Previous</button><button onclick="chartFollow()">'+(g_sectionBrowse===null?'Following':'Resume following')+'</button><button onclick="chartNavigate(1)">Next →</button></div><h2>'+trEsc(section.label)+'</h2>';
+            if(!clAlive())html+='<div class="sc-note">Disconnected · saved chart</div>';
+            else if(currentPos<g_clData.song.start || currentPos>=g_clData.song.end)html+='<div class="sc-note">Loading the next song…</div>';
+            if(!lyricsOnly || section.kind==='instrumental'){
+                if(section.kind==='instrumental' || !(section.rows||[]).some(function(r){return r.anchors && r.anchors.length;}))html+=progression(section.progression);
+                if(section.repeat>1)html+='<div>Repeat ×'+section.repeat+'</div>';
+                if(!section.progression || !section.progression.length)html+='<div class="sc-note">Chords not supplied for this passage</div>';
+            }
+            (section.rows||[]).forEach(function(row){
+                if(!row.text)return;
+                var anchors=lyricsOnly?[]:(row.anchors||[]).slice().sort(function(a,b){return a.offset-b.offset;}),words=String(row.text),content='',cursor=0;
+                if(!anchors.length)content=trEsc(words);
+                else{
+                    if(anchors[0].offset>0)content+='<span class="sc-word"><b>&nbsp;</b><span>'+trEsc(words.slice(0,anchors[0].offset))+'</span></span>';
+                    anchors.forEach(function(a,i){
+                        var at=Math.max(cursor,Math.min(words.length,a.offset)),end=i+1<anchors.length?Math.max(at,Math.min(words.length,anchors[i+1].offset)):words.length;
+                        content+='<span class="sc-word"><b>'+chord(a.symbol)+'</b><span>'+trEsc(words.slice(at,end))+'</span></span>';cursor=end;
+                    });
+                }
+                html+='<div class="sc-line">'+(!lyricsOnly && row.progression?progression(row.progression):'')+content+'</div>';
+            });
+            html+='<div class="sc-note">'+(section.evidence==='detected'?'Estimated harmony from audio · ':'')+(section.confidence==='section checked'?'Section checked':'Automatic passage timing')+'</div>';
+            if(index+1<doc.sections.length)html+='<div class="sc-next">Next: '+trEsc(doc.sections[index+1].label)+'</div>';
+            html+='<button onclick="openTimingRepair(\'lyrics\')">Fix this section</button>';
+            if(host._chartHtml!==html || !host.classList.contains('structured-chart')){host._chartHtml=html;host.innerHTML=html;host.classList.add('structured-chart');}
+            if(canvasOpen){
+                var canvas=document.getElementById(lyricsOnly?'cw-content-lyrics':'cw-content-chords');
+                if(canvas){var compact='<small>'+trEsc(section.label)+'</small><br>'+ (lyricsOnly?(section.rows||[]).filter(function(r){return r.text;}).map(function(r){return trEsc(r.text);}).join('<br>'):(section.progression||[]).map(chord).join(' · '));if(canvas.innerHTML!==compact)canvas.innerHTML=compact;}
+            }
+            return true;
+        }
+        function sectionEditorOpen(selectCurrent){
+            var doc=g_clData && g_clData.document,host=document.getElementById('section-editor');
+            if(!doc){host.classList.add('hide');return;}host.classList.remove('hide');
+            var select=document.getElementById('section-choice'),value=selectCurrent?chartSectionIndex(doc):Number(select.value)||0;
+            select.innerHTML=doc.sections.map(function(s,i){return '<option value="'+i+'">'+trEsc(s.label)+' · '+trTime(s.start)+'</option>';}).join('');
+            select.value=String(Math.min(value,doc.sections.length-1));sectionEditorSelect();
+        }
+        function sectionEditorSelect(){
+            var doc=g_clData.document,s=doc.sections[Number(document.getElementById('section-choice').value)];
+            document.getElementById('section-label').value=s.label;
+            document.getElementById('section-start').value=s.start.toFixed(2);document.getElementById('section-end').value=s.end.toFixed(2);
+            document.getElementById('section-repeat').value=s.repeat||1;document.getElementById('section-pattern').value='';
+            document.getElementById('section-template').innerHTML='<option value="0">Keep current content</option>'+(doc.templates||[]).map(function(t,i){return '<option value="'+(i+1)+'">Use '+trEsc(t.label)+' progression</option>';}).join('');
+        }
+        function sectionMarkNow(){document.getElementById('section-start').value=Math.max(0,currentPos-g_clData.song.start).toFixed(2);}
+        function sectionSave(){
+            if(!clAlive() || !g_clData || Number(g_clData.song.id)!==g_tr.songId)return trSetStatus('Song changed; reopen repair.');
+            var nonce=Date.now().toString(36)+Math.random().toString(36).slice(2,7);
+            function field(id){return document.getElementById(id).value.replace(/[|\r\n]/g,' ');}
+            var fields=[nonce,'section',g_tr.songId,Number(field('section-choice'))+1,field('section-start'),field('section-end'),field('section-label'),field('section-template'),field('section-repeat'),g_clData.document.revision,g_clData.project,field('section-pattern')];
+            g_tr.pending=nonce;wwr_req('SET/EXTSTATE/ReaSetCL/want/'+encodeURIComponent(fields.join('|')));trSetStatus('Saving section…');
+            setTimeout(function(){if(g_tr.pending===nonce){g_tr.pending=null;trSetStatus('REAPER did not confirm the section. Check the connection and try again.','bad');}},5000);
+        }
+        function openSongUpdates(){
+            window.open(location.protocol+'//'+location.hostname+':8765/#updates='+encodeURIComponent(displayList.map(function(s){return s.id;}).join(',')),'jamroom-importer');
+        }
+
         function renderChordsView() {
             var host = document.getElementById('chords-live');
             if (!host) return;
+            if (g_clData && g_clData.document && (g_chordView!=='big' && g_chordView!=='timeline' || !g_preciseFollow || g_clData.document.manual) && renderStructuredChart(host)) return;
+            host.classList.remove('structured-chart');host._chartHtml=null;
             if (!g_clData || !g_clData.chords || !g_clData.chords.length) {
                 host.innerHTML = '<div class="cv-empty">' + (clAlive()
                     ? 'No chords for this song.'
@@ -9053,6 +9163,9 @@
             var tkSemis = (g_tkState && g_tkState.semis) || 0;
             var t = currentPos + getLead() * tkRate;
             var cur = clIndexAtOrBefore(list, t);
+            if (g_chordView==='big' && (!clAlive() || cur < 0 || t >= list[cur][1])) {
+                host.innerHTML='<div class="cv-empty">'+(!clAlive()?'Disconnected — waiting for live timing.':'No chord sounding here.')+'</div>';return;
+            }
             if (cur < 0) cur = 0;
             // What the player should FINGER: the sounding chord, moved by any
             // audio key change, then down by the capo fret.
@@ -9076,7 +9189,7 @@
                 for (var i = cur + 1; i < Math.min(cur + 5, list.length); i++) nextTxt.push(X(list[i][2]));
                 var bigName = X(list[cur][2]);
                 html = '<div class="cv-big" style="font-size:'
-                     + cvFontFor([bigName], true) + '">' + bigName + '</div>'
+                     + cvFontFor([bigName], true) + '">' + trEsc(bigName) + '</div>'
                      + '<div class="cv-next">' + (nextTxt.length
                          ? 'next: ' + nextTxt.join(' · ') : '&nbsp;') + '</div>';
             } else if (g_chordView === 'timeline') {
@@ -9094,7 +9207,7 @@
                     var w = Math.max(2, ((Math.min(e2, from + WIN) - Math.max(s2, from)) / WIN) * 100);
                     cells.push('<div class="cv-tl-cell' + (g_preciseFollow && j2 === cur ? ' on' : '')
                         + '" style="width:' + w.toFixed(2) + '%;font-size:' + tlFont
-                        + '">' + tlNames[ci++] + '</div>');
+                        + '">' + trEsc(tlNames[ci++]) + '</div>');
                 }
                 html = '<div class="cv-tl">' + cells.join('') + '</div>'
                      + '<div class="cv-tl-now"></div>';
@@ -9149,12 +9262,12 @@
                             chHtml += '<span class="cs-ch'
                                 + (g_preciseFollow && inLine[d2][1] === cur ? ' on' : '')
                                 + '" style="left:' + pctL.toFixed(1) + '%">'
-                                + X(list[inLine[d2][1]][2]) + '</span>';
+                                + trEsc(X(list[inLine[d2][1]][2])) + '</span>';
                         }
                         var words = lys[b][2] || '';
                         out.push('<div class="cs-line' + (g_preciseFollow && b === li ? ' on' : '') + '">'
                             + '<div class="cs-chords">' + chHtml + '</div>'
-                            + '<div class="cs-words">' + words + '</div></div>');
+                            + '<div class="cs-words">' + trEsc(words) + '</div></div>');
                     }
                     html = out.join('');
                 }
@@ -9177,7 +9290,7 @@
                             ? 'calc(' + aheadFont + ' * 0.6)' : nowFont;
                         cellsHtml += '<div class="cv-cell' + (g_preciseFollow && idx === cur ? ' on' : '')
                             + (r === 1 ? ' ahead' : '') + '" style="font-size:' + fs
-                            + '">' + X(list[idx][2]) + '</div>';
+                            + '">' + trEsc(X(list[idx][2])) + '</div>';
                     }
                     rows += '<div class="cv-row">' + cellsHtml + '</div>';
                 }
@@ -9195,7 +9308,7 @@
             var isSheet = (g_chordView === 'sheet');
             host.classList.toggle('sheet', isSheet);
             host.style.fontSize = isSheet ? 'clamp(0.95rem,3.4vw,1.5rem)' : '';
-            host.innerHTML = html + badge + '<div class="cv-meta">' + meta + '</div>';
+            host.innerHTML = html + badge + '<div class="cv-meta">' + trEsc(meta) + '</div>';
             // Keep the line being sung in view without yanking the page about
             // while someone is reading ahead.
             if (isSheet) {
@@ -9210,8 +9323,14 @@
         // ── Lyrics view with lookahead ───────────────────────────────────────
         function renderLyricsView() {
             var host = document.getElementById('lyrics-live');
+            if(!host && g_clData && g_clData.document){
+                var content=document.getElementById('lyrics-content');
+                if(content){content.innerHTML='<div id="lyrics-live"></div>';host=document.getElementById('lyrics-live');}
+            }
             if (!host) return;
-            if (!g_clData || !g_clData.lyrics || !g_clData.lyrics.length) return;
+            if (g_clData && g_clData.document && renderStructuredChart(host, true)) return;
+            host.classList.remove('structured-chart');host._chartHtml=null;
+            if (!g_clData || !g_clData.lyrics || !g_clData.lyrics.length) {host.textContent='No lyrics for this song.';return;}
             var list = g_clData.lyrics;
             var t = currentPos + getLead() * ((g_tkState && g_tkState.rate) || 1.0);
             var cur = clIndexAt(list, t);
@@ -9237,11 +9356,11 @@
                 var nxt = -1;
                 for (var i = 0; i < list.length; i++) { if (list[i][0] > t) { nxt = i; break; } }
                 out = '<div class="lv-gap">&nbsp;</div>'
-                    + (nxt >= 0 ? '<div class="lv-next">' + list[nxt][2] + '</div>' : '');
+                    + (nxt >= 0 ? '<div class="lv-next">' + trEsc(list[nxt][2]) + '</div>' : '');
             } else {
-                out = '<div class="lv-now">' + list[cur][2] + '</div>'
+                out = '<div class="lv-now">' + trEsc(list[cur][2]) + '</div>'
                     + (cur + 1 < list.length
-                        ? '<div class="lv-next">' + list[cur + 1][2] + '</div>' : '');
+                        ? '<div class="lv-next">' + trEsc(list[cur + 1][2]) + '</div>' : '');
             }
             host.innerHTML = out;
         }
