@@ -66,6 +66,9 @@ one undo step. Every connected browser receives the same document. Section
 edits do not rewrite individual legacy note items; structured views use the
 edited document. A stale browser revision or wrong project cannot overwrite a
 newer section edit.
+If a chart was replaced while legacy timing checkpoints were retained, first
+rebuild that song using **Replace old timing fixes too**. The section editor
+refuses to combine those two correction systems and apply the timing twice.
 
 ## Updates, protection and restore
 

@@ -333,6 +333,9 @@ local function section_command(f, song)
     local _, blob = reaper.GetProjExtState(0,"ReaSetSong",key .. "document")
     local doc = J.decode(blob)
     if doc.revision ~= f[10] then return repair_reply(f[1],false,"Chart changed; reopen repair.") end
+    if #load_anchors(song.id,"lyrics") > 0 or #load_anchors(song.id,"chords") > 0 then
+        return repair_reply(f[1],false,"This song still has legacy timing fixes. Update it with 'Replace old timing fixes' before editing sections.")
+    end
     local index, a, b = tonumber(f[4]), tonumber(f[5]), tonumber(f[6])
     local section = index and doc.sections[index]
     if not section or not a or not b or a < 0 or b <= a or b > song.e-song.s then
