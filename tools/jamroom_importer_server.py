@@ -12,6 +12,8 @@ Part of ReaSet Jam Room. GPL v3, same as the repo.
 """
 
 import json
+import os
+import sys
 import copy
 import uuid
 import re
@@ -1051,6 +1053,8 @@ class Handler(BaseHTTPRequestHandler):
                        "text/html")
         elif self.path == "/api/checks":
             self._send(200, checks())
+        elif self.path == "/api/runtime":
+            self._send(200, runtime())
         elif self.path == "/api/status":
             self._send(200, STATE)
         elif self.path == "/api/updates":
@@ -1370,35 +1374,65 @@ class ImporterServer(ThreadingHTTPServer):
     allow_reuse_address = False
 
 
+def runtime():
+    return {"app": "jamroom-importer", "build": getattr(ji, "BUILD", "?"),
+            "pid": os.getpid(), "source": str(TOOLDIR.parent)}
+
+
+def startup_error(exc):
+    print(f"Could not start importer on port {PORT}: {exc}")
+    # Probe our own loopback service, without assuming every socket error means
+    # another importer. Never terminate an unrelated process that owns a port.
+    with requests.Session() as session:
+        session.trust_env = False
+        for endpoint in ("runtime", "checks"):
+            try:
+                response = session.get(f"http://127.0.0.1:{PORT}/api/{endpoint}", timeout=3)
+                response.raise_for_status()
+                info = response.json()
+                if not isinstance(info, dict):
+                    continue
+                identified = (info.get("app") == "jamroom-importer" if endpoint == "runtime"
+                              else all(k in info for k in ("build", "reaper", "ytdlp", "config")))
+                if not identified:
+                    continue
+                print(f"Existing importer: {info.get('build', '?')}; requested: {ji.BUILD}.")
+                if endpoint == "runtime":
+                    print(f"Process ID: {info.get('pid')}; folder: {info.get('source')}")
+                print(f"Open http://localhost:{PORT} and let any import/update finish.")
+                print("Then close the old importer process and run JamRoom Importer.bat again.")
+                break
+            except (requests.RequestException, ValueError):
+                continue
+        else:
+            print("No responding Jam Room Importer was identified. Check the socket error above.")
+    print("To identify the listening process in PowerShell:")
+    print(f"  Get-NetTCPConnection -LocalPort {PORT} -State Listen | Select-Object LocalAddress,OwningProcess")
+
+
 def main():
     try:
         srv = ImporterServer(("0.0.0.0", PORT), Handler)
-    except OSError:
-        print("=" * 62)
-        print(f" A Jam Room Importer is ALREADY RUNNING on port {PORT}.")
-        print()
-        print(" Close that window first. If there is no window, end any stray")
-        print(" python.exe in Task Manager, or run this in PowerShell:")
-        print(f"   Get-NetTCPConnection -LocalPort {PORT} -State Listen |")
-        print("     ForEach-Object { Stop-Process -Id $_.OwningProcess -Force }")
-        print()
-        print(" Then start JamRoom Importer.bat again.")
-        print("=" * 62)
-        try:
-            input("Press Enter to close...")
-        except EOFError:
-            pass
-        return
+    except OSError as exc:
+        startup_error(exc)
+        return 1
     url = f"http://localhost:{PORT}"
     print(f"Jam Room Importer {getattr(ji, 'BUILD', '?')} running at {url}")
+    print(f"Process ID: {os.getpid()}; folder: {TOOLDIR.parent}")
     if lan_url():
         print(f"  (from the tablet: {lan_url()})")
     try:
         webbrowser.open(url)
-    except Exception:  # noqa: BLE001 — opening a browser is best-effort
+    except Exception:  # Opening a browser is best-effort.
         pass
-    srv.serve_forever()
+    try:
+        srv.serve_forever()
+    except KeyboardInterrupt:
+        pass
+    finally:
+        srv.server_close()
+    return 0
 
 
 if __name__ == "__main__":
-    main()
+    sys.exit(main())
