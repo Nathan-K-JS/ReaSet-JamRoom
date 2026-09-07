@@ -13,6 +13,10 @@ if "%~1"=="" (
 )
 cd /d "%~1"
 
+set BEFORE=
+set AFTER=
+set UPDATE_BRANCH=
+for /f "delims=" %%i in ('git branch --show-current 2^>nul') do set UPDATE_BRANCH=%%i
 for /f "delims=" %%i in ('git rev-parse HEAD 2^>nul') do set BEFORE=%%i
 if "%BEFORE%"=="" (
   echo This folder is not a git clone, so it cannot update itself.
@@ -23,6 +27,9 @@ if "%BEFORE%"=="" (
 )
 
 echo Fetching the latest Jam Room version...
+echo Folder: %CD%
+echo Branch: %UPDATE_BRANCH%
+echo Installed commit: %BEFORE%
 git pull --ff-only
 if errorlevel 1 (
   echo.
@@ -33,6 +40,7 @@ if errorlevel 1 (
   exit /b 1
 )
 for /f "delims=" %%i in ('git rev-parse HEAD') do set AFTER=%%i
+echo Updated commit: %AFTER%
 
 set NEED_BROWSER=0
 set NEED_REAPER=0
@@ -64,8 +72,10 @@ yt-dlp -U
 echo.
 echo ============================================
 if "%BEFORE%"=="%AFTER%" (
-  echo  Already on the latest version.
-  echo  Nothing changed, so nothing needs restarting.
+  echo  Already on the latest commit for branch %UPDATE_BRANCH%.
+  echo  The browser files were redeployed. Refresh ReaSet with Ctrl+F5.
+  echo  If REAPER or the importer was left running through an earlier
+  echo  update, restart it to load those previously downloaded changes.
   goto :done
 )
 echo  WHAT YOU NEED TO DO NOW:

@@ -13,6 +13,13 @@ Current implementation branch: `feature/timing-repair`. The section-chart overha
 is documented in `docs/SONG_CHART_UPDATES.md`; the baseline review and longer-term
 suggestions are in `docs/PROJECT_REVIEW.md`.
 
+The installed Jam Room update channel is `feature/jamroom-claude`, as used by
+`docs/FRESH_INSTALL.md`. `JamRoom Update.bat` pulls the installation's current
+upstream branch. Release delivery requires pushing the implementation branch
+AND fast-forwarding `origin/feature/jamroom-claude` to the tested release. Verify
+ancestry first; never force-push or overwrite divergent changes. Pushing only
+`feature/timing-repair` does not deliver an update to standard installations.
+
 Current architecture:
 - `ReaSet.html`: single-file browser app, legacy timelines plus schema-2 section charts.
 - `tools/jamroom_importer_server.py`: optional local Python importer on port 8765.

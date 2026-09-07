@@ -51,6 +51,12 @@ automatically with the new code.
 
 ## Verifying an update landed
 
+- Standard Jam Room installations use **`feature/jamroom-claude`**. The updater
+  reports the installation folder, current branch and before/after commit IDs.
+  Development changes must also be released to that branch to reach these installs.
+- "Already on the latest commit" means the current branch is up to date. Browser
+  files are still redeployed; refresh the page. A previously updated importer or
+  running Lua script can still need restarting even when Git has no new commits.
 - ReaSet: the page loads and the **TRACKS** tab shows your groups (not "bridge
   is not running").
 - Background scripts: `http://localhost:8080/_/GET/EXTSTATE/ReaSetJR/heartbeat`
