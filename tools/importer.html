@@ -367,8 +367,35 @@
 
 <script>
 // Version of THIS page (served fresh from disk). Compared against the version
-// of the running server; a mismatch means the importer needs restarting.
-var UI_BUILD = "v2.1";
+// of the running server. Either side may be older.
+var UI_BUILD = "v3.0";
+
+function importerVersionWarning(serverBuild) {
+  if (serverBuild === UI_BUILD) return '';
+  var details = 'This page is ' + UI_BUILD + '; the running importer is '
+    + (serverBuild || 'not reporting a version') + '.';
+  function parts(value) {
+    var match = /^v(\d+(?:\.\d+)*)$/.exec(value || '');
+    return match ? match[1].split('.').map(Number) : null;
+  }
+  var page = parts(UI_BUILD), server = parts(serverBuild), order = 0;
+  if (page && server) {
+    for (var i = 0; i < Math.max(page.length, server.length); i++) {
+      order = (server[i] || 0) - (page[i] || 0);
+      if (order) break;
+    }
+    if (!order) return '';
+    if (order > 0) return 'The importer page is older than the running server.\n'
+      + details + '\nRefresh this page with Ctrl+F5. If it persists, run JamRoom Update.bat '
+      + 'on the Jam Room PC to bring its installed files up to date.';
+    return 'The running importer is older than this page.\n' + details
+      + '\nRun JamRoom Update.bat on the Jam Room PC to restart it with updated code. '
+      + 'Updating interrupts unfinished imports.';
+  }
+  return 'The page and importer versions could not be matched.\n' + details
+    + '\nRefresh this page. If it persists, report these versions and the output '
+    + 'of http://localhost:8765/api/runtime from the Jam Room PC.';
+}
 
 var picked = null, poller = null, reviewShown = false;
 var pipelineActive = false, g_timingLaunchedSong = null;
@@ -512,31 +539,12 @@ function refreshChecks(){
       return '<div class="check ' + (r[0]?'ok':'bad') + '">' + (r[0]?r[1]:r[2]) + '</div>';
     }).join('')
       + (c.lan ? '<div class="check" style="color:#9aa0a6">Tablet URL: ' + c.lan + '</div>' : '');
-    // Page and server out of step? Say so loudly — this looks exactly like
-    // "the new feature is broken" when it is really "restart the importer".
     var warn = $('staleWarn');
     if (warn) {
-      // A server old enough to report NO build at all is the most stale case
-      // there is, so treat missing exactly like mismatched.
-      var srvBuild = c.build || null;
-      if (srvBuild !== UI_BUILD) {
-        warn.innerHTML = '<b>Restart the importer — it is running old code.</b>'
-          + '<br>This page is <b>' + UI_BUILD + '</b>; the running importer is <b>'
-          + (srvBuild || 'older than v1.1 (reports no version)') + '</b>.'
-          + '<br><br>The page is re-read from disk after an update, but the '
-          + 'importer keeps its code in memory — so newer features have no '
-          + 'server to talk to and look blank or dead.'
-          + '<br><br><b>1.</b> Close the <b>Jam Room Importer</b> window.'
-          + '<br><b>2.</b> Double-click <b>JamRoom Importer.bat</b> again.'
-          + '<br><br>If it still says this, a stray importer is holding the '
-          + 'port. In PowerShell run:<br>'
-          + '<code>Get-NetTCPConnection -LocalPort 8765 -State Listen | '
-          + 'ForEach-Object { Stop-Process -Id $_.OwningProcess -Force }</code>'
-          + '<br>then start it again.';
-        warn.classList.remove('hide');
-      } else {
-        warn.classList.add('hide');
-      }
+      var message = importerVersionWarning(c.build);
+      warn.textContent = message;
+      warn.style.whiteSpace = 'pre-line';
+      warn.classList.toggle('hide', !message);
     }
     var badge = $('verBadge');
     if (badge) {

@@ -6,6 +6,7 @@ import unittest
 
 from playwright.sync_api import sync_playwright
 import jamroom_chart as chart
+import jamroom_import as importer
 
 ROOT = Path(__file__).resolve().parent.parent
 EDGE = Path(os.environ.get('PROGRAMFILES(X86)', 'C:/Program Files (x86)')) / 'Microsoft/Edge/Application/msedge.exe'
@@ -167,6 +168,35 @@ class BrowserTests(unittest.TestCase):
         self.setup_transport()
         self.page.evaluate("g_transportRegions='old';wwr_onreply('TRANSPORT\\t1\\t59.9\\t0\\nREGION_LIST\\nREGION\\tA\\t1\\t0\\t65\\t0\\nREGION\\tB\\t2\\t70\\t130\\t0\\nREGION_LIST_END\\n')")
         self.assertNotIn(1016,self.page.evaluate('sent'))
+
+    def test_importer_version_warning_matches_running_server(self):
+        running = {'build': importer.BUILD, 'key': True, 'reaper': True}
+        def route(req):
+            if '/api/checks' in req.request.url:
+                req.fulfill(json=running)
+            elif '/api/' in req.request.url:
+                req.fulfill(json={'songs': [], 'state': 'idle'})
+            else:
+                req.fulfill(path=str(ROOT/'tools/importer.html'))
+        self.page.route('**/*', route)
+        self.page.goto('http://importer.test/')
+        self.page.wait_for_function("document.getElementById('verBadge').textContent.includes('v3.0')")
+        self.assertEqual(self.page.evaluate('UI_BUILD'), importer.BUILD)
+        self.assertTrue(self.page.locator('#staleWarn').is_hidden())
+        for page_version, server_version, expected in [
+            ('v2.1', 'v3.0', 'page is older'),
+            ('v3.0', 'v2.1', 'running importer is older'),
+            ('v3.0', 'v3.10', 'page is older'),
+            ('v3.0', None, 'could not be matched'),
+            ('v3.0', 'unknown', 'could not be matched'),
+        ]:
+            with self.subTest(page=page_version, server=server_version):
+                message = self.page.evaluate('''versions => {
+                    UI_BUILD = versions[0]; return importerVersionWarning(versions[1]);
+                }''', [page_version, server_version])
+                self.assertIn(expected, message)
+                self.assertNotIn('Stop-Process', message)
+        self.assertEqual(self.page.evaluate("importerVersionWarning('v3.0.0')"), '')
 
     def test_bulk_selection_and_protection(self):
         songs=[{'id':i,'name':'Song '+str(i),'eligible':i==1,'protected':i==2,'update_status':'Update available'} for i in (1,2,3)]
