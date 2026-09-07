@@ -145,7 +145,14 @@ def build_document(job, templates, detected, transpose=lambda x: x):
                 for a in original["anchors"]:
                     at = min(len(original["text"]), a["offset"])
                     block = next((b for b in mapping if b.a <= at < b.a + b.size), None)
-                    row["anchors"].append(dict(a, offset=(block.b + at - block.a) if block else 0))
+                    if at == len(original["text"]):
+                        row["anchors"].append(dict(a, offset=len(line["text"])))
+                    elif block:
+                        row["anchors"].append(dict(a, offset=block.b+at-block.a))
+                    else:
+                        row["anchors"] = []
+                        row["progression"] = [a["symbol"] for a in original["anchors"]]
+                        break
             else:
                 row["progression"] = [a["symbol"] for a in original["anchors"]]
         rows.append(row)

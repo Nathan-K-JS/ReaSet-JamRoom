@@ -247,6 +247,8 @@ local function build_json()
         local doc = J.decode(document)
         -- Legacy checkpoint repairs apply consistently to the displayed words.
         for _, section in ipairs(doc.sections or {}) do
+            section.start = mapped_relative(section.start,ly_anchors,song.e-song.s)
+            section["end"] = mapped_relative(section["end"],ly_anchors,song.e-song.s)
             for _, row in ipairs(section.rows or {}) do
                 if row.start then row.start = mapped_relative(row.start, ly_anchors, song.e-song.s) end
                 if row["end"] then row["end"] = mapped_relative(row["end"], ly_anchors, song.e-song.s) end
@@ -382,7 +384,7 @@ local function section_command(f, song)
     reaper.SetProjExtState(0,"ReaSetSong",key .. "revision",doc.revision)
     reaper.MarkProjectDirty(0)
     reaper.Undo_EndBlock("Edit chart section: " .. section.label,-1)
-    repair_reply(f[1],true,"Section saved. Other passages retained.")
+    repair_reply(f[1],true,"Section saved; adjacent boundaries kept aligned.")
     return true
 end
 
@@ -395,6 +397,8 @@ local function process_repair_command(want, song)
             "Open the song you want to repair, then try again.")
     end
     if action == "section" then return section_command(f,song) end
+    local _,project=reaper.GetProjExtState(0,"ReaSet","projectId")
+    if f[7] ~= project then return repair_reply(nonce,false,"Project changed or browser needs refreshing; reopen repair.") end
     if scope ~= "lyrics" and scope ~= "chords" and scope ~= "both" then
         return repair_reply(nonce, false, "Choose lyrics, chords, or both.")
     end

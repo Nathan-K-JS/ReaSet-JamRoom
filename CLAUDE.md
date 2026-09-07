@@ -9,10 +9,24 @@ project so they don't need to be re-explained in every prompt.
 **REAPER** DAW. This repo is a fork/customisation of it. We are adding a new feature
 to it — we are not building a new app from scratch.
 
-Current branch: `feature/jamroom-claude` — a clean branch off `main`, created
-specifically to design and build this feature without inheriting a prior AI-assisted
-attempt's implementation (which lives untouched on `feature/jamroom-stem-controls`
-and should not be merged, referenced as required behavior, or copied from).
+Current implementation branch: `feature/timing-repair`. The section-chart overhaul
+is documented in `docs/SONG_CHART_UPDATES.md`; the baseline review and longer-term
+suggestions are in `docs/PROJECT_REVIEW.md`.
+
+Current architecture:
+- `ReaSet.html`: single-file browser app, legacy timelines plus schema-2 section charts.
+- `tools/jamroom_importer_server.py`: optional local Python importer on port 8765.
+- `tools/jamroom_chart.py`: pure chart parsing and shared document generation.
+- `tools/jamroom_updates.py`: project-scoped batch progress, protection and snapshots.
+- `tools/jamroom_song_transaction.lua`: guarded REAPER text/document update and restore.
+- `Requirements/ReaSet_ChordsLyrics.lua`: project document publication and section repairs.
+
+Bump `jamroom_chart.GENERATOR` when changing generation behavior after a release,
+so the chooser can identify songs requiring regeneration.
+
+Rebuild existing songs only through the explicit library chooser. Never silently
+regenerate the user's loaded library while testing. Test commands and the opt-in
+scratch-project REAPER check are in the delivery guide.
 
 ## Hard constraints — these are real, not stylistic choices
 
@@ -20,10 +34,10 @@ and should not be merged, referenced as required behavior, or copied from).
   Vue, Angular, TypeScript, Node build system, or package manager is in use here.
   Don't introduce one without discussing it first — it would be a significant
   departure from the existing codebase's conventions.
-- **No backend server, no database.** The browser talks to REAPER exclusively through
-  REAPER's built-in Web Interface JS globals (`wwr_req`, `wwr_req_recur`,
-  `wwr_onreply`, `wwr_start`). This is a platform limitation of REAPER's web
-  interface, not a design preference — there is no REST API alternative available.
+- **Performance runtime stays local.** The browser controls REAPER through its
+  built-in Web Interface globals (`wwr_req`, `wwr_req_recur`, `wwr_onreply`,
+  `wwr_start`). The optional Python importer has an existing local HTTP API;
+  do not require it for ordinary playback or section repair. There is no external database.
 - **Lua ↔ browser communication** happens via REAPER's project extstate (a simple
   key/value store scoped to the project file), polled from the browser. This is
   effectively the only two-way channel available.
@@ -38,8 +52,9 @@ and should not be merged, referenced as required behavior, or copied from).
   `Sortable.min.js`, `LICENSE`, `Requirements/ReaSet_NativeLoop.lua`, the two
   X-Raym scripts in `Requirements/`. `main.js` isn't in this repo at all — REAPER
   provides it at deployment time.
-- **No cloud services, external databases, CDNs beyond what's already in use, or
-  internet dependency.** This runs entirely on a local network.
+- **No new cloud services or external databases.** Rehearsal runs on a local
+  network. The existing importer uses online recording, stem and chart providers;
+  updates reuse cached sources and must not trigger paid processing automatically.
 
 ## Existing features that must keep working
 

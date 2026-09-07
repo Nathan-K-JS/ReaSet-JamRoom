@@ -4968,6 +4968,7 @@
             var fields = [nonce, action, g_tr.songId, scope];
             if (source != null) fields.push(Number(source).toFixed(3));
             if (actual != null) fields.push(Number(actual).toFixed(3));
+            fields[6]=g_clData.project||'';
             trSetStatus('Saving in REAPER…', '');
             wwr_req('SET/EXTSTATE/ReaSetCL/want/' + encodeURIComponent(fields.join('|')));
             setTimeout(function () {

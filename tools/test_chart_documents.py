@@ -11,6 +11,12 @@ import jamroom_import as ji
 
 
 class ChartTests(unittest.TestCase):
+    def test_chord_after_last_word_does_not_jump_to_first_word(self):
+        templates=model.parse_chart('[Verse]\n[ch]C[/ch]                    [ch]G[/ch]\nHere we sing')
+        doc,_=model.build_document({'duration':20,'lyrics':{'synced':True,'lines':[
+            {'time':0,'text':'Here we sing'}]}},templates,[])
+        self.assertEqual(doc['sections'][0]['rows'][0]['anchors'][1]['offset'],len('Here we sing'))
+
     def test_header_repeats_and_lead_break_preserve_the_pattern(self):
         templates=model.parse_chart('[Lead break x2]\n[ch]C[/ch] [ch]G[/ch]')
         doc,_=model.build_document({'duration':30},templates,[])

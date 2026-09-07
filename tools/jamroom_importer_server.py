@@ -695,6 +695,7 @@ def rechord_song(name, chart_url, snap=True, force=False, key_offset=None):
     chord detection can be fixed in place - no re-import, no Fadr, no charge.
     """
     cfg = ji.load_config(None)
+    target_project = project_identity(cfg)
     jobs_dir = Path(cfg.get("jobs_dir") or (ji.REPO_ROOT / "imports"))
     job_dir = jobs_dir / ji.sanitize_filename(name)
     job = ji.load_job(job_dir)
@@ -707,6 +708,7 @@ def rechord_song(name, chart_url, snap=True, force=False, key_offset=None):
     song = next((s for s in project_songs() if s["name"] == name), None)
     if not song:
         raise RuntimeError(f'"{name}" is not in the REAPER project.')
+    song["project"] = target_project
 
     # The chart REPLACES the detected chords rather than renaming them. The
     # detector's fault is not bad names but spurious changes - passing notes and
@@ -813,12 +815,14 @@ def relyric_song(name, record_id=None, offset=None):
     disagreeing.
     """
     cfg = ji.load_config(None)
+    target_project = project_identity(cfg)
     jobs_dir = Path(cfg.get("jobs_dir") or (ji.REPO_ROOT / "imports"))
     job_dir = jobs_dir / ji.sanitize_filename(name)
     job = ji.load_job(job_dir)
     song = next((s for s in project_songs() if s["name"] == name), None)
     if not song:
         raise RuntimeError(f'"{name}" is not in the REAPER project.')
+    song["project"] = target_project
 
     if not job.get("chords_detected"):
         job["chords_detected"] = ji.detected_chords(job, job_dir)

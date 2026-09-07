@@ -1,3 +1,5 @@
+**Jam Room chart overhaul:** [Using section charts and bulk song updates](docs/SONG_CHART_UPDATES.md) ? [Project review and improvement ideas](docs/PROJECT_REVIEW.md)
+
 ##### 🇬🇧 ENGLISH
 
 ## 📌 Table of Contents
