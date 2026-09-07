@@ -59,6 +59,14 @@ findstr /i /c:"tools/" "%TEMP%\jr_changed.txt" >nul && set NEED_IMPORTER=1
 
 :nochange
 echo.
+echo Recovering the importer so it uses the updated code...
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File "%CD%\tools\restart_importer.ps1" -RepoRoot "%CD%"
+if errorlevel 1 (
+  echo The code was downloaded, but importer recovery failed. See the error above.
+  pause
+  exit /b 1
+)
+echo.
 echo Deploying ReaSet to REAPER's web interface...
 call "%CD%\tools\deploy_reaset.bat"
 if errorlevel 1 (
@@ -74,8 +82,8 @@ echo ============================================
 if "%BEFORE%"=="%AFTER%" (
   echo  Already on the latest commit for branch %UPDATE_BRANCH%.
   echo  The browser files were redeployed. Refresh ReaSet with Ctrl+F5.
-  echo  If REAPER or the importer was left running through an earlier
-  echo  update, restart it to load those previously downloaded changes.
+  echo  Any running importer was restarted automatically.
+  echo  Restart REAPER if its scripts were changed in an earlier update.
   goto :done
 )
 echo  WHAT YOU NEED TO DO NOW:
@@ -87,8 +95,7 @@ if "%NEED_REAPER%"=="1" (
   echo       the startup action.
 )
 if "%NEED_IMPORTER%"=="1" (
-  echo   [ ] RESTART THE IMPORTER. Close the "Jam Room Importer" window,
-  echo       then double-click "JamRoom Importer.bat" again.
+  echo   The importer recovery check is complete. Refresh its browser tab.
 )
 if "%NEED_BROWSER%"=="1" (
   echo   [ ] REFRESH REASET on the PC and on every tablet: Ctrl+F5
@@ -99,8 +106,8 @@ if "%NEED_REAPER%%NEED_IMPORTER%%NEED_BROWSER%"=="000" (
 )
 :done
 echo.
-echo  Nothing was deleted. Your Fadr key, downloaded songs in imports\,
-echo  your REAPER project and your setlists are all untouched.
+echo  Your Fadr key and downloaded files were kept. An unfinished import
+echo  may need retrying; check the song before applying it again.
 echo ============================================
 echo.
 pause

@@ -6,7 +6,8 @@ the structured chart schema is 2 and its generator is `sections-1`.
 ## Start using it
 
 1. Run **JamRoom Update.bat** on another installation to fetch and deploy this branch.
-2. Save your REAPER project, then restart REAPER and the importer. Refresh ReaSet
+2. Save your REAPER project, then restart REAPER. The updater restarts any running
+   importer automatically; open **JamRoom Importer.bat** if it was closed. Refresh ReaSet
    in each browser. Already-running Lua scripts retain their previous code until
    restarted; rerunning Startup alone skips scripts that are already running.
 3. Open **Update song charts** in ReaSet, or **Song library → Update lyrics &
@@ -19,6 +20,30 @@ the structured chart schema is 2 and its generator is `sections-1`.
 Existing songs are not silently rewritten when the application updates. The
 library chooser is the deliberate migration step. Audio, routing, regions,
 region IDs and setlist membership are unchanged by this operation.
+
+## Importer recovery during application updates
+
+**JamRoom Update.bat** checks port 8765 after a successful pull, including when
+Git says it is already current. It stops a verified Python importer and its local
+workers, then starts the installed code and checks its runtime identity over HTTP.
+This works without a responsive importer page. An unrelated port owner is left
+alone and reported as a recovery failure.
+
+Updating interrupts unfinished imports, including downloads or preparation.
+Cached files are retained; retry the unfinished song and inspect REAPER before
+applying it again. Restarting Python cannot undo work already applied in REAPER
+or cancel work already submitted to a remote provider. Batch chart progress remains
+available through the existing resume workflow.
+
+For recovery without fetching an update, run from the installation folder:
+
+```powershell
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File tools/restart_importer.ps1
+```
+
+Startup logs are under `imports/.runtime/`. When upgrading from an older updater
+that does not contain recovery, run Update a second time: its first run continues
+using its old temporary copy, even after downloading the new batch file.
 
 ## Automatic first pass
 
