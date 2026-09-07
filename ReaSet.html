@@ -4293,6 +4293,36 @@
         var displayList = [];
         var g_subRegionMap = {};   // { "Song Name": [{id,name,sectionName,start,end},...] }
         var isPlaying = false;
+        var g_transportEpoch=0, g_transportTimers=[], g_transportBarrier=-1;
+        var g_transportRegions=null, g_transportMidiPulse=false, g_transportDesiredPlaying=null;
+        function cancelTransportActions() {
+            g_transportEpoch++;
+            g_transportTimers.forEach(function(timer){clearTimeout(timer);});
+            g_transportTimers=[];
+            g_transportMidiPulse=false;
+            g_transportDesiredPlaying=null;
+            queuedRegion=null;
+            g_transportBarrier=Date.now();
+            window._lastRegionEndTrigger=null;
+            window._lastSpecialTriggerPos=null;
+            window._lastPauseTriggerPos=null;
+            window._lastTransitionTriggerPos=null;
+        }
+        function scheduleTransport(action, delay) {
+            var epoch=g_transportEpoch, project=g_projectKey;
+            var timer=setTimeout(function(){
+                g_transportTimers=g_transportTimers.filter(function(t){return t!==timer;});
+                if(epoch===g_transportEpoch && project===g_projectKey)action();
+            },delay);
+            g_transportTimers.push(timer);
+        }
+        function transportSampleIsCurrent(requestStarted) {
+            // REAPER main.js supplies the request's start time. Ignore snapshots
+            // requested before the latest command, even on a slow connection.
+            if(typeof requestStarted==='number')return requestStarted>g_transportBarrier;
+            return g_transportBarrier<0 || Date.now()-g_transportBarrier>=500;
+        }
+
         var currentPos = 0.0;
         var queuedRegion = null;
         var lastActiveID = null;
@@ -4378,6 +4408,7 @@
         }
 
         function _initProjectStorage(newKey) {
+            cancelTransportActions();
             // Called on first load and whenever the REAPER project changes.
             // Reloads all project-specific storage under the new namespace.
             g_projectKey = newKey;
@@ -5520,16 +5551,17 @@
         syncLeadSlider();
         tkRenderPanel();             // paints the performance chips on load
         // Shown in the sidebar so a stale cached page is obvious after a deploy.
-        var REASET_VERSION = "v1.8 · 2026-09-04";
+        var REASET_VERSION = "v1.9 - transport fix";
         var _rv = document.getElementById("reasetVer");
         if (_rv) _rv.textContent = REASET_VERSION;
         (function () { var t = localStorage.getItem("reasetlist_theme") || "dark"; setTheme(t, true); })();
 
         // --- 3. REAPER REPLY HANDLER ---
-        function wwr_onreply(results) {
+        function wwr_onreply(results, requestStarted) {
             if (isDragging) return;
             var ar = results.split("\n");
             var x;
+            var transportReceived = false;
             var _jrTrkBatch = null; // TRACK rows arrive as one batch per reply, no list framing
             for (x = 0; x < ar.length; x++) {
                 var tok = ar[x].split("\t");
@@ -5564,6 +5596,11 @@
                     case "TRANSPORT":
                         var nowPlaying = (parseInt(tok[1]) & 1) === 1;
                         currentPos = parseFloat(tok[2]);
+                        if(nowPlaying && !wasPlayingLast && g_transportTimers.length && !g_transportMidiPulse) {
+                            // Playback started outside this page (REAPER or a
+                            // controller): discard an old automatic cue/delay.
+                            cancelTransportActions();
+                        }
                         if (nowPlaying && !wasPlayingLast) {
                             if (!showStartTime) { showStartTime = Date.now() - showAccumulatedMs; }
                             else if (showTimerInterval === null) { showStartTime = Date.now() - showAccumulatedMs; }
@@ -5574,11 +5611,9 @@
                         }
                         wasPlayingLast = nowPlaying;
                         isPlaying = nowPlaying;
-                        updatePlaybackUI();
-                        // Chord/lyric views follow the playhead (with lead time)
-                        // rather than waiting to be pushed a value from REAPER.
-                        if (g_clData) { renderChordsView(); renderLyricsView(); }
-                        tkTick();
+                        if(transportSampleIsCurrent(requestStarted) && !g_transportMidiPulse &&
+                           g_transportDesiredPlaying===nowPlaying)g_transportDesiredPlaying=null;
+                        transportReceived = true;
                         break;
                     case "REGION_LIST":
                         g_regions = [];
@@ -5587,6 +5622,9 @@
                         g_regions.push(tok);
                         break;
                     case "REGION_LIST_END":
+                        var transportRegions=JSON.stringify(g_regions.filter(function(r){return r[1]!=='ReaSet Loop';}));
+                        if (g_transportRegions!==null && g_transportRegions!==transportRegions) cancelTransportActions();
+                        g_transportRegions=transportRegions;
                         // Namespace project-specific storage. The fingerprint is
                         // only the fallback/migration source now — the stable
                         // project ID wins as soon as it arrives (see
@@ -5663,6 +5701,14 @@
                         // the sub-region — prevents JS from re-jumping after Lua finishes.
                         break;
                 }
+            }
+
+            // Consume the whole reply before deciding on playback. REGION can
+            // follow TRANSPORT in the same batch after an import or project edit.
+            if (transportReceived) {
+                updatePlaybackUI(true, requestStarted);
+                if (g_clData) { renderChordsView(); renderLyricsView(); }
+                tkTick();
             }
 
             // Jam Room: commit the TRACK batch and refresh confirmed mute display.
@@ -6799,8 +6845,11 @@
         }
 
         // --- 8. PLAYBACK UI ---
-        function updatePlaybackUI() {
+        function updatePlaybackUI(fromTransport, requestStarted) {
             if (isDragging) return;
+            // Rendering (including an import's region refresh) cannot drive
+            // playback from the previous transport snapshot.
+            var automate = fromTransport === true && transportSampleIsCurrent(requestStarted);
             // Clear active state on song rows
             var prev = document.querySelector('.song-row.active');
             if (prev) prev.classList.remove('active');
@@ -6844,7 +6893,7 @@
 
             if (activeRegion) {
                 // Skip logic
-                if (activeRegion.skipped) {
+                if (automate && isPlaying && activeRegion.skipped) {
                     var nxt = findNextValidSong(activeIdx);
                     if (nxt) { wwr_req("SET/POS/" + nxt.start); return; }
                 }
@@ -6888,7 +6937,7 @@
                         var sub = subs[s];
                         if (currentPos >= sub.start && currentPos < sub.end) { activeSub = sub; break; }
                     }
-                    if (activeSub && activeSub.skipped) {
+                    if (automate && isPlaying && activeSub && activeSub.skipped) {
                         wwr_req("SET/POS/" + activeSub.end);
                         return;
                     }
@@ -6943,7 +6992,7 @@
 
                 // ── Special marker triggers (SONG END, STOP, +PAUSE) ──────────
                 // Deduplicated with window._lastSpecialTriggerPos so each trigger fires once.
-                if (isPlaying && activeRegion) {
+                if (automate && isPlaying && activeRegion) {
                     var specials = (window.g_specialMarkersMap || {})[activeRegion.name] || [];
                     for (var sp = 0; sp < specials.length; sp++) {
                         var spm = specials[sp];
@@ -6964,7 +7013,7 @@
                                 _reaperNativeLoopOff();
                                 wwr_req(1016);
                                 var nxtAfterStop = findNextValidSong(activeIdx);
-                                if (nxtAfterStop) { setTimeout(function() { wwr_req("SET/POS/" + nxtAfterStop.start); }, 100); }
+                                if (nxtAfterStop) { scheduleTransport(function() { wwr_req("SET/POS/" + nxtAfterStop.start); }, 100); }
                                 return;
                             }
                         }
@@ -6972,7 +7021,7 @@
                 }
 
                 // ── Section-change detection: reset per-section counters ─────────
-                if (activeSub) {
+                if (automate && activeSub) {
                     if (window._prevActiveSubId !== activeSub.id) {
                         window._prevActiveSubId = activeSub.id;
 
@@ -7013,7 +7062,7 @@
                         window._lastTransitionTriggerPos = undefined;
                         window._lastLoopFireKey          = null;
                     }
-                } else {
+                } else if (automate) {
                     // Playhead is outside every sub-section (gap, song-level space, or
                     // transport repositioned before the first section). Clear the cached
                     // sub-section ID so the NEXT entry into any sub-section is treated as
@@ -7030,7 +7079,7 @@
                 // syncRegions sets _pendingNativeLoopArm when it detects a +LOOP flag was
                 // just added to the active section. The section-change guard (_prevActiveSubId)
                 // won't fire again (same section), so we consume the flag here every tick.
-                if (activeSub && window._pendingNativeLoopArm === activeSub.id &&
+                if (automate && activeSub && window._pendingNativeLoopArm === activeSub.id &&
                     window.REASET_NATIVE_LOOP && activeSub.loop &&
                     window._nativeLoopSubId !== activeSub.id) {
                     var _paMax = (activeSub.loopMax && activeSub.loopMax > 1) ? activeSub.loopMax : 0;
@@ -7039,7 +7088,7 @@
                 }
 
                 // Sub-region End-of-region logic
-                if (activeSub && isPlaying) {
+                if (automate && activeSub && isPlaying) {
                     var subTimeRem = activeSub.end - currentPos;
 
                     // Clear loop-fire dedup key when we're safely away from the end boundary
@@ -7174,13 +7223,13 @@
                 // Guard: do NOT reset while _endOfRegionLocked is active. When A.end === B.start,
                 // entering B causes timeRem(B) >> 0.5which would erase A's dedup key and allow
                 // the end-of-A trigger to fire again before REAPER processes the stop/jump.
-                if (timeRem > 0.5 &&
+                if (automate && timeRem > 0.5 &&
                     !(window._endOfRegionLocked && Date.now() < window._endOfRegionLocked)) {
                     window._lastRegionEndTrigger = null;
                 }
                 // Clamp lower bound to -0.1 s: if the cursor is more than 100ms past the
                 // region end it has clearly moved on; firing again here would be a false positive.
-                if (timeRem <= 0.2 && timeRem > -0.1 && isPlaying) {
+                if (automate && timeRem <= 0.2 && timeRem > -0.1 && isPlaying) {
                     // Dedup guard: fire once per region end. Without this, the 0.2s
                     // window fires ~6 times at 33ms poll rate — each tick emitting a
                     // SET/POS or stop command, causing REAPER to seek backward
@@ -7218,7 +7267,7 @@
                         window._endOfRegionLocked = Date.now() + 400; // lock before any async
                         wwr_req(1016);
                         var _nrs = findNextValidSong(activeIdx);
-                        if (_nrs) { setTimeout(function() { wwr_req("SET/POS/" + _nrs.start); }, 150); }
+                        if (_nrs) { scheduleTransport(function() { wwr_req("SET/POS/" + _nrs.start); }, 150); }
                         return;
                     }
                     if (_rov.delayAfter > 0) {
@@ -7227,9 +7276,9 @@
                             window._endOfRegionLocked = Date.now() + 400; // lock before async — same guard as autoStop/shouldPlayNext
                             wwr_req(1016);
                             (function(nxt, delaySec) {
-                                setTimeout(function() {
+                                scheduleTransport(function() {
                                     wwr_req("SET/POS/" + nxt.start);
-                                    setTimeout(function() { wwr_req(1007); }, 80);
+                                    scheduleTransport(function() { wwr_req(1007); }, 80);
                                 }, delaySec * 1000);
                             })(_nrd, _rov.delayAfter);
                             return;
@@ -7247,19 +7296,13 @@
                         }
                     }
                     if (document.getElementById('autoStopToggle').checked && !activeRegion.chain) {
-                        // If the user just explicitly played a new song (playRegion was called
-                        // within the last 500ms), skip the STOP entirely. The stale transport
-                        // response that triggered this tick was from BEFORE the user's click;
-                        // sending STOP now would race with the user's already-dispatched PLAY
-                        // and kill the new song's playback.
-                        if (window._playRegionLocked && Date.now() < window._playRegionLocked) { return; }
                         window._endOfRegionLocked = Date.now() + 400; // lock before any async
                         wwr_req(1016);
                         var nextR2 = findNextValidSong(activeIdx);
-                        if (nextR2) { setTimeout(function () {
-                            // Skip repositioning if user started a new song during the 100ms delay.
-                            if (window._playRegionLocked && Date.now() < window._playRegionLocked) { return; }
-                            wwr_req("SET/POS/" + nextR2.start); triggerMidi();
+                        if (nextR2) { scheduleTransport(function () {
+                            // Cue silently. A background MIDI Play/Stop pulse here
+                            // could stop a musician starting playback in REAPER.
+                            wwr_req("SET/POS/" + nextR2.start);
                         }, 100); }
                         return;
                     }
@@ -7415,22 +7458,9 @@
         function playRegion(start, id) {
             var queueMode = document.getElementById('queueModeToggle').checked;
             if (!isPlaying || !queueMode) {
-                // Guard against stale transport responses: when the user clicks a song, the
-                // XHR with SET/POS+PLAY dispatches immediately. A pending transport response
-                // (still showing the OLD position near the previous song's end) may arrive
-                // milliseconds later, trigger autoStop, and dispatch a STOP that arrives at
-                // REAPER AFTER the PLAY — killing the user-initiated playback.
-                // Setting this flag for 500ms tells the autoStop block to skip its STOP if
-                // the user just explicitly started a new song.
-                window._playRegionLocked   = Date.now() + 500;
-                // Separate flag consumed ONLY by triggerMidi()'s internal STOP guard.
-                // We cannot reuse _playRegionLocked here because cueRegion() also sets
-                // it — cue must let its own triggerMidi() STOP fire (it stops REAPER
-                // intentionally after the brief MIDI-arm play). This flag is set only
-                // by playRegion() so triggerMidi()'s cleanup STOP won't race with a
-                // user's explicit PLAY when autoStop pre-positioned to the next song.
-                window._playbackInitiated  = Date.now() + 500;
-                wwr_req("SET/POS/" + start); wwr_req(1007); queuedRegion = null;
+                cancelTransportActions();
+                g_transportDesiredPlaying=true;
+                wwr_req("SET/POS/" + start + ";1007"); queuedRegion = null;
                 var all = document.querySelectorAll('.queued');
                 for (var i = 0; i < all.length; i++) all[i].classList.remove('queued');
             } else {
@@ -7459,39 +7489,44 @@
         }
         function triggerMidi() {
             if (!document.getElementById('initSongMidiToggle').checked) return;
+            g_transportMidiPulse=true;
             wwr_req(1007);
-            setTimeout(function () {
-                // If the user explicitly started playback (playRegion) after this
-                // MIDI-arm PLAY was sent, skip the cleanup STOP — it would arrive at
-                // REAPER after the user's PLAY and kill their song.
-                // Note: cueRegion() sets _playRegionLocked but NOT _playbackInitiated,
-                // so cue's triggerMidi() STOP still fires correctly.
-                if (window._playbackInitiated && Date.now() < window._playbackInitiated) { return; }
-                wwr_req(1016);
-            }, 100);
+            scheduleTransport(function () { g_transportMidiPulse=false;wwr_req(1016); }, 100);
         }
         function cueRegion(start, id) {
-            // Set the same lock as playRegion so autoStop's pending 100ms setTimeout
-            // (from a stale transport response) cannot override our cued position
-            // or fire a conflicting triggerMidi PLAY+STOP on top of ours.
-            window._playRegionLocked = Date.now() + 500;
-            wwr_req(1016); wwr_req("SET/POS/" + start); flashRow(id); triggerMidi();
+            cancelTransportActions();
+            g_transportDesiredPlaying=false;
+            queuedRegion=null;
+            wwr_req("1016;SET/POS/" + start); flashRow(id); triggerMidi();
         }
         function smartStop() {
+            cancelTransportActions();
+            g_transportDesiredPlaying=false;
+            queuedRegion=null;
+            _reaperNativeLoopOff();
             var activeIdx = -1;
             for (var i = 0; i < displayList.length; i++) { var r = displayList[i]; if (currentPos >= r.start && currentPos < r.end) { activeIdx = i; break; } }
             var target = null;
             if (activeIdx !== -1) target = displayList[activeIdx].start;
             else if (displayList.length > 0) target = displayList[0].start;
-            wwr_req(1016); if (target !== null) setTimeout(function () { wwr_req("SET/POS/" + target); }, 150);
+            // One ordered request; no delayed seek survives a subsequent Play.
+            wwr_req(target===null ? 1016 : "1016;SET/POS/" + target);
+        }
+        function startPlayback() {
+            cancelTransportActions();
+            g_transportDesiredPlaying=true;
+            wwr_req(1007);
         }
         function togglePlay() {
-            if (isPlaying) { wwr_req(1008); }
+            // Resolve rapid clicks against our outstanding command, while the
+            // displayed transport state continues to come only from REAPER.
+            var playing=g_transportDesiredPlaying===null?isPlaying:g_transportDesiredPlaying;
+            if (playing) { cancelTransportActions(); g_transportDesiredPlaying=false;wwr_req(1008); }
             else {
                 var activeIdx = -1;
                 for (var i = 0; i < displayList.length; i++) { var r = displayList[i]; if (currentPos >= r.start && currentPos < r.end) { activeIdx = i; break; } }
                 if (activeIdx === -1 && displayList.length > 0) playRegion(displayList[0].start, displayList[0].id);
-                else wwr_req(1007);
+                else startPlayback();
             }
         }
         // --- 9. SHOW TIMER ---
@@ -8218,8 +8253,8 @@
                     if (liveViewOpen) { closeLiveView(); return; }
                     if (activeIdx !== -1 && displayList[activeIdx].loop) toggleLoop(displayList[activeIdx].id);
                     break;
-                case 'Space': event.preventDefault(); togglePlay(); break;
-                case 'Enter': event.preventDefault(); smartStop(); break;
+                case 'Space': event.preventDefault(); if (!event.repeat) togglePlay(); break;
+                case 'Enter': event.preventDefault(); if (!event.repeat) smartStop(); break;
                 case 'KeyL': event.preventDefault(); toggleLyricsPanel(); break;
                 case 'KeyO':
                     event.preventDefault();
@@ -8274,8 +8309,8 @@
 
         // ── Action dispatcher ──────────────────────────────────────
         var MIDI_ACTIONS = {
-            'play':         function() { wwr_req(1007); },
-            'stop':         function() { wwr_req(1016); },
+            'play':         function() { startPlayback(); },
+            'stop':         function() { cancelTransportActions(); g_transportDesiredPlaying=false;wwr_req(1016); },
             'play_pause':   function() { togglePlay(); },
             'next_song':    function() { midiNextSong(); },
             'prev_song':    function() { midiPrevSong(); },
@@ -8319,6 +8354,7 @@
             for (var s2 = subIdx + 1; s2 < subs.length; s2++) {
                 var ss = window.subStates && window.subStates[subs[s2].id];
                 if (!ss || !ss.skipped) {
+                    cancelTransportActions();
                     wwr_req('SET/POS/' + subs[s2].start);
                     if (isPlaying) wwr_req(1007);
                     return;
@@ -8338,6 +8374,7 @@
             for (var s2 = subIdx - 1; s2 >= 0; s2--) {
                 var ss = window.subStates && window.subStates[subs[s2].id];
                 if (!ss || !ss.skipped) {
+                    cancelTransportActions();
                     wwr_req('SET/POS/' + subs[s2].start);
                     if (isPlaying) wwr_req(1007);
                     return;
@@ -8348,6 +8385,7 @@
         function midiRestartSong() {
             var idx = midiGetActiveIdx();
             if (idx === -1) return;
+            cancelTransportActions();
             wwr_req('SET/POS/' + displayList[idx].start);
             if (isPlaying) wwr_req(1007);
         }
@@ -8900,7 +8938,7 @@
                 queue: "Queue ON = seamless transition.\nQueue OFF = immediate jump.",
                 stop: "Auto-Stop ON = stops at the end of the region.\n(Use Chain to override per song).",
                 hide: "Hide Skips = removes inactive songs from the view.",
-                initsongmidi: "Briefly fires play/stop at the start of each region to initialize MIDI.\nOnly works with Auto-Stop enabled."
+                initsongmidi: "Briefly plays then stops when you explicitly Cue a song to initialize MIDI.\nAutomatic song-end cues stay silent. Play or Stop cancels an unfinished MIDI pulse."
             };
             alert(msgs[topic] || "");
         }

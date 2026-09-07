@@ -77,6 +77,97 @@ class BrowserTests(unittest.TestCase):
         self.page.evaluate('g_clData=null;renderLyricsView();renderChordsView()')
         self.assertEqual(self.page.locator('#lyrics-live').inner_text(), 'No lyrics for this song.')
 
+    def setup_transport(self):
+        self.load_reaset()
+        self.page.clock.install()
+        self.page.evaluate('''() => {
+          displayList=[{id:'1',name:'A',start:0,end:60,duration:60},
+                       {id:'2',name:'B',start:70,end:130,duration:60}];
+          g_subRegionMap={};window.g_specialMarkersMap={};g_songOverrides={};
+          currentPos=10;isPlaying=false;sent=[];
+          document.getElementById('queueModeToggle').checked=false;
+          document.getElementById('initSongMidiToggle').checked=true;
+        }''')
+
+    def test_normal_play_cancels_midi_initialisation_stop(self):
+        self.setup_transport()
+        self.page.evaluate('triggerMidi();togglePlay();sent=[]')
+        self.page.clock.run_for(1000)
+        self.assertNotIn(1016,self.page.evaluate('sent'))
+
+    def test_stop_then_play_before_transport_ack_starts_instead_of_pausing(self):
+        self.setup_transport()
+        self.page.evaluate('isPlaying=true;smartStop();sent=[];togglePlay()')
+        self.assertIn(1007,self.page.evaluate('sent'))
+        self.assertNotIn(1008,self.page.evaluate('sent'))
+
+    def test_stop_then_play_another_song_cancels_old_reposition(self):
+        self.setup_transport()
+        self.page.evaluate("smartStop();playRegion(70,'2');sent=[]")
+        self.page.clock.run_for(1000)
+        self.assertNotIn('SET/POS/0',self.page.evaluate('sent'))
+
+    def test_import_render_does_not_send_transport_commands(self):
+        self.setup_transport()
+        self.page.evaluate('isPlaying=true;currentPos=59.9;updatePlaybackUI()')
+        self.assertNotIn(1016,self.page.evaluate('sent'))
+
+    def test_play_ignores_stale_end_of_song_poll(self):
+        self.setup_transport()
+        self.page.evaluate("togglePlay();sent=[];wwr_onreply('TRANSPORT\\t1\\t59.9\\t0\\n')")
+        self.assertNotIn(1016,self.page.evaluate('sent'))
+
+    def test_stop_cancels_delayed_next_song_start(self):
+        self.setup_transport()
+        self.page.evaluate("g_songOverrides={'1':{delayAfter:2}};wwr_onreply('TRANSPORT\\t1\\t59.9\\t0\\n');smartStop();sent=[]")
+        self.page.clock.run_for(3000)
+        self.assertNotIn(1007,self.page.evaluate('sent'))
+
+    def test_auto_stop_fires_once_and_cues_without_midi_play_stop(self):
+        self.setup_transport()
+        self.page.evaluate("for(var i=0;i<5;i++)wwr_onreply('TRANSPORT\\t1\\t59.9\\t0\\n')")
+        self.page.clock.run_for(1000)
+        commands=self.page.evaluate('sent')
+        self.assertEqual(commands.count(1016),1)
+        self.assertIn('SET/POS/70',commands)
+        self.assertNotIn(1007,commands)
+
+    def test_native_play_cancels_pending_automatic_cue(self):
+        self.setup_transport()
+        self.page.evaluate("wwr_onreply('TRANSPORT\\t1\\t59.9\\t0\\n');wwr_onreply('TRANSPORT\\t0\\t0\\t0\\n');wwr_onreply('TRANSPORT\\t1\\t10\\t0\\n');sent=[]")
+        self.page.clock.run_for(1000)
+        self.assertEqual(self.page.evaluate('sent'),[])
+
+    def test_slow_old_poll_cannot_stop_new_playback_after_timeout(self):
+        self.setup_transport()
+        self.page.evaluate('oldRequest=Date.now()-1;startPlayback();sent=[]')
+        self.page.clock.fast_forward(5000)
+        self.page.evaluate("wwr_onreply('TRANSPORT\\t1\\t59.9\\t0\\n',oldRequest)")
+        self.assertNotIn(1016,self.page.evaluate('sent'))
+
+    def test_background_timer_cannot_stop_later_play(self):
+        self.setup_transport()
+        self.page.evaluate("triggerMidi();playRegion(70,'2');sent=[]")
+        self.page.clock.fast_forward(5000)
+        self.assertNotIn(1016,self.page.evaluate('sent'))
+
+    def test_song_chain_still_advances(self):
+        self.setup_transport()
+        self.page.evaluate("displayList[0].chain=true;wwr_onreply('TRANSPORT\\t1\\t59.9\\t0\\n')")
+        self.assertIn('SET/POS/70',self.page.evaluate('sent'))
+        self.assertNotIn(1016,self.page.evaluate('sent'))
+
+    def test_region_change_cancels_pending_midi_stop(self):
+        self.setup_transport()
+        self.page.evaluate("g_transportRegions='old';triggerMidi();wwr_onreply('REGION_LIST\\nREGION\\tA\\t1\\t0\\t60\\t0\\nREGION_LIST_END\\n');sent=[]")
+        self.page.clock.run_for(1000)
+        self.assertNotIn(1016,self.page.evaluate('sent'))
+
+    def test_transport_and_imported_regions_in_one_reply_use_new_boundaries(self):
+        self.setup_transport()
+        self.page.evaluate("g_transportRegions='old';wwr_onreply('TRANSPORT\\t1\\t59.9\\t0\\nREGION_LIST\\nREGION\\tA\\t1\\t0\\t65\\t0\\nREGION\\tB\\t2\\t70\\t130\\t0\\nREGION_LIST_END\\n')")
+        self.assertNotIn(1016,self.page.evaluate('sent'))
+
     def test_bulk_selection_and_protection(self):
         songs=[{'id':i,'name':'Song '+str(i),'eligible':i==1,'protected':i==2,'update_status':'Update available'} for i in (1,2,3)]
         posts=[]
