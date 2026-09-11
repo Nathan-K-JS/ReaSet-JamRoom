@@ -36,7 +36,7 @@ import jamroom_chart as chart_model
 # what is on disk — the importer server holds its modules in memory, so this is
 # how you tell "did the update take effect?" from "is the old process still up?"
 # BUMP THIS whenever the importer changes, and quote it when handing over.
-BUILD = "v3.2"
+BUILD = "v3.3"
 BUILD_DATE = "2026-09-11"
 
 # Fadr's S3 throttles each connection independently, so several transfers at
@@ -2069,8 +2069,8 @@ def stage_lyrics_align(job, job_dir, force, persist=True):
             f"sung line lands at {onset:.2f}s, which needs {onset_offset:+.2f}s. "
             f"Keeping the source lyric timing because those estimates disagree.")
     elif abs(offset) <= CORRECT_ABOVE:
-        log(f"Lyric-align: OK — lyric timing matches the sung vocals "
-            f"(best offset {offset:+.2f}s); no correction needed.")
+        log(f"Lyric-align: estimated global offset {offset:+.2f}s; keeping the original timestamps. "
+            "This does not verify individual lines or page cues.")
     elif drop >= 0.10:
         shift = offset
         log(f"Lyric-align: lyric lines best match the sung vocals when moved "

@@ -2,6 +2,7 @@
 
 Requires stopped REAPER, its web interface, Playwright and Microsoft Edge.
 Usage: python tools/verify_song_visual.py [path/to/cached/song]
+Add --playback-check to verify actual playback crosses saved section cues.
 Audio stays in its original location. Evidence is saved under imports/.visual/.
 """
 import json
@@ -170,6 +171,29 @@ if not ok then write('error.json',{error=tostring(why)});cleanup()end
             page.set_viewport_size({'width':768,'height':1024})
             page.wait_for_timeout(500)
             page.screenshot(path=str(folder / 'chords-lyrics-tablet.png'), full_page=True)
+            if '--playback-check' in sys.argv:
+                sections=page.evaluate('g_clData.document.sections')
+                candidates=[s for s in sections[1:] if s['end']-s['start']>=3]
+                targets=[]
+                if candidates:
+                    for section in (candidates[0], next((s for s in candidates if s['label']=='Bridge'),candidates[len(candidates)//2]),candidates[-1]):
+                        if section not in targets:targets.append(section)
+                checks=[]
+                for section in targets:
+                    start=max(0,section['start']-1.5)
+                    session.get(WEB+'/_/SET/POS/'+str(start),timeout=5).raise_for_status()
+                    page.evaluate('chartFollow()')
+                    try:
+                        session.get(WEB+'/_/1007',timeout=5).raise_for_status()
+                        page.wait_for_function('t=>currentPos>=t&&currentPos<t+5',arg=section['start']+.5,timeout=8000)
+                        state=session.get(WEB+'/_/TRANSPORT',timeout=5).text.split('\t')
+                        label=page.get_by_role('combobox',name='Chart section').locator('option:checked').inner_text()
+                        assert state[1]=='1' and label==section['label'],(state,label,section)
+                        checks.append({'cue':section['start'],'section':label,'playing_position':float(state[2])})
+                        page.screenshot(path=str(folder/('playing-'+str(len(checks))+'.png')))
+                    finally:
+                        session.get(WEB+'/_/1016',timeout=5).raise_for_status()
+                (folder/'playback-following.json').write_text(json.dumps(checks,indent=2))
             if '--edit-check' in sys.argv:
                 page.set_viewport_size({'width':1440,'height':1000})
                 before = page.evaluate('g_clData.document')

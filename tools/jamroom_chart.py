@@ -10,12 +10,12 @@ import json
 import math
 import re
 
-GENERATOR = "source-pages-3"
-PARSER = 2
+GENERATOR = "source-pages-4"
+PARSER = 3
 SCHEMA = 2
 CH = re.compile(r"\[ch\](.*?)\[/ch\]", re.I)
 HEADER = re.compile(r"^\s*\[?(lead break|guitar solo|intro|verse|chorus|pre[- ]?chorus|post[- ]?chorus|bridge|solo|outro|"
-                    r"interlude|instrumental|refrain|break|hook|riff|ending|coda|tag)\b([^\]]*)\]?\s*$", re.I)
+                    r"interlude|instrumental|refrain|break|hook|riff|ending|coda|tag)\b([^\]\n]*)(?:\]\s*(?:[-\u2013\u2014:]\s*)?(.*))?\s*$", re.I)
 
 
 def fingerprint(value):
@@ -43,7 +43,8 @@ def lyric_items(job):
         end = min(duration, line["start"] + 15,
                   lines[i + 1]["start"] if i + 1 < len(lines) else duration)
         if line["text"].strip() and end > line["start"]:
-            out.append(dict(line, end=end))
+            out.append(dict(line, end=end, ended_by_gap=bool(i+1 < len(lines) and
+                not lines[i+1]['text'].strip() and end == lines[i+1]['start'])))
     return out
 
 
@@ -67,6 +68,8 @@ def parse_chart(content, transpose=lambda x: x):
         if header or reference:
             m = header or reference
             current = new_section((m.group(1) + m.group(2)).strip().title())
+            if header and header.group(3):
+                current['instruction'] = header.group(3).strip()
             i += 1
             continue
         if current is None:
@@ -133,6 +136,52 @@ def _tokens(text):
     return re.findall(r"[a-z0-9]+", re.sub(r"['\u2019\-]", "", text.casefold()))
 
 
+def matching_word_runs(source, sung):
+    """Global edit alignment, rather than greedy longest repeated phrases.
+
+    Keep only exact word runs as timing evidence. Substitutions/omissions affect
+    which occurrence is selected, but never rewrite the displayed source.
+    Rolling costs and byte directions bound memory for longer songs.
+    """
+    # Equal edit costs are common in repeated lyrics. Prefer more exact words,
+    # then earlier occurrences, so a short source line is not scattered across
+    # two later repetitions merely because traceback starts at the song's end.
+    previous = [(j,0,0) for j in range(len(sung)+1)]
+    directions = []
+    for i, word in enumerate(source, 1):
+        current = [(i,0,0)] + [None]*len(sung)
+        row = bytearray(len(sung))
+        for j, other in enumerate(sung, 1):
+            equal = word == other
+            p = previous[j-1]
+            diagonal = (p[0]+(not equal), p[1]-equal, p[2]+(j if equal else 0))
+            p, q = previous[j], current[j-1]
+            deletion, insertion = (p[0]+1,p[1],p[2]), (q[0]+1,q[1],q[2])
+            best = min(diagonal, deletion, insertion)
+            current[j] = best
+            row[j-1] = 0 if best == diagonal else 1 if best == deletion else 2
+        directions.append(row)
+        previous = current
+    pairs, i, j = [], len(source), len(sung)
+    while i and j:
+        direction = directions[i-1][j-1]
+        if direction == 0:
+            if source[i-1] == sung[j-1]:
+                pairs.append((i-1, j-1))
+            i -= 1; j -= 1
+        elif direction == 1:
+            i -= 1
+        else:
+            j -= 1
+    runs = []
+    for i, j in reversed(pairs):
+        if runs and runs[-1][0]+runs[-1][2] == i and runs[-1][1]+runs[-1][2] == j:
+            runs[-1][2] += 1
+        else:
+            runs.append([i, j, 1])
+    return runs
+
+
 def source_sections(templates):
     """Headings can be wrong; words, columns and occurrence order cannot change."""
     sections, issues = [], []
@@ -196,21 +245,27 @@ def build_document(job, templates, detected, transpose=lambda x: x):
     row_matches = {}
     # Ordered whole-song alignment disambiguates repeated choruses. It provides
     # cue estimates ONLY. The source rows/anchors above are never rewritten.
-    matcher = difflib.SequenceMatcher(None, source_words, sung_words, autojunk=False)
-    for block in matcher.get_matching_blocks():
-        if block.size < 3:
+    for source_start, sung_start, size in matching_word_runs(source_words, sung_words):
+        if size < 3:
             continue
-        for k in range(block.size):
-            si, ri = source_owner[block.a+k]
-            li, ti, count = sung_owner[block.b+k]
+        for k in range(size):
+            si, ri = source_owner[source_start+k]
+            li, ti, count = sung_owner[sung_start+k]
             row_matches.setdefault((si, ri), []).append((li, ti, count))
     starts = [None] * len(sections)
     vocal_ends = {}
+    vocal_gap_ends = {}
     matched_rows = 0
     for si, section in enumerate(sections):
         for ri, row in enumerate(section["rows"]):
             matches = row_matches.get((si, ri), [])
             if not matches:
+                continue
+            coverage = len(matches)/max(1,len(_tokens(row['text'])))
+            row['cue_word_coverage'] = round(coverage,3)
+            # A common tail such as "to get away" can belong to a preceding
+            # ad-lib. It is not enough evidence to time an entire extra line.
+            if coverage < .8:
                 continue
             li, ti, count = matches[0]
             line = lyrics[li]
@@ -221,6 +276,16 @@ def build_document(job, templates, detected, transpose=lambda x: x):
             if starts[si] is None:
                 starts[si] = cue
             vocal_ends[si] = lyrics[matches[-1][0]]["end"]
+            vocal_gap_ends[si] = lyrics[matches[-1][0]].get('ended_by_gap', False)
+    for si, section in enumerate(sections):
+        # A section can begin with written instrumental bars before its first
+        # sung word. An explicit LRC gap after the preceding vocal provides a
+        # better cue estimate than waiting for those words to start.
+        leading = section['rows'] and not section['rows'][0]['text'].strip()
+        gap = vocal_ends.get(si-1)
+        if leading and starts[si] is not None and vocal_gap_ends.get(si-1) and gap < starts[si]:
+            starts[si] = gap
+            section['rows'][0].update(cue=round(gap,3), cue_confidence='estimated')
     # Keep every source section in order. Unlocated sections get explicit
     # estimated cues between neighbouring evidence, never a new lyric layout.
     if starts[0] is None:
@@ -271,6 +336,9 @@ def build_document(job, templates, detected, transpose=lambda x: x):
         issues.append({'code':'unmatched_source_words', 'message':'Some chart words have no reliable recording match. Check the source version and page cues.'})
     if matched_words < len(sung_words) * .9:
         issues.append({'code':'unrepresented_recording_words', 'message':'Some timed recording words are absent from the chart. Check for missing passages or a different song version.'})
+    unlocated = sum(bool(r['text'].strip()) and 'cue' not in r for s in sections for r in s['rows'])
+    if unlocated:
+        issues.append({'code':'unlocated_rows', 'message':f'{unlocated} chart lines have no lyric timing match. Their page cues need checking; the source may contain extra or different words.'})
     for section in sections:
         if section['end']-section['start'] < 2:
             issues.append({'code':'short_section', 'section':section['id'], 'message':'Section lasts less than two seconds; check its boundary.'})
@@ -278,7 +346,7 @@ def build_document(job, templates, detected, transpose=lambda x: x):
            "sections":sections,"templates":copy.deepcopy(templates),
            "source_hash":fingerprint(templates),"lyrics_hash":fingerprint(job.get("lyrics",{})),
            "alignment":{"matched_rows":matched_rows,"source_rows":sum(bool(r["text"].strip()) for s in sections for r in s["rows"]),
-                        "purpose":"section cues only"},
+                        "purpose":"section cues only", "method":"global word sequence alignment"},
            "review":{"status":"needs_review", "issues":issues,
                      "timing":"estimated", "message":"Source chord placement preserved. Section names and playback cues still need review; text matching does not verify musical timing."}}
     doc["revision"] = fingerprint(doc)

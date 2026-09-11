@@ -196,9 +196,8 @@ def build_review(job, job_dir, cfg):
             s["slot"] = "SKIP"
         elif skip_history.get(ji.norm_stem_type(s["name"])):
             n, tot = skip_history[ji.norm_stem_type(s["name"])]
-            s["suggest_skip"] = (f"you left this stem out of {n} of the last "
-                                 f"{tot} songs")
-            s["slot"] = "SKIP"
+            s["history_note"] = (f"You left this stem type out of {n} of the last "
+                                 f"{tot} songs. Listen before deciding for this song.")
 
 
     ly = job.get("lyrics") or {}

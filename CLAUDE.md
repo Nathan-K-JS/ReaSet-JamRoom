@@ -12,6 +12,10 @@ to it — we are not building a new app from scratch.
 Current implementation branch: `feature/timing-repair`. The section-chart overhaul
 is documented in `docs/SONG_CHART_UPDATES.md`; the baseline review and longer-term
 suggestions are in `docs/PROJECT_REVIEW.md`.
+The fresh-import findings and shared generation fixes are in
+`docs/FLY_AWAY_IMPORT_REVIEW.md`. Visual verification now supports
+`tools/verify_song_visual.py <cached-song-folder> --playback-check --edit-check`;
+stopped-position screenshots and text-match counts alone do not verify playback.
 
 This workspace and its running REAPER instance are the **testing workstation**,
 not the jam-room PC. Local deployments, song rebuilds and saved test projects are

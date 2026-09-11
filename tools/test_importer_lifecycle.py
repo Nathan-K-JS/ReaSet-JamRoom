@@ -14,6 +14,16 @@ import jamroom_importer_server as server  # noqa: E402
 
 
 class ImporterLifecycleTests(unittest.TestCase):
+    def test_other_songs_skip_history_does_not_discard_this_songs_audio(self):
+        cfg={'slot_map':{'piano':'KEYS'},'slot_labels':{'KEYS':'Keys'}}
+        job={'stems':[{'fadr_name':'piano','file':'stems/piano.wav'}]}
+        with tempfile.TemporaryDirectory() as td, patch.object(server,'_usually_skipped',return_value={'piano':(3,4)}), patch.object(server.ji,'stem_profile',return_value={'verdict':'sparse','peak_db':-7}):
+            stem=server.build_review(job,Path(td),cfg)['stems'][0]
+            self.assertEqual(stem['slot'],'KEYS')
+            self.assertIn('Listen before deciding',stem['history_note'])
+            job['slot_overrides']={'stems/piano.wav':'SKIP'}
+            self.assertEqual(server.build_review(job,Path(td),cfg)['stems'][0]['slot'],'SKIP')
+
     def setUp(self):
         self.old_state = dict(server.STATE)
         self.old_current = dict(server.CURRENT)

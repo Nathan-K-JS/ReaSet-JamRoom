@@ -334,7 +334,7 @@
 <script>
 // Version of THIS page (served fresh from disk). Compared against the version
 // of the running server. Either side may be older.
-var UI_BUILD = "v3.2";
+var UI_BUILD = "v3.3";
 
 function importerVersionWarning(serverBuild) {
   if (serverBuild === UI_BUILD) return '';
@@ -1076,6 +1076,7 @@ function stemNote(st){
               'peak ' + p.peak_db + ' dB'];
   if(p.below_loudest_db >= 6) bits.push(p.below_loudest_db + ' dB below the loudest stem');
   var s = bits.join(' · ');
+  if(st.history_note) s += ' · ' + st.history_note;
   if(st.suggest_skip) s += ' — set to “don’t import”, because ' + st.suggest_skip
                          + '. Change it if you disagree.';
   return s;

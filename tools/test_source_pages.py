@@ -36,6 +36,40 @@ class JobPersistenceTests(unittest.TestCase):
             self.assertEqual(json.loads((target/'job.json').read_text()),{'old':True})
 
 class SourceChartTests(unittest.TestCase):
+    def test_common_tail_cannot_supply_a_cue_for_an_unmatched_line(self):
+        doc,_=chart.build_document({'duration':30,'lyrics':{'synced':True,'lines':[{'time':10,'text':'We met my dear friend'}]}},
+            chart.parse_chart('[Verse]\n[ch]C[/ch]\nWelcome home my dear friend'),[])
+        self.assertNotIn('cue',doc['sections'][0]['rows'][0])
+        self.assertTrue(any(i['code']=='unlocated_rows' for i in doc['review']['issues']))
+
+    def test_leading_instrumental_uses_explicit_vocal_gap_before_words(self):
+        source='[Chorus]\n[ch]C[/ch]\nWe sing together now\n[Bridge] - no chords\nN.C. x2\n\nN.C.\nHere we go again'
+        job={'duration':60,'lyrics':{'synced':True,'lines':[{'time':10,'text':'We sing together now'}, {'time':20,'text':''}, {'time':30,'text':'Here we go again'}]}}
+        doc,_=chart.build_document(job,chart.parse_chart(source),[])
+        bridge=doc['sections'][1]
+        self.assertEqual(bridge['start'],20)
+        self.assertEqual(bridge['rows'][1]['cue'],30)
+        self.assertEqual(bridge['confidence'],'estimated')
+
+    def test_global_word_alignment_keeps_later_repetitions_after_unique_bridge(self):
+        source=('unique bridge here '+'a b c d e f '*4+'final ending now').split()
+        sung=source[:]
+        sung[8]='different';sung[18]='wording'
+        runs=chart.matching_word_runs(source,sung)
+        pairs={a+k:b+k for a,b,size in runs for k in range(size)}
+        self.assertEqual(pairs,{i:i for i in range(len(source)) if i not in (8,18)})
+
+    def test_bracketed_heading_with_instruction_is_not_sung_text(self):
+        for suffix in (' - no chords', ' (quietly)', ': repeat twice', ' \u2014 drums only'):
+            with self.subTest(suffix=suffix):
+                source='[Verse 1]\n[ch]C[/ch]\nHere we sing\n[Bridge]'+suffix+'\nN.C.\nAnother line to sing\n[Chorus]\n[ch]G[/ch]\nThere we go'
+                sections=chart.parse_chart(source)
+                self.assertEqual([s['label'] for s in sections],['Verse 1','Bridge','Chorus'])
+                self.assertEqual(sections[1]['rows'][0]['text'],'Another line to sing')
+                self.assertEqual(sections[1]['rows'][0]['anchors'][0]['symbol'],'N.C.')
+                self.assertTrue(sections[1]['instruction'])
+                self.assertFalse(any('[Bridge]' in r['text'] for s in sections for r in s['rows']))
+
     def test_mislabeled_repeated_passage_keeps_every_source_column(self):
         chorus='[ch]C[/ch]   [ch]G[/ch]\nWe are singing in the rain\n[ch]Am[/ch]\nEvery little light will shine'
         templates=chart.parse_chart('[Chorus]\n'+chorus+'\n[Instrumental]\n[ch]F[/ch]\n\n'+chorus)
