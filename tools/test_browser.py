@@ -125,6 +125,20 @@ class BrowserTests(unittest.TestCase):
         payload=bytes.fromhex(''.join(c.rsplit('/',1)[1] for c in commands)).decode('utf-8')
         self.assertIn('sections',json.loads(payload))
 
+    def test_transposed_repeats_have_space_without_moving_word_anchors(self):
+        self.load_reaset()
+        result=self.page.evaluate('''()=>{
+            let row={text:'Held note',chord_line:'C                   C C C',anchors:[
+              {symbol:'C',offset:0,width:1},{symbol:'C',offset:20,width:1},
+              {symbol:'C',offset:22,width:1},{symbol:'C',offset:24,width:1}]};
+            let before=JSON.stringify(row),parts=chartFragments(row,80,'sheet',0,0,1);
+            return {before,after:JSON.stringify(row),anchors:parts[0].anchors};
+        }''')
+        self.assertEqual(result['before'],result['after'])
+        self.assertEqual(result['anchors'][0]['offset'],0)
+        for previous,current in zip(result['anchors'],result['anchors'][1:]):
+            self.assertGreaterEqual(current['offset']-previous['offset']-len(previous['symbol']),2)
+
     def test_whole_library_uses_all_project_songs_and_keeps_protected_versions(self):
         songs=[{'id':i,'name':'Song '+str(i),'eligible':i!=2,'protected':i==2,'update_status':'Update available'} for i in (1,2,3)]
         posts=[]
@@ -266,6 +280,31 @@ class BrowserTests(unittest.TestCase):
                 self.assertIn(expected, message)
                 self.assertNotIn('Stop-Process', message)
         self.assertEqual(self.page.evaluate("importerVersionWarning('v3.0.0')"), '')
+
+    def test_fadr_picker_starts_default_import_through_visible_buttons(self):
+        song={'id':'split-song','name':'Paramore - Misery Business','duration':199.3,
+              'subsplits_done':2,'named_locally':True,'has_chords':True,'stems':5,
+              'key':'G#:maj','tempo':173,'created':'2026-08-23'}
+        posts=[]
+        def route(req):
+            url=req.request.url
+            if '/api/import_library' in url:
+                posts.append(req.request.post_data_json);req.fulfill(json={'ok':True})
+            elif '/api/library' in url:req.fulfill(json={'songs':[song]})
+            elif '/api/' in url:req.fulfill(json={'songs':[],'state':'idle'})
+            else:req.fulfill(path=str(ROOT/'tools/importer.html'))
+        self.page.route('**/*',route)
+        self.page.goto('http://importer.test/')
+        self.page.locator('#srcLib').click()
+        self.page.locator('#libFilter').fill('Misery')
+        self.page.locator('#libList .result').click()
+        self.assertEqual(self.page.locator('#band').input_value(),'Paramore')
+        self.assertEqual(self.page.locator('#title').input_value(),'Misery Business')
+        self.page.locator('#importBtn').click()
+        self.page.wait_for_timeout(200)
+        self.assertEqual(posts[0]['id'],'split-song')
+        self.assertEqual(posts[0]['title'],'Misery Business')
+        self.assertEqual(posts[0]['duration'],199.3)
 
     def test_bulk_selection_and_protection(self):
         songs=[{'id':i,'name':'Song '+str(i),'eligible':i==1,'protected':i==2,'update_status':'Update available'} for i in (1,2,3)]

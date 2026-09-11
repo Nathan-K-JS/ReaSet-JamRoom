@@ -8977,6 +8977,18 @@
                 (row.anchors||[]).forEach(function(a){for(var n=a.offset;n<a.offset+(a.width||a.symbol.length);n++)chars[n]=' ';});
                 decorations=chars.join('');
                 if(!raw && repeat>1)decorations=' '.repeat(Math.max(text.length,anchors.reduce(function(n,a){return Math.max(n,a.offset+a.symbol.length);},0))+2)+'x'+repeat;
+                // Transposition can turn tightly printed C C C into C#C#C#.
+                // Expand only instrumental space or space after the lyric;
+                // anchors over words retain their exact authored columns.
+                var previousEnd=-2;
+                anchors.forEach(function(a,i){
+                    if(a.offset>=text.length && a.offset<previousEnd+2){
+                        var at=a.offset,extra=previousEnd+2-at;
+                        decorations=decorations.slice(0,at)+' '.repeat(extra)+decorations.slice(at);
+                        for(var j=i;j<anchors.length;j++)anchors[j].offset+=extra;
+                    }
+                    previousEnd=a.offset+a.symbol.length;
+                });
             }
             var width=Math.max(text.length,decorations.length,anchors.reduce(function(n,a){return Math.max(n,a.offset+a.symbol.length);},0));
             if(!width)return [];

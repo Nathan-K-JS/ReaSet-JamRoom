@@ -918,6 +918,148 @@ function doRechord(url, btn){
 // ── Give an existing song different lyrics (and re-place its chords) ──────
 
 // ── Stem content: see what is in a track without playing it through ───────
+function loadLibrary(force){
+  if(force) g_library = null;
+  $('libList').innerHTML = '<div class="note">Loading your Fadr library…</div>';
+  fetch('/api/library').then(function(r){
+    // An old server has no such endpoint; say what to do rather than "not found".
+    if(r.status === 404){
+      throw new Error('This importer is running an older version that has no '
+        + 'Fadr library support. Close the Jam Room Importer window and start '
+        + 'JamRoom Importer.bat again.');
+    }
+    return r.json();
+  }).then(function(d){
+    if(d.error){ $('libList').innerHTML = '<div class="check bad">'+d.error+'</div>'; return; }
+    g_library = d.songs || [];
+    if(!g_library.length){
+      $('libList').innerHTML = '<div class="note">Your Fadr account has no '
+        + 'split songs yet. Import one from YouTube first.</div>';
+      return;
+    }
+    renderLibrary();
+  }).catch(function(e){
+    g_library = null;   // let a retry actually retry
+    $('libList').innerHTML = '<div class="check bad">' + e.message + '</div>';
+  });
+}
+
+function renderLibrary(){
+  if(!g_library) return;
+  var f = ($('libFilter').value || '').toLowerCase();
+  var rows = g_library.filter(function(s){ return s.name.toLowerCase().indexOf(f) >= 0; });
+  if(!rows.length){ $('libList').innerHTML = '<div class="note">Nothing matches.</div>'; return; }
+  $('libList').innerHTML = '';
+  rows.forEach(function(s){
+    var b = document.createElement('button');
+    b.className = 'result';
+    var m = Math.floor(s.duration/60), sec = ('0'+Math.round(s.duration%60)).slice(-2);
+    var free = (s.subsplits_done >= 2);
+    b.innerHTML = s.name
+      + (s.named_locally ? '' : '<span class="libpill warn">name unknown</span>')
+      + (s.has_chords ? '<span class="libpill">chords</span>'
+                      : '<span class="libpill warn">no chords</span>')
+      + (free ? '<span class="libpill">fully split · free</span>'
+              : '<span class="libpill warn">extra splits not done</span>')
+      + '<br><small>' + m + ':' + sec + ' · ' + s.stems + ' stems · '
+      + (s.key || 'key ?') + ' · ' + (s.tempo || '?') + ' bpm · added ' + s.created
+      + '</small>';
+    b.onclick = function(){ pickLibrary(s, b); };
+    $('libList').appendChild(b);
+  });
+}
+
+function pickLibrary(s, btn){
+  g_libPicked = s; picked = null;
+  document.querySelectorAll('.result').forEach(function(x){ x.classList.remove('sel'); });
+  btn.classList.add('sel');
+  // Split "Band - Song" when we know it; otherwise the operator names it now.
+  var i = s.name.indexOf(' - ');
+  $('band').value  = i > 0 ? s.name.slice(0, i) : '';
+  $('title').value = i > 0 ? s.name.slice(i + 3) : (s.named_locally ? s.name : '');
+  var extra = $('libExtra');
+  if (s.subsplits_done >= 2) {
+    $('cost').textContent = 'Already fully split on Fadr — this import is free.';
+    $('importBtn').textContent = 'Import this song (no charge)';
+    extra.classList.add('hide');
+  } else {
+    // Honest about cost: the main split is paid for, the sub-splits are not.
+    var mins = Math.max(1, Math.ceil(s.duration/60));
+    $('cost').textContent = 'Main split already paid for. Splitting vocals into '
+      + 'lead/backing and melodies into guitars/keys has NOT been done for this '
+      + 'song yet — doing it now costs about $' + (mins*0.05*2).toFixed(2) + '.';
+    $('importBtn').textContent = 'Import this song';
+    extra.classList.remove('hide');
+  }
+  $('confirmCard').classList.remove('hide');
+}
+
+function doImport(rebuild){
+  if(g_source === 'lib'){ return doImportLibrary(); }
+  if(!picked) return;
+  if(!$('band').value.trim() || !$('title').value.trim()){
+    alert('Please give this song a Band and Song title.'); return;
+  }
+  var importUrl = picked.url;
+  var importBand = $('band').value.trim();
+  var importTitle = $('title').value.trim();
+  dismissReceipt();
+  $('importBtn').disabled = true;
+  setPipelineActive(true);
+  reviewShown = false;
+  fetch('/api/import', {method:'POST', headers:{'Content-Type':'application/json'},
+    body: JSON.stringify({url:importUrl, band:importBand,
+                          title:importTitle, rebuild:!!rebuild})})
+  .then(r=>r.json()).then(function(d){
+    if(d.error){
+      setPipelineActive(false);
+      $('importBtn').disabled = false;
+      if(d.code === 'cached_recording' && !rebuild){
+        if(confirm(d.error + '\n\nReplace all cached audio, stems, lyrics and chord analysis with the newly selected recording? This can incur a new Fadr charge.')){
+          doImport(true);
+        }
+      } else alert(d.error);
+      return;
+    }
+    beginPipeline((rebuild ? 'Rebuilding ' : 'Downloading & splitting ')
+      + importBand + ' - ' + importTitle + ' …');
+    startPolling();
+  }).catch(function(e){
+    setPipelineActive(false);
+    $('importBtn').disabled = false;
+    alert('Could not start the import: ' + e);
+  });
+}
+
+function doImportLibrary(){
+  if(!g_libPicked) return;
+  if(!$('band').value.trim() || !$('title').value.trim()){
+    alert('Please give this song a Band and a Song title — that becomes the region name in REAPER.');
+    return;
+  }
+  var importAsset = g_libPicked;
+  var importBand = $('band').value.trim();
+  var importTitle = $('title').value.trim();
+  $('importBtn').disabled = true;
+  dismissReceipt();
+  setPipelineActive(true);
+  reviewShown = false;
+  fetch('/api/import_library', {method:'POST', headers:{'Content-Type':'application/json'},
+    body: JSON.stringify({id: importAsset.id, band: importBand,
+                          title: importTitle, duration: importAsset.duration,
+                          allow_new_splits: (importAsset.subsplits_done >= 2)
+                              || $('allowSplits').checked})})
+  .then(r=>r.json()).then(function(d){
+    if(d.error){ setPipelineActive(false); alert(d.error); $('importBtn').disabled = false; return; }
+    beginPipeline('Fetching ' + importBand + ' - ' + importTitle + ' from Fadr…');
+    startPolling();
+  }).catch(function(e){
+    setPipelineActive(false);
+    $('importBtn').disabled = false;
+    alert('Could not start the Fadr import: ' + e);
+  });
+}
+
 function stemBadge(st){
   var p = st.profile || {};
   if(p.error) return '';
