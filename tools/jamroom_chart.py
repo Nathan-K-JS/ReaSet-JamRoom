@@ -10,10 +10,11 @@ import json
 import math
 import re
 
-GENERATOR = "sections-1"
+GENERATOR = "source-pages-2"
+PARSER = 2
 SCHEMA = 2
 CH = re.compile(r"\[ch\](.*?)\[/ch\]", re.I)
-HEADER = re.compile(r"^\s*\[?(lead break|guitar solo|intro|verse|chorus|pre[- ]?chorus|bridge|solo|outro|"
+HEADER = re.compile(r"^\s*\[?(lead break|guitar solo|intro|verse|chorus|pre[- ]?chorus|post[- ]?chorus|bridge|solo|outro|"
                     r"interlude|instrumental|refrain|break|hook|riff|ending|coda|tag)\b([^\]]*)\]?\s*$", re.I)
 
 
@@ -47,70 +48,180 @@ def lyric_items(job):
 
 
 def parse_chart(content, transpose=lambda x: x):
-    """Retain headings, lyrics, columns and explicit repeats. Empty named
-    sections reference preceding content; ambiguous instructions are retained.
-    """
-    lines = re.sub(r"\[/?tab\]", "", content, flags=re.I).replace("\r", "").split("\n")
+    """Source columns and source wording are inseparable. Never trim one alone."""
+    lines = re.sub(r"\[/?tab\]", "", content, flags=re.I).replace("\r", "").expandtabs(8).split("\n")
     sections, current = [], None
-
-    def section(label):
+    has_headers = any(HEADER.match(line) for line in lines)
+    diagram = re.compile(r"^\s*[eBGDAE]\|", re.I)
+    def new_section(label):
         repeat = re.search(r"\s+x\s*(\d+)\s*$", label, re.I)
-        s = {"label": label[:repeat.start()].strip() if repeat else label, "rows": [],
-             "repeat": max(1,min(32,int(repeat.group(1)) )) if repeat else 1}
-        sections.append(s)
-        return s
-
+        item = {"label": label[:repeat.start()].strip() if repeat else label,
+                "rows": [], "repeat": min(32, max(1, int(repeat.group(1)))) if repeat else 1}
+        sections.append(item)
+        return item
     i = 0
     while i < len(lines):
         line = lines[i]
         header = HEADER.match(line)
-        repeat_ref = re.match(r"^\s*(?:repeat\s+)(chorus|verse|bridge|intro|solo)(.*)$", line, re.I)
-        if header or repeat_ref:
-            m = header or repeat_ref
-            current = section((m.group(1) + m.group(2)).strip().title())
+        reference = re.match(r"^\s*repeat\s+(chorus|verse|bridge|intro|solo)(.*)$", line, re.I)
+        if header or reference:
+            m = header or reference
+            current = new_section((m.group(1) + m.group(2)).strip().title())
+            i += 1
+            continue
+        if current is None:
+            if has_headers:
+                i += 1
+                continue
+            current = new_section("Song")
+        if diagram.match(line) or re.match(r"^[\s\u2191\u2193~^v]+$", line):
+            repeat = re.search(r"\bx(\d+)", line)
+            if repeat and current["rows"]:
+                current["rows"][-1]["repeat"] = min(32, int(repeat.group(1)))
             i += 1
             continue
         if not line.strip():
             i += 1
             continue
-        if current is None:
-            current = section("Passage")
+        # Untagged no-chord instructions are musical content, too.
+        line = re.sub(r"(?<![\w>])N\.C\.(?!\[/ch\])", "[ch]N.C.[/ch]", line)
         anchors, plain, last = [], "", 0
         for m in CH.finditer(line):
             plain += line[last:m.start()]
-            anchors.append({"symbol": transpose(m.group(1).strip()), "offset": len(plain)})
+            anchors.append({"symbol": transpose(m.group(1).strip()), "offset": len(plain),
+                            "width": len(m.group(1))})
             plain += m.group(1)
             last = m.end()
         plain += line[last:]
         if anchors:
             words = ""
-            if i + 1 < len(lines):
-                nxt = lines[i + 1]
-                if nxt.strip() and not CH.search(nxt) and not HEADER.match(nxt) and not re.match(r"\s*(repeat|x\s*\d)", nxt, re.I):
+            if i+1 < len(lines):
+                nxt = lines[i+1]
+                if (nxt.strip() and not CH.search(nxt) and not HEADER.match(nxt)
+                        and not diagram.match(nxt) and not re.match(r"\s*(repeat|x\s*\d)", nxt, re.I)):
                     words = nxt
                     i += 1
-            repeat = re.search(r"(?:\bx\s*|\brepeat\s+)(\d+)\b", plain, re.I)
-            current["rows"].append({"text": words, "anchors": anchors,
-                                    "repeat": min(32, int(repeat.group(1))) if repeat else 1})
+            repeat = re.search(r"\bx\s*(\d+)", plain, re.I)
+            row = {"text": words, "anchors": anchors, "repeat": 1, "chord_line": plain}
+            if repeat:
+                row["repeat"] = min(32, int(repeat.group(1)))
+                # 'pattern x4, E' has a coda, not four repetitions of the coda.
+                row["repeat_at"] = sum(a["offset"] < repeat.start() for a in anchors)
+            current["rows"].append(row)
         elif re.fullmatch(r"\s*(?:x\s*|repeat\s+)(\d+)\s*", line, re.I):
             current["repeat"] = min(32, int(re.search(r"\d+", line).group()))
-        elif not re.match(r"\s*(capo|tuning|key|https?:|e\||b\||g\||d\||a\||E\|)", line):
+        elif not re.match(r"\s*(capo|tuning|key|https?:)", line, re.I):
             current["rows"].append({"text": line, "anchors": [], "repeat": 1})
         i += 1
-    for i, s in enumerate(sections):
-        s["id"] = "template-" + str(i)
-        if not s["rows"]:
-            base = re.sub(r"\d+|\bx\b", "", norm(s["label"])).strip()
-            previous = next((p for p in reversed(sections[:i]) if p["rows"] and
-                             re.sub(r"\d+|\bx\b", "", norm(p["label"])).strip() == base), None)
+    for si, section in enumerate(sections):
+        section["id"] = "template-" + str(si)
+        if not section["rows"]:
+            family = re.sub(r"\d+", "", norm(section["label"])).strip()
+            previous = next((x for x in reversed(sections[:si]) if x["rows"] and
+                             re.sub(r"\d+", "", norm(x["label"])).strip() == family), None)
             if previous:
-                s["rows"] = copy.deepcopy(previous["rows"])
-                s["reference"] = previous["id"]
-        s["kind"] = "vocal" if any(r["text"].strip() for r in s["rows"]) else "instrumental"
+                section["rows"] = copy.deepcopy(previous["rows"])
+                section["reference"] = previous["id"]
+        section["kind"] = "vocal" if any(r["text"].strip() for r in section["rows"]) else "instrumental"
+        for ri, row in enumerate(section["rows"]):
+            row["id"] = f"source-{si}-{ri}"
     return sections
 
 
+def _tokens(text):
+    # Match across punctuation, hyphenated syllables and different line breaks.
+    return re.findall(r"[a-z0-9]+", re.sub(r"['\u2019\-]", "", text.casefold()))
+
+
 def build_document(job, templates, detected, transpose=lambda x: x):
+    if not templates:
+        return _build_unscored_document(job, [], detected, transpose)
+    duration = float(job.get("duration") or 0)
+    if not math.isfinite(duration) or duration <= 0:
+        raise ValueError("Recording duration is missing or invalid")
+    sections = copy.deepcopy(templates)
+    source_words, source_owner = [], []
+    for si, section in enumerate(sections):
+        section.update(id=f"section-{si}", template=si, evidence="chart", confidence="estimated", event_timing="unresolved")
+        for ri, row in enumerate(section["rows"]):
+            row["id"] = f"source-{si}-{ri}"
+            for anchor in row["anchors"]:
+                anchor["symbol"] = transpose(anchor["symbol"])
+            tokens = _tokens(row["text"])
+            source_words.extend(tokens)
+            source_owner.extend([(si, ri)] * len(tokens))
+        section["progression"] = [a["symbol"] for r in section["rows"] for a in r["anchors"]]
+    lyrics = lyric_items(job)
+    sung_words, sung_owner = [], []
+    for li, line in enumerate(lyrics):
+        tokens = _tokens(line["text"])
+        sung_words.extend(tokens)
+        sung_owner.extend([(li, ti, len(tokens)) for ti in range(len(tokens))])
+    row_matches = {}
+    # Ordered whole-song alignment disambiguates repeated choruses. It provides
+    # cue estimates ONLY. The source rows/anchors above are never rewritten.
+    matcher = difflib.SequenceMatcher(None, source_words, sung_words, autojunk=False)
+    for block in matcher.get_matching_blocks():
+        if block.size < 3:
+            continue
+        for k in range(block.size):
+            si, ri = source_owner[block.a+k]
+            li, ti, count = sung_owner[block.b+k]
+            row_matches.setdefault((si, ri), []).append((li, ti, count))
+    starts = [None] * len(sections)
+    vocal_ends = {}
+    matched_rows = 0
+    for si, section in enumerate(sections):
+        for ri, row in enumerate(section["rows"]):
+            matches = row_matches.get((si, ri), [])
+            if not matches:
+                continue
+            li, ti, count = matches[0]
+            line = lyrics[li]
+            cue = line["start"] + (line["end"]-line["start"]) * ti / max(1,count)
+            row["cue"] = round(cue, 3)
+            row["cue_confidence"] = "estimated"
+            matched_rows += 1
+            if starts[si] is None:
+                starts[si] = cue
+            vocal_ends[si] = lyrics[matches[-1][0]]["end"]
+    # Keep every source section in order. Unlocated sections get explicit
+    # estimated cues between neighbouring evidence, never a new lyric layout.
+    if starts[0] is None:
+        starts[0] = 0.
+    for si in range(len(sections)):
+        if starts[si] is not None:
+            continue
+        left = si-1
+        right = next((k for k in range(si+1,len(sections)) if starts[k] is not None),len(sections))
+        a = max(starts[left], vocal_ends.get(left, starts[left]))
+        b = starts[right] if right < len(sections) else duration
+        a = min(a, b-.1*(right-left))
+        for k in range(si,right):
+            starts[k] = a+(b-a)*(k-si)/max(1,right-si)
+    if starts[0] > 0:
+        # A chart without an intro is shown from the start; it doesn't invent
+        # an audio-derived intro progression before its first written section.
+        starts[0] = 0.
+    for si, section in enumerate(sections):
+        lower = starts[si-1]+.05 if si else 0.
+        starts[si] = max(lower,min(float(starts[si]),duration-.05*(len(sections)-si)))
+        section["start"] = round(starts[si],3)
+    for si, section in enumerate(sections):
+        section["end"] = sections[si+1]["start"] if si+1<len(sections) else duration
+    doc = {"schema":SCHEMA,"generator":GENERATOR,"source_preserved":True,"duration":duration,
+           "sections":sections,"templates":copy.deepcopy(templates),
+           "source_hash":fingerprint(templates),"lyrics_hash":fingerprint(job.get("lyrics",{})),
+           "alignment":{"matched_rows":matched_rows,"source_rows":sum(bool(r["text"].strip()) for s in sections for r in s["rows"]),
+                        "purpose":"section cues only"}}
+    doc["revision"] = fingerprint(doc)
+    # Precise views retain measured evidence, distinct from the authored chart.
+    events = [dict(c) for c in detected if 0 <= c["start"] < c["end"] <= duration]
+    validate_document(doc)
+    return doc, events
+
+
+def _build_unscored_document(job, templates, detected, transpose=lambda x: x):
     duration = float(job.get("duration") or max([c["end"] for c in detected] or [0]))
     if not math.isfinite(duration) or duration <= 0:
         raise ValueError("Recording duration is missing or invalid")

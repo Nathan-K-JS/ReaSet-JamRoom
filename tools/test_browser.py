@@ -59,24 +59,93 @@ class BrowserTests(unittest.TestCase):
         self.assertIn('C', self.page.locator('#chords-live').inner_text())
         self.page.evaluate('currentPos=25;renderChordsView();renderLyricsView()')
         self.assertIn('Solo', self.page.locator('#lyrics-live').inner_text())
-        self.page.evaluate("openTimingRepair('lyrics');sectionSave();repairHandleReply(g_tr.pending+'|ok|Section saved')")
-        self.assertIsNone(self.page.evaluate('g_tr.pending'))
-        self.assertIn('Section saved', self.page.locator('#tr-status').inner_text())
-        self.assertIn('|section|', self.page.evaluate('decodeURIComponent(sent[sent.length-1])'))
+        self.page.evaluate("chartEditorOpen();chartEditorSave();repairHandleReply(g_chartPending.nonce+'|ok|Sections saved')")
+        self.assertIsNone(self.page.evaluate('g_chartPending'))
+        self.assertIn('Sections saved', self.page.evaluate('g_chartMessage'))
+        self.assertIn('|layout|', self.page.evaluate('decodeURIComponent(sent[sent.length-1])'))
 
-    def test_precise_chords_clear_during_rest_and_legacy_repair_opens(self):
+    def test_precise_chords_clear_during_rest_and_old_repair_links_request_upgrade(self):
         self.load_reaset()
         self.page.evaluate("g_chordView='big';g_preciseFollow=true;currentPos=15;renderChordsView()")
         self.assertIn('No chord sounding', self.page.locator('#chords-live').inner_text())
         self.page.evaluate("currentPos=10;renderChordsView()")
         self.assertEqual(self.page.locator('.cv-big').inner_text(), 'C')
-        self.page.evaluate("g_clData.document=null;openTimingRepair('lyrics')")
-        self.assertIn('Here we sing', self.page.locator('#tr-choices').inner_text())
+        self.page.evaluate("window.alert=m=>window.upgradeMessage=m;g_clData.document=null;openTimingRepair('lyrics')")
+        self.assertIn('Update this song', self.page.evaluate('upgradeMessage'))
+        self.assertEqual(self.page.locator('.timing-fix-btn,#timing-repair').count(),0)
 
     def test_empty_song_clears_previous_lyrics(self):
         self.load_reaset()
         self.page.evaluate('g_clData=null;renderLyricsView();renderChordsView()')
         self.assertEqual(self.page.locator('#lyrics-live').inner_text(), 'No lyrics for this song.')
+
+    def test_source_chart_pages_keep_every_chord_visible_above_words(self):
+        self.load_reaset()
+        rows='\n'.join('[ch]C[/ch]           [ch]G[/ch]                      [ch]Am[/ch]  [ch]F[/ch]\nAn original lyric line for the musicians' for _ in range(16))
+        doc,_=chart.build_document({'duration':120},chart.parse_chart('[Verse]\n'+rows),[])
+        self.page.evaluate('doc=>{g_clData.document=doc;g_clData.song.end=120;g_chordView="sheet"}',doc)
+        self.page.locator('#tab-btn-chords').click()
+        for width,height in [(1440,1000),(768,1024),(390,844),(1024,768)]:
+            self.page.set_viewport_size({'width':width,'height':height})
+            self.page.evaluate('g_clHb.changedAt=Date.now();renderChordsView();renderChordsView()')
+            count=self.page.evaluate('document.querySelector("#chords-live")._pages.length')
+            shown=0
+            for i in range(count):
+                self.page.evaluate('i=>{g_chartPage=i;g_clHb.changedAt=Date.now();renderChordsView()}',i)
+                metrics=self.page.locator('#chords-live').evaluate('''host=>{
+                    let paper=host.querySelector('.sc-paper'), box=paper.getBoundingClientRect();
+                    return {x:paper.scrollWidth-paper.clientWidth,y:paper.scrollHeight-paper.clientHeight,
+                      chords:paper.querySelectorAll('.sc-chords b').length,
+                      overlap:[...paper.querySelectorAll('.sc-line')].some(line=>{
+                        let words=line.querySelector('.sc-words');return words&&[...line.querySelectorAll('b')].some(ch=>ch.getBoundingClientRect().bottom>words.getBoundingClientRect().top+1);
+                      })};}''')
+                self.assertLessEqual(metrics['x'],1,(width,i,metrics))
+                self.assertLessEqual(metrics['y'],1,(width,i,metrics))
+                self.assertFalse(metrics['overlap'])
+                shown+=metrics['chords']
+            self.assertEqual(shown,64,'Pagination must neither drop nor repeat chords')
+        self.page.locator('[data-cv="chart"]').click()
+        self.assertEqual(self.page.locator('#chords-live .sc-words').count(),0)
+        self.assertIn('C',self.page.locator('#chords-live .sc-paper').inner_text())
+
+    def test_full_chart_editor_keeps_unsaved_changes_local(self):
+        self.load_reaset()
+        self.page.evaluate('chartEditorOpen()')
+        before=self.page.evaluate('JSON.stringify(g_clData.document)')
+        self.page.evaluate('chartEditorJoin(1)')
+        self.page.evaluate('chartEditorSplit(0,1)')
+        self.assertEqual(self.page.evaluate('JSON.stringify(g_clData.document)'),before)
+        self.assertIn('Here we sing',self.page.locator('#chart-edit-lines').inner_text())
+        self.page.evaluate('chartEditorSave()')
+        self.assertEqual(self.page.evaluate('JSON.stringify(g_clData.document)'),before)
+        self.assertIn('|layout|',self.page.evaluate('decodeURIComponent(sent[sent.length-1])'))
+        commands=self.page.evaluate('sent.filter(c=>c.includes("/edit:"))')
+        self.assertTrue(commands)
+        self.assertTrue(all(len(c)<500 for c in commands))
+        payload=bytes.fromhex(''.join(c.rsplit('/',1)[1] for c in commands)).decode('utf-8')
+        self.assertIn('sections',json.loads(payload))
+
+    def test_whole_library_uses_all_project_songs_and_keeps_protected_versions(self):
+        songs=[{'id':i,'name':'Song '+str(i),'eligible':i!=2,'protected':i==2,'update_status':'Update available'} for i in (1,2,3)]
+        posts=[]
+        def route(req):
+            url=req.request.url
+            if '/api/updates/start' in url:
+                posts.append(req.request.post_data_json);req.fulfill(json={'id':'batch'})
+            elif '/api/updates' in url:req.fulfill(json={'project':'test','songs':songs,'batch':None})
+            elif '/api/' in url:req.fulfill(json={'songs':[],'state':'idle'})
+            elif url.split('#')[0].endswith('/'):
+                req.fulfill(path=str(ROOT/'tools/importer.html'))
+            else:req.fulfill(body='')
+        self.page.route('**/*',route)
+        self.page.goto('http://importer.test/#updates=1')
+        self.page.get_by_role('button',name='Update whole library',exact=True).click()
+        self.page.wait_for_timeout(300)
+        self.assertEqual(posts[0]['ids'],[1,3])
+        self.assertEqual(posts[0]['project'],'test')
+        self.assertFalse(posts[0]['replace_edits'])
+        self.assertEqual(self.page.locator('#updateScope').input_value(),'all')
+        self.assertEqual(self.page.get_by_role('button',name='Shift timing',exact=True).count(),0)
 
     def setup_transport(self):
         self.load_reaset()
@@ -180,7 +249,7 @@ class BrowserTests(unittest.TestCase):
                 req.fulfill(path=str(ROOT/'tools/importer.html'))
         self.page.route('**/*', route)
         self.page.goto('http://importer.test/')
-        self.page.wait_for_function("document.getElementById('verBadge').textContent.includes('v3.0')")
+        self.page.wait_for_function("v => document.getElementById('verBadge').textContent.includes(v)", arg=importer.BUILD)
         self.assertEqual(self.page.evaluate('UI_BUILD'), importer.BUILD)
         self.assertTrue(self.page.locator('#staleWarn').is_hidden())
         for page_version, server_version, expected in [

@@ -36,8 +36,8 @@ import jamroom_chart as chart_model
 # what is on disk — the importer server holds its modules in memory, so this is
 # how you tell "did the update take effect?" from "is the old process still up?"
 # BUMP THIS whenever the importer changes, and quote it when handing over.
-BUILD = "v3.0"
-BUILD_DATE = "2026-09-07"
+BUILD = "v3.1"
+BUILD_DATE = "2026-09-11"
 
 # Fadr's S3 throttles each connection independently, so several transfers at
 # once finish far sooner than one at a time. Overridable via config.
@@ -141,7 +141,16 @@ def save_job(job_dir, job):
     tmp = job_dir / "job.json.tmp"
     with open(tmp, "w", encoding="utf-8") as fh:
         json.dump(job, fh, indent=2)
-    tmp.replace(job_dir / "job.json")
+    # Windows can briefly deny replacement while a library poll or scanner
+    # reads the old job. Keep the complete temporary file and retry atomically.
+    for attempt in range(6):
+        try:
+            tmp.replace(job_dir / "job.json")
+            break
+        except PermissionError:
+            if attempt == 5:
+                raise
+            time.sleep(.1 * (attempt + 1))
 
 
 # ---------------------------------------------------------------- resolve
@@ -1562,19 +1571,23 @@ def chords_from_chart(job, url, min_len=0.0, job_dir=None, key_offset=None):
 def build_chart_chords(job, url, job_dir=None, key_offset=None):
     """Build a structured chart; uncertain passages remain readable."""
     cached = job.get("chart_source") or {}
-    if cached.get("url") == url and cached.get("templates"):
+    if cached.get("url") == url and cached.get("templates") and cached.get("parser") == chart_model.PARSER:
         templates, capo, key = cached["templates"], cached.get("capo", 0), cached.get("key", "")
     else:
-        data = _ug_page_data(url)
-        page = data.get("store", {}).get("page", {}).get("data", {})
-        view = page.get("tab_view") or {}
-        content = (view.get("wiki_tab") or {}).get("content") or ""
-        capo = int(view.get("capo") or 0)
-        key = transpose_chord((page.get("tab") or {}).get("tonality_name") or "", capo)
+        if cached.get("url") == url and cached.get("content"):
+            content, capo, key = cached["content"], cached.get("capo", 0), cached.get("key", "")
+        else:
+            data = _ug_page_data(url)
+            page = data.get("store", {}).get("page", {}).get("data", {})
+            view = page.get("tab_view") or {}
+            content = (view.get("wiki_tab") or {}).get("content") or ""
+            capo = int(view.get("capo") or 0)
+            key = transpose_chord((page.get("tab") or {}).get("tonality_name") or "", capo)
         templates = chart_model.parse_chart(content, lambda c: transpose_chord(c, capo))
         if not any(r["anchors"] for t in templates for r in t["rows"]):
             raise RuntimeError("This chart has no supported chord symbols. Choose another chart.")
-        job["chart_source"] = {"url": url, "templates": templates, "capo": capo, "key": key}
+        job["chart_source"] = {"url": url, "templates": templates, "capo": capo, "key": key,
+                               "content": content, "parser": chart_model.PARSER}
     detected = detected_chords(job, job_dir)
     if detected and not job.get("chords_detected"):
         job["chords_detected"] = detected
@@ -1594,8 +1607,10 @@ def build_chart_chords(job, url, job_dir=None, key_offset=None):
     doc, events = chart_model.build_document(job, templates, detected,
                             lambda c: transpose_chord(c, offset))
     chart_model.validate_document(doc)
+    doc["source_url"] = url
+    doc["revision"] = chart_model.fingerprint({k:v for k,v in doc.items() if k!="revision"})
     job["chart_document"] = doc
-    matched = sum(r.get("template") is not None for t in doc["sections"] for r in t["rows"] if "template" in r)
+    matched = doc.get("alignment", {}).get("matched_rows", 0)
     return {"chords": events, "document": doc, "method": "sections",
             "capo": capo, "key": transpose_chord(key, offset), "key_offset": offset,
             "key_fit_pct": round(100*fit), "lines_matched": matched,

@@ -347,11 +347,6 @@ local function section_command(f, song)
     end
     local old_a, old_b = section.start, section["end"]
     local function retime(part, start, finish)
-        local before, length = part.start, part["end"]-part.start
-        for _,row in ipairs(part.rows or {}) do
-            if row.start then row.start=start+(row.start-before)/length*(finish-start) end
-            if row["end"] then row["end"]=start+(row["end"]-before)/length*(finish-start) end
-        end
         part.start,part["end"]=start,finish
     end
     if previous and (math.abs(previous["end"]-old_a)<.01 or a<previous["end"]) then retime(previous,previous.start,a) end
@@ -398,6 +393,46 @@ local function process_repair_command(want, song)
     if not song or not song_id or song.id ~= song_id then
         return repair_reply(nonce, false,
             "Open the song you want to repair, then try again.")
+    end
+    if action == "layout" or action == "cue" or action == "pagecue" then
+        local _,project=reaper.GetProjExtState(0,'ReaSet','projectId')
+        if project~=f[5] then return repair_reply(nonce,false,'Project changed; reopen the chart.') end
+        local key='song:'..song.id..':'
+        local _,blob=reaper.GetProjExtState(0,'ReaSetSong',key..'document')
+        local doc=J.decode(blob)
+        if doc.revision~=f[4] then return repair_reply(nonce,false,'Chart changed; reopen the editor before saving.') end
+        if #load_anchors(song.id,'lyrics')>0 or #load_anchors(song.id,'chords')>0 then
+            return repair_reply(nonce,false,'Replace old timing fixes in Song Library before editing this chart.')
+        end
+        local payload=f[6] or ''
+        local count=tonumber(payload:match('^chunks:(%d+)$'))
+        if count then
+            if count<1 or count>192 then return repair_reply(nonce,false,'Invalid chart edit size.') end
+            local chunks={}
+            for i=0,count-1 do
+                local key='edit:'..nonce..':'..i
+                local hex=reaper.GetExtState(SEC,key)
+                reaper.DeleteExtState(SEC,key,false)
+                if #hex==0 or #hex>384 or #hex%2~=0 or hex:find('[^%x]') then
+                    return repair_reply(nonce,false,'Chart edit was incomplete. Please save again.')
+                end
+                chunks[#chunks+1]=hex:gsub('%x%x',function(pair)return string.char(tonumber(pair,16))end)
+            end
+            payload=table.concat(chunks)
+        end
+        local decoded_ok,data=pcall(J.decode,payload)
+        if not decoded_ok then return repair_reply(nonce,false,'Chart edit was incomplete. Please save again.') end
+        local editor=dofile(dir..'ReaSet_ChartEdit.lua')
+        local ok,result=pcall(editor.apply,doc,action,data,song.e-song.s)
+        if not ok then return repair_reply(nonce,false,tostring(result)) end
+        result.revision='manual:'..nonce..':'..tostring(reaper.time_precise())
+        reaper.Undo_BeginBlock()
+        reaper.SetProjExtState(0,'ReaSetSong',key..'document',J.encode(result))
+        reaper.SetProjExtState(0,'ReaSetSong',key..'revision',result.revision)
+        reaper.MarkProjectDirty(0)
+        reaper.Undo_EndBlock('Edit chart '..action,-1)
+        repair_reply(nonce,true,action=='layout' and 'Sections saved. Chord positions preserved.' or 'Page timing saved. Chart content preserved.')
+        return true
     end
     if action == "section" then return section_command(f,song) end
     local _,project=reaper.GetProjExtState(0,"ReaSet","projectId")
@@ -498,7 +533,10 @@ local function main_loop()
     if want ~= "" and want ~= s_last_want then
         s_last_want = want
         local ok, result = pcall(process_repair_command,want,song)
-        if not ok then repair_reply(command_fields(want)[1],false,"Chart could not be edited; reopen repair.") end
+        if not ok then
+            reaper.ShowConsoleMsg('[ReaSet chart edit] '..tostring(result)..'\n')
+            repair_reply(command_fields(want)[1],false,"Chart could not be edited; check the REAPER console.")
+        end
         s_force = ok and result and true or false
         -- Consume the command. This prevents an interrupted/restarted script
         -- from replaying a stale request while leaving the separate confirmed
@@ -522,6 +560,7 @@ local function main_loop()
 end
 
 reaper.atexit(clear_all)
+reaper.SetExtState(SEC, 'build', 'source-pages-2', false)
 reaper.SetToggleCommandState(({ reaper.get_action_context() })[3],
                              ({ reaper.get_action_context() })[4], 1)
 main_loop()

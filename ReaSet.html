@@ -3534,6 +3534,41 @@
         .sc-nav{display:flex;gap:8px;justify-content:space-between}.sc-note,.sc-next{font-size:.65em;opacity:.75;margin:14px 0}
         #section-editor{display:grid;gap:8px}#section-editor.hide{display:none}#section-editor label{display:flex;justify-content:space-between;gap:8px}
         #section-editor input,#section-editor select{min-width:0;max-width:65%;font-size:16px;padding:8px}
+
+        /* Performance pages never share scrolling space with fixed controls. */
+        #chords-panel.source-chart,#lyrics-panel.source-chart{padding:12px 20px;align-items:stretch;justify-content:flex-start;overflow:hidden;box-sizing:border-box;gap:8px}
+        .source-chart>.cv-tabs{flex:none;margin:0;min-height:34px}
+        .source-chart>.lead-row,.source-chart>.timing-fix-btn{display:none!important}
+        #chords-live.structured-chart,#lyrics-live.structured-chart{display:grid!important;grid-template-rows:auto auto minmax(0,1fr) auto;gap:12px;flex:1;min-width:0;min-height:0!important;max-height:none!important;width:100%;padding:0!important;overflow:hidden;text-align:left;align-items:stretch;justify-content:stretch;white-space:normal;font-size:16px!important}
+        #lyrics-panel.source-chart .lyrics-content{padding:0;min-height:0;display:flex;align-items:stretch;justify-content:flex-start;white-space:normal}
+        .structured-chart button,.structured-chart select,#chart-editor button,#chart-editor input{font:inherit;color:#e5eaf1;background:#222a35;border:1px solid #455163;border-radius:7px;padding:9px 13px;min-height:40px}
+        .structured-chart button:disabled{opacity:.35}.structured-chart button.on{background:#235a80}
+        .structured-chart .sc-nav{display:flex;gap:8px;justify-content:flex-start;flex-wrap:wrap;min-height:40px}
+        .vtab.t-show:not(.active){color:rgba(255,255,255,.4);border-bottom-color:transparent}
+        .vtab.active{color:#8edbcc;border-bottom:2px solid #8edbcc}
+        .sc-heading{display:flex;align-items:center;justify-content:space-between;gap:12px;border-bottom:1px solid #303b49;padding-bottom:8px}
+        .sc-heading select{font-size:23px!important;font-weight:700!important;border:0!important;background:transparent!important;max-width:85%}
+        .sc-heading option{background:#222a35}
+        .sc-paper{overflow:hidden;padding:6px 8px;min-height:0;font-family:Consolas,'Liberation Mono',monospace;font-weight:400;line-height:1;align-self:stretch}
+        .sc-paper .sc-line{margin:0 0 .45em;white-space:pre;line-height:1;max-width:100%}
+        .sc-chords{height:1.2em;line-height:1.2;position:relative;color:#8edbcc;white-space:pre}
+        .sc-chords b{position:absolute;top:0;font-family:inherit;font-weight:700;line-height:1.2;white-space:pre}
+        .sc-marks{color:#8edbcc;white-space:pre}
+        .sc-words{height:1.35em;line-height:1.35;white-space:pre;color:#f0f2f5}
+        .sc-empty{font-family:var(--font-ui);font-size:24px;color:#a5b1c3;padding:24px 0}
+        .sc-footer{display:flex;gap:10px;justify-content:space-between;align-items:center;flex-wrap:wrap;font-size:13px;color:#a5b1c3;border-top:1px solid #303b49;padding-top:8px;min-height:34px}
+        .sc-footer button{font-size:14px;min-height:40px}
+        #chart-editor{position:fixed;inset:60px 3vw 20px;z-index:1200;background:#141a22;border:1px solid #455163;border-radius:12px;display:flex;flex-direction:column;padding:20px;color:#e5eaf1;box-shadow:0 0 0 100vmax #0009;font:16px var(--font-ui)}
+        #chart-editor.hide{display:none}.ce-head{display:flex;justify-content:space-between;align-items:center;gap:12px}
+        #chart-editor h2{margin:0;font-size:24px}#chart-editor p{font-size:14px;color:#a5b1c3;line-height:1.5}
+        #chart-edit-lines{overflow:auto;flex:1;min-height:0;padding:0 8px 12px 0}
+        .ce-section{border:1px solid #354354;border-radius:8px;margin:14px 0;padding:12px}
+        .ce-section-head{display:flex;gap:8px;align-items:center;flex-wrap:wrap;padding-bottom:10px;border-bottom:1px solid #354354}
+        .ce-section-head>input{flex:1;min-width:130px;max-width:55%}.ce-section-head label input{width:100px}
+        .ce-row{display:grid;grid-template-columns:1fr auto;gap:12px;padding:10px 0;align-items:center;border-bottom:1px solid #252f3c;white-space:pre-wrap}
+        .ce-row button{font-size:12px!important}.ce-row small{font-size:12px;color:#a5b1c3}
+        #chart-edit-status{min-height:24px;padding-top:12px;color:#8edbcc}
+        @media(max-width:600px){#chords-panel.source-chart,#lyrics-panel.source-chart{padding:8px}.structured-chart .sc-nav{gap:4px}.structured-chart button{padding:7px;font-size:12px;min-height:36px}.sc-heading select{font-size:20px!important}#chart-editor{inset:58px 4px 4px;padding:12px}.ce-row{grid-template-columns:1fr}.ce-row button{justify-self:start}}
     </style>
 </head>
 
@@ -3632,6 +3667,10 @@
             <button class="sidebar-close-btn" onclick="closeSidebar()">✕</button>
         </div>
 
+        <div class="sidebar-section">
+            <div class="sidebar-section-title">Song charts</div>
+            <button class="sidebar-action-btn sab-slate" onclick="openSongUpdates();closeSidebar()">Song library &amp; chart updates</button>
+        </div>
         <div class="sidebar-section">
             <div class="sidebar-section-title">Show Options</div>
 
@@ -3939,7 +3978,6 @@
         <div class="panel-header">
             <span class="panel-title" id="lyrics-song-title">Lyrics</span>
             <span class="panel-header-actions">
-                <button class="timing-fix-btn" onclick="openTimingRepair('lyrics')">Fix timing</button>
                 <span class="panel-close-btn" onclick="toggleLyricsPanel()">✕</span>
             </span>
         </div>
@@ -3960,7 +3998,6 @@
     <!-- CHORDS PANEL -->
     <div id="chords-panel">
         <span class="chord-close-btn" onclick="toggleChordsPanel()">✕</span>
-        <button class="timing-fix-btn chords-fix-btn" onclick="openTimingRepair('chords')">Fix timing</button>
         <div class="cv-tabs">
             <button class="cv-tab on" data-cv="chart"    onclick="setChordView('chart')">Chart</button>
             <button class="cv-tab"    data-cv="big"      onclick="setChordView('big')">Big</button>
@@ -3982,51 +4019,14 @@
     <!-- Timing repair stays out of the normal performance view. It is opened
          deliberately from Lyrics/Chords and speaks in musical, not technical,
          terms; offsets and interpolation remain implementation details. -->
-    <button onclick="openSongUpdates()" style="position:fixed;bottom:8px;right:8px;z-index:900;font-size:12px">Update song charts</button>
-    <div id="timing-repair" class="hide" role="dialog" aria-modal="true"
-         aria-labelledby="tr-title">
-        <div class="tr-head">
-            <div><div id="tr-title">Fix timing</div><div id="tr-song"></div></div>
-            <button class="tr-close" onclick="closeTimingRepair()" aria-label="Close">✕</button>
-        </div>
-        <div class="tr-help">Play or pause where a line or chord should begin,
-            then choose what should be showing at that moment.</div>
-        <button class="tr-nearby" onclick="repairRefreshChoices()">Show choices near the playhead</button>
-        <div id="section-editor" class="hide">
-            <label>Section <select id="section-choice" onchange="sectionEditorSelect()"></select></label>
-            <label>Name <input id="section-label"></label>
-            <label>Starts (seconds) <input id="section-start" type="number" min="0" step="0.1"></label>
-            <button onclick="sectionMarkNow()">This section starts now</button>
-            <label>Ends (seconds) <input id="section-end" type="number" min="0" step="0.1"></label>
-            <select id="section-template"></select>
-            <label>Progression (optional) <input id="section-pattern" placeholder="Am F C G"></label>
-            <label>Repeats <input id="section-repeat" type="number" min="1" max="32" value="1"></label>
-            <button class="tr-primary" onclick="sectionSave()">Save section</button>
-        </div>
-        <div id="tr-choices"></div>
-        <button id="tr-mark" class="tr-primary" onclick="repairMarkNow()" disabled>
-            This should start now
-        </button>
-        <div id="tr-status" aria-live="polite"></div>
-        <div id="tr-summary"></div>
-        <button class="tr-nearby" onclick="repairReviewed()">
-            Timing looks right — mark as checked
-        </button>
-        <details class="tr-more">
-            <summary>More controls</summary>
-            <label class="tr-link"><input type="checkbox" id="tr-precise"
-                    onchange="setPreciseFollow(this.checked)">
-                Highlight each change precisely</label>
-            <div class="tr-option-note">Leave this off until the song has been
-                checked. Jam Room will show a readable passage instead of
-                making an unreliable word or chord look exact.</div>
-            <label class="tr-link"><input type="checkbox" id="tr-link" checked>
-                Keep chords and lyrics together</label>
-            <div id="tr-points"></div>
-            <button class="tr-reset" onclick="repairReset()">Reset to imported timing</button>
-        </details>
+    <div id="chart-editor" class="hide" role="dialog" aria-modal="true" aria-labelledby="chart-edit-title">
+        <div class="ce-head"><h2 id="chart-edit-title">Song sections</h2><button onclick="chartEditorClose()">Close</button></div>
+        <p>All chart lines are shown in source order. Start a section at any line, join it to the previous section, or rename it. Chords stay with their words. For playback cues, close this editor and turn on Timing.</p>
+        <p><a id="chart-source-link" target="_blank" rel="noopener noreferrer" style="color:#86d9cf">View source chart</a></p>
+        <div id="chart-edit-lines"></div>
+        <div id="chart-edit-status" role="status"></div>
+        <div class="ce-head"><span>Changes apply only after REAPER confirms.</span><button onclick="chartEditorSave()">Save sections</button></div>
     </div>
-
     <!-- JAM ROOM TRACKS PANEL -->
     <div id="tracks-panel">
         <div class="panel-header">
@@ -4878,10 +4878,8 @@
         // The UI records simple correspondences ("this imported event starts
         // now"). Lua confirms and persists them in the project; it performs
         // the actual drift correction before publishing a new timeline.
-        var g_tr = { open: false, scope: 'lyrics', selected: -1,
-                     songId: null, pending: null };
         var g_trAutoScope = (function () {
-            var m = String(location.search || '').match(/[?&]repair=(lyrics|chords)/);
+            var m = String(location.search || '').match(/[?&](?:repair|sections)=(lyrics|chords|1)/);
             return m ? m[1] : null;
         })();
         var g_trAutoOpening = false;
@@ -4896,186 +4894,22 @@
             var m = Math.floor(t / 60), s = Math.round(t - m * 60);
             return m + ':' + (s < 10 ? '0' : '') + s;
         }
-        function trList() {
-            return g_clData && g_clData[g_tr.scope] ? g_clData[g_tr.scope] : [];
-        }
-        function trSetStatus(text, cls) {
-            var el = document.getElementById('tr-status');
-            if (!el) return;
-            el.textContent = text || '';
-            el.className = cls || '';
-        }
+        // Old repair links now open the one section workflow.
         function openTimingRepair(scope, quiet) {
-            if (!g_clData || !g_clData.song || !clAlive()) {
-                if (!quiet) alert('Timing repair needs the chord/lyric timeline script. Run ReaSet_Startup.lua in REAPER, then try again.');
-                return false;
+            if (!g_clData || !g_clData.song || !clAlive()) return false;
+            if (g_clData.document && g_clData.document.generator === 'source-pages-2') {
+                chartEditorOpen();
+            } else {
+                alert('Update this song from Song library to use section editing and page timing.');
             }
-            g_tr.open = true;
-            g_tr.scope = scope === 'chords' ? 'chords' : 'lyrics';
-            g_tr.songId = Number(g_clData.song.id);
-            g_tr.selected = -1;
-            document.getElementById('tr-link').checked = true;
-            document.getElementById('tr-precise').checked = g_preciseFollow;
-            var panel = document.getElementById('timing-repair');
-            if (panel) panel.classList.remove('hide');
-            document.getElementById('tr-title').textContent =
-                'Fix ' + (g_tr.scope === 'lyrics' ? 'lyric' : 'chord') + ' timing';
-            document.getElementById('tr-song').textContent = g_clData.song.name;
-            trSetStatus('', '');
-            repairRefreshChoices();
-            repairRenderSummary();
-            sectionEditorOpen(true);
-            document.getElementById("tr-choices").classList.toggle("hide", !!g_clData.document);
-            document.getElementById("tr-mark").classList.toggle("hide", !!g_clData.document);
             return true;
         }
         function repairTryAutoOpen(scope, attempts) {
-            if (openTimingRepair(scope, true)) {
-                g_trAutoScope = null;
-                g_trAutoOpening = false;
-                return;
-            }
-            if (attempts < 12 && g_trAutoScope) {
-                setTimeout(function () { repairTryAutoOpen(scope, attempts + 1); }, 500);
-            } else if (g_trAutoScope) {
-                g_trAutoScope = null;
-                g_trAutoOpening = false;
-                alert('Jam Room opened the song, but its timing helper is not running. Run ReaSet_Startup.lua in REAPER, then tap Fix timing.');
-            }
+            if (openTimingRepair(scope, true)) { g_trAutoScope=null;g_trAutoOpening=false;return; }
+            if (attempts<12 && g_trAutoScope) setTimeout(function(){repairTryAutoOpen(scope,attempts+1);},500);
+            else {g_trAutoScope=null;g_trAutoOpening=false;}
         }
-        function closeTimingRepair() {
-            g_tr.open = false; g_tr.selected = -1; g_tr.pending = null;
-            var panel = document.getElementById('timing-repair');
-            if (panel) panel.classList.add('hide');
-        }
-        function repairRefreshChoices() {
-            if (!g_tr.open || !g_clData || !g_clData.song) return;
-            var list = trList(), host = document.getElementById('tr-choices');
-            g_tr.selected = -1;
-            document.getElementById('tr-mark').disabled = true;
-            if (!list.length) {
-                host.innerHTML = '<div class="tr-help">This song has no '
-                    + g_tr.scope + ' to choose from.</div>';
-                return;
-            }
-            var cur = clIndexAtOrBefore(list, currentPos);
-            if(cur<0)cur=0;
-            var radius = g_tr.scope === 'lyrics' ? 3 : 5;
-            var a = Math.max(0, cur - radius), b = Math.min(list.length, cur + radius + 1);
-            var html = '';
-            for (var i = a; i < b; i++) {
-                var raw = list[i].length > 3 ? list[i][3] : null;
-                var rel = raw == null ? list[i][0] : raw;
-                rel -= g_clData.song.start;
-                html += '<button class="tr-choice" data-tr-index="' + i
-                    + '" onclick="repairSelectChoice(' + i + ')">'
-                    + trEsc(list[i][2]) + '<small>around ' + trTime(rel)
-                    + ' in the song</small></button>';
-            }
-            host.innerHTML = html;
-            if (list[0].length < 4) {
-                trSetStatus('REAPER is still running the older timeline script. Restart ReaSet_Startup.lua to enable repair.', 'bad');
-            }
-        }
-        function repairSelectChoice(index) {
-            var list = trList();
-            if (!list[index] || list[index].length < 4) return;
-            g_tr.selected = index;
-            var buttons = document.querySelectorAll('#tr-choices .tr-choice');
-            for (var i = 0; i < buttons.length; i++) {
-                buttons[i].classList.toggle('on', Number(buttons[i].getAttribute('data-tr-index')) === index);
-            }
-            document.getElementById('tr-mark').disabled = false;
-            trSetStatus('Pause or tap the button at the exact moment it should begin.', '');
-        }
-        function repairCommand(action, scope, source, actual) {
-            if (!g_clData || !g_clData.song || Number(g_clData.song.id) !== g_tr.songId) {
-                trSetStatus('The song changed. Open Fix timing again for this song.', 'bad');
-                return;
-            }
-            var nonce = String(Date.now());
-            g_tr.pending = nonce;
-            document.getElementById('tr-mark').disabled = true;
-            var fields = [nonce, action, g_tr.songId, scope];
-            if (source != null) fields.push(Number(source).toFixed(3));
-            if (actual != null) fields.push(Number(actual).toFixed(3));
-            fields[6]=g_clData.project||'';
-            trSetStatus('Saving in REAPER…', '');
-            wwr_req('SET/EXTSTATE/ReaSetCL/want/' + encodeURIComponent(fields.join('|')));
-            setTimeout(function () {
-                if (g_tr.pending !== nonce) return;
-                g_tr.pending = null;
-                document.getElementById('tr-mark').disabled = g_tr.selected < 0;
-                trSetStatus('REAPER did not confirm the change. Check that ReaSet_Startup.lua is running, then try again.', 'bad');
-            }, 5000);
-        }
-        function repairMarkNow() {
-            var list = trList(), item = list[g_tr.selected];
-            if (!item || item.length < 4 || !g_clData || !g_clData.song) return;
-            var source = Number(item[3]) - g_clData.song.start;
-            var actual = currentPos - g_clData.song.start;
-            var linked = document.getElementById('tr-link').checked;
-            repairCommand('add', linked ? 'both' : g_tr.scope, source, actual);
-        }
-        function repairReset() {
-            if (!confirm('Reset the saved timing corrections for this song?')) return;
-            var linked = document.getElementById('tr-link').checked;
-            repairCommand('clear', linked ? 'both' : g_tr.scope, null, null);
-        }
-        function repairReviewed() {
-            var linked = document.getElementById('tr-link').checked;
-            repairCommand('review', linked ? 'both' : g_tr.scope, null, null);
-        }
-        function repairDelete(scope, source) {
-            repairCommand('delete', scope, source, null);
-        }
-        function repairDeletePoint(source) {
-            var linked = document.getElementById('tr-link').checked;
-            repairDelete(linked ? 'both' : g_tr.scope, source);
-        }
-        function repairHandleReply(val) {
-            var p = String(val || '').split('|');
-            if (p.length < 3 || !g_tr.open || p[0] !== g_tr.pending) return;
-            g_tr.pending = null;
-            trSetStatus(p.slice(2).join(' '), p[1] === 'ok' ? 'ok' : 'bad');
-            if (p[1] === 'ok') {
-                g_tr.selected = -1;
-                document.getElementById('tr-mark').disabled = true;
-            } else {
-                document.getElementById('tr-mark').disabled = g_tr.selected < 0;
-            }
-        }
-        function repairRenderSummary() {
-            if (!g_tr.open || !g_clData || !g_clData.song) return;
-            if (Number(g_clData.song.id) !== g_tr.songId) {
-                closeTimingRepair(); return;
-            }
-            var repair = g_clData.repair || {};
-            var points = repair[g_tr.scope] || [];
-            var reviewed = repair.reviewed && repair.reviewed[g_tr.scope];
-            var summary = document.getElementById('tr-summary');
-            if (!points.length && reviewed) {
-                summary.textContent = 'Timing checked — no correction is currently needed.';
-            } else if (!points.length) {
-                summary.textContent = 'Using the imported timing. Add a checkpoint to correct it.';
-            } else if (points.length === 1) {
-                summary.textContent = 'The starting shift is fixed. Check a line near the end; add it too if the timing has drifted.';
-            } else if (points.length === 2) {
-                summary.textContent = 'Two checkpoints saved — timing drift is corrected between them.';
-            } else {
-                summary.textContent = points.length + ' checkpoints saved — local timing changes are corrected too.';
-            }
-            var host = document.getElementById('tr-points'), html = '';
-            for (var i = 0; i < points.length; i++) {
-                var shift = points[i][1] - points[i][0];
-                html += '<div class="tr-point"><span>' + trTime(points[i][0])
-                    + ' now appears at ' + trTime(points[i][1])
-                    + ' (' + (shift >= 0 ? '+' : '') + shift.toFixed(1) + 's)</span>'
-                    + '<button onclick="repairDeletePoint('
-                    + Number(points[i][0]).toFixed(3) + ')">Remove</button></div>';
-            }
-            host.innerHTML = html || '<div class="tr-point"><span>No saved checkpoints</span></div>';
-        }
+        function repairHandleReply(val) { chartEditReply(val); }
 
         function clAlive() {
             return g_clHb.val !== null && (Date.now() - g_clHb.changedAt) < 5000;
@@ -9069,8 +8903,6 @@
                         syncLeadSlider();
                         syncPreciseFollowSong();
                         renderChordsView(); renderLyricsView();
-                        repairRenderSummary();
-                        if (g_tr.open && g_clData && g_clData.document) sectionEditorOpen(false);
                         if (g_trAutoScope && g_clData && !g_trAutoOpening) {
                             var autoScope = g_trAutoScope;
                             // REAPER's heartbeat and timeline chunks can arrive
@@ -9106,78 +8938,207 @@
         }
 
         // ── Chord views ──────────────────────────────────────────────────────
-        var g_sectionBrowse = null;
+        var g_sectionBrowse = null, g_chartPage = null, g_chartPages = [], g_chartTiming = false;
+        var g_chartEdit = null, g_chartPending = null, g_chartMessage = '';
         function chartSectionIndex(doc) {
             var t=currentPos-g_clData.song.start+getLead()*((g_tkState && g_tkState.rate)||1);
-            for(var i=0;i<doc.sections.length;i++) if(t>=doc.sections[i].start && t<doc.sections[i].end) return i;
+            for(var i=0;i<doc.sections.length;i++) if(t>=doc.sections[i].start && t<doc.sections[i].end)return i;
             return t<doc.sections[0].start?0:doc.sections.length-1;
         }
         function chartNavigate(delta) {
-            var doc=g_clData && g_clData.document;if(!doc)return;
-            g_sectionBrowse=Math.max(0,Math.min(doc.sections.length-1,(g_sectionBrowse===null?chartSectionIndex(doc):g_sectionBrowse)+delta));
+            if(!g_chartPages.length)return;
+            var host=document.getElementById(chordsVisible?'chords-live':'lyrics-live');
+            g_chartPage=Math.max(0,Math.min(g_chartPages.length-1,(g_chartPage===null?(host._pageIndex||0):g_chartPage)+delta));
             renderChordsView();renderLyricsView();
         }
-        function chartFollow(){g_sectionBrowse=null;renderChordsView();renderLyricsView();}
-        function renderStructuredChart(host, lyricsOnly) {
-            var doc=g_clData.document;if(!doc || !doc.sections || !doc.sections.length)return false;
-            if(host.dataset.song!==String(g_clData.song.id)){g_sectionBrowse=null;host.dataset.song=String(g_clData.song.id);}
-            var index=g_sectionBrowse===null?chartSectionIndex(doc):Math.min(g_sectionBrowse,doc.sections.length-1), section=doc.sections[index];
-            var semis=(g_tkState && tkAlive() && Math.abs(g_tkState.songStart-g_clData.song.start)<.05?g_tkState.semis:0)-getCapo();
-            function chord(x){return trEsc(transposeChordName(x,semis));}
-            function progression(seq){return '<div class="sc-progression">'+(seq||[]).map(function(x){return '<span>'+chord(x)+'</span>';}).join('')+'</div>';}
-            var html='<div class="sc-nav"><button onclick="chartNavigate(-1)">← Previous</button><button onclick="chartFollow()">'+(g_sectionBrowse===null?'Following':'Resume following')+'</button><button onclick="chartNavigate(1)">Next →</button></div><h2>'+trEsc(section.label)+'</h2>';
-            if(!clAlive())html+='<div class="sc-note">Disconnected · saved chart</div>';
-            else if(currentPos<g_clData.song.start || currentPos>=g_clData.song.end)html+='<div class="sc-note">Loading the next song…</div>';
-            if(!lyricsOnly || section.kind==='instrumental'){
-                if(section.kind==='instrumental' || !(section.rows||[]).some(function(r){return r.anchors && r.anchors.length;}))html+=progression(section.progression);
-                if(section.repeat>1)html+='<div>Repeat ×'+section.repeat+'</div>';
-                if(!section.progression || !section.progression.length)html+='<div class="sc-note">Chords not supplied for this passage</div>';
+        function chartFollow(){g_chartPage=null;g_sectionBrowse=null;renderChordsView();renderLyricsView();}
+        function chartChooseSection(value){
+            var i=g_chartPages.findIndex(function(p){return p.section===Number(value);});
+            g_chartPage=Math.max(0,i);renderChordsView();renderLyricsView();
+        }
+        function chartRowKey(row,si,ri){return row.id||('legacy-'+(si+1)+'-'+(ri+1));}
+        function chartFragments(row,cols,mode,si,ri,semis){
+            var text=String(row.text||''), anchors=(row.anchors||[]).map(function(a){return {offset:a.offset,symbol:transposeChordName(a.symbol,semis)};});
+            var decorations='',repeat=row.repeat||1;
+            if(mode==='chart'){
+                // Chords-only keeps each written line/pattern; it is not a second lyric view.
+                var symbols=anchors.map(function(a){return a.symbol;});
+                if(!symbols.length)symbols=(row.progression||[]).map(function(x){return transposeChordName(x,semis);});
+                var at=row.repeat_at===undefined?symbols.length:row.repeat_at;
+                if(repeat>1)symbols.splice(at,0,'x'+repeat);
+                decorations=symbols.join('   ');anchors=[];text='';
+            }else if(mode==='lyrics'){
+                anchors=[];
+                if(!text.trim())return [];
+            }else{
+                // Preserve bars/repeat marks between source chords, never print them as lyrics.
+                var raw=String(row.chord_line||'');
+                var chars=raw.split('');
+                (row.anchors||[]).forEach(function(a){for(var n=a.offset;n<a.offset+(a.width||a.symbol.length);n++)chars[n]=' ';});
+                decorations=chars.join('');
+                if(!raw && repeat>1)decorations=' '.repeat(Math.max(text.length,anchors.reduce(function(n,a){return Math.max(n,a.offset+a.symbol.length);},0))+2)+'x'+repeat;
             }
-            (section.rows||[]).forEach(function(row){
-                if(!row.text)return;
-                var anchors=lyricsOnly?[]:(row.anchors||[]).slice().sort(function(a,b){return a.offset-b.offset;}),words=String(row.text),content='',cursor=0;
-                if(!anchors.length)content=trEsc(words);
-                else{
-                    if(anchors[0].offset>0)content+='<span class="sc-word"><b>&nbsp;</b><span>'+trEsc(words.slice(0,anchors[0].offset))+'</span></span>';
-                    anchors.forEach(function(a,i){
-                        var at=Math.max(cursor,Math.min(words.length,a.offset)),end=i+1<anchors.length?Math.max(at,Math.min(words.length,anchors[i+1].offset)):words.length;
-                        content+='<span class="sc-word"><b>'+chord(a.symbol)+'</b><span>'+trEsc(words.slice(at,end))+'</span></span>';cursor=end;
-                    });
+            var width=Math.max(text.length,decorations.length,anchors.reduce(function(n,a){return Math.max(n,a.offset+a.symbol.length);},0));
+            if(!width)return [];
+            var out=[],start=0;
+            while(start<width){
+                var end=Math.min(width,start+cols);
+                if(end<width){
+                    // Break only at a word boundary, moving any overhanging chord with its column.
+                    if(text.length>end && text[end]!==' ' && text[end-1]!==' '){
+                        var space=text.lastIndexOf(' ',end-1);if(space>start+cols*.45)end=space+1;
+                    }
+                    anchors.forEach(function(a){if(a.offset<end && a.offset+a.symbol.length>end && a.offset>start)end=a.offset;});
+                    if(mode==='chart'){
+                        var gap=decorations.lastIndexOf(' ',end-1);if(gap>start+cols*.45)end=gap+1;
+                    }
                 }
-                html+='<div class="sc-line">'+(!lyricsOnly && row.progression?progression(row.progression):'')+content+'</div>';
-            });
-            html+='<div class="sc-note">'+(section.evidence==='detected'?'Estimated harmony from audio · ':'')+(section.confidence==='section checked'?'Section checked':'Automatic passage timing')+'</div>';
-            if(index+1<doc.sections.length)html+='<div class="sc-next">Next: '+trEsc(doc.sections[index+1].label)+'</div>';
-            html+='<button onclick="openTimingRepair(\'lyrics\')">Fix this section</button>';
-            if(host._chartHtml!==html || !host.classList.contains('structured-chart')){host._chartHtml=html;host.innerHTML=html;host.classList.add('structured-chart');}
-            if(canvasOpen){
-                var canvas=document.getElementById(lyricsOnly?'cw-content-lyrics':'cw-content-chords');
-                if(canvas){var compact='<small>'+trEsc(section.label)+'</small><br>'+ (lyricsOnly?(section.rows||[]).filter(function(r){return r.text;}).map(function(r){return trEsc(r.text);}).join('<br>'):(section.progression||[]).map(chord).join(' · '));if(canvas.innerHTML!==compact)canvas.innerHTML=compact;}
+                if(end<=start)end=Math.min(width,start+cols);
+                out.push({text:text.slice(start,end),decorations:decorations.slice(start,end),
+                    anchors:anchors.filter(function(a){return a.offset>=start && a.offset<end;}).map(function(a){return {symbol:a.symbol,offset:a.offset-start};}),
+                    column:start,row:chartRowKey(row,si,ri),rowIndex:ri,cue:row.cue,pageCues:row.page_cues||{},hasWords:mode!=='chart' && !!text.length,
+                    hasChords:mode!=='lyrics' && (anchors.length>0 || !!decorations.trim())});
+                start=end;
             }
+            return out;
+        }
+        function chartBuildPages(doc,width,height,mode,semis){
+            var pages=[];
+            doc.sections.forEach(function(section,si){
+                var preferred=width>=1000?28:22, font=preferred, fragments=[],budget;
+                function layout(size){
+                    var cols=Math.max(12,Math.floor((width-32)/(size*.61))),out=[];
+                    (section.rows||[]).forEach(function(row,ri){out=out.concat(chartFragments(row,cols,mode,si,ri,semis));});
+                    if(!out.length && mode!=='lyrics')out=chartFragments({text:'',progression:section.progression||[],anchors:[],repeat:section.repeat||1},cols,'chart',si,0,semis);
+                    return out;
+                }
+                function cost(f){return (f.hasWords?1.35:0)+(f.hasChords?1.2:0)+.45;}
+                for(var size=preferred;size>=20;size--){
+                    var trial=layout(size),room=Math.max(3.1,(height-198-(g_chartTiming?56:0))/size);
+                    if(trial.reduce(function(n,f){return n+cost(f);},0)<=room){font=size;break;}
+                }
+                fragments=layout(font);budget=Math.max(3.1,(height-198-(g_chartTiming?56:0))/font);
+                var total=fragments.reduce(function(n,f){return n+cost(f);},0);
+                // Balance pages so a long verse doesn't leave one orphan line.
+                var target=Math.min(budget,total/Math.max(1,Math.ceil(total/budget))+.1);
+                var sectionPages=[],page={section:si,parts:[],font:font},used=0;
+                fragments.forEach(function(f){
+                    var amount=cost(f);
+                    if(page.parts.length && used+amount>target){sectionPages.push(page);page={section:si,parts:[],font:font};used=0;}
+                    page.parts.push(f);used+=amount;
+                });
+                sectionPages.push(page);
+                sectionPages.forEach(function(p,i){
+                    p.part=i;p.total=sectionPages.length;
+                    var first=p.parts[0], guess=section.start+(section.end-section.start)*i/sectionPages.length;
+                    var manual=first && first.pageCues[String(first.column)];
+                    var candidate=manual===undefined?(first && first.cue):manual;
+                    p.cue=i===0?section.start:(Number.isFinite(candidate) && candidate>section.start && candidate<section.end?candidate:guess);
+                    // Two fragments of one lyric line cannot turn the page at the same cue.
+                    if(i>0)p.cue=Math.max(sectionPages[i-1].cue+.01,Math.min(p.cue,section.end-.01*(sectionPages.length-i)));
+                    p.checked=i===0?section.confidence==='section checked':Number.isFinite(manual)&&Math.abs(p.cue-manual)<.001;
+                    pages.push(p);
+                });
+            });
+            return pages;
+        }
+        function renderStructuredChart(host, lyricsOnly) {
+            var doc=g_clData && g_clData.document;if(!doc || !doc.sections || !doc.sections.length)return false;
+            var panel=document.getElementById(lyricsOnly?'lyrics-panel':'chords-panel');
+            panel.classList.add('source-chart');host.classList.add('structured-chart');host.classList.remove('sheet');
+            var bar=document.getElementById('perfBar'),rect=bar && bar.getBoundingClientRect();
+            panel.style.bottom=(rect && rect.height && rect.top>100?Math.max(0,innerHeight-rect.top+8):8)+'px';
+            var songKey=g_clData.project+':'+g_clData.song.id;
+            if(host.dataset.song!==songKey){g_chartPage=null;host.dataset.song=songKey;g_chartMessage='';}
+            var mode=lyricsOnly?'lyrics':g_chordView;
+            var semis=(g_tkState && tkAlive() && Math.abs(g_tkState.songStart-g_clData.song.start)<.05?g_tkState.semis:0)-getCapo();
+            var width=host.clientWidth||innerWidth-40,height=host.clientHeight||innerHeight-160;
+            var cacheKey=[songKey,doc.revision,width,height,mode,semis,g_chartTiming].join('|');
+            if(host._layoutKey!==cacheKey){host._layoutKey=cacheKey;host._pages=chartBuildPages(doc,width,height,mode,semis);host._chartHtml=null;}
+            var pages=host._pages,t=currentPos-g_clData.song.start+getLead()*((g_tkState&&g_tkState.rate)||1),active=0;
+            pages.forEach(function(p,i){if(t>=p.cue)active=i;});
+            var index=g_chartPage===null?active:Math.min(g_chartPage,pages.length-1),page=pages[index],section=doc.sections[page.section];
+            host._pageIndex=index;
+            if((lyricsOnly && lyricsVisible)||(!lyricsOnly && chordsVisible)||!g_chartPages.length)g_chartPages=pages;
+            var html='<div class="sc-nav"><button onclick="chartNavigate(-1)" '+(index===0?'disabled':'')+'>Previous</button><button onclick="chartFollow()">'+(g_chartPage===null?'Following':'Resume following')+'</button><button onclick="chartNavigate(1)" '+(index===pages.length-1?'disabled':'')+'>Next</button><button onclick="chartEditorOpen()">Edit sections</button><button class="'+(g_chartTiming?'on':'')+'" onclick="g_chartTiming=!g_chartTiming;renderChordsView();renderLyricsView()">Timing</button></div>';
+            html+='<div class="sc-heading"><select aria-label="Chart section" onchange="chartChooseSection(this.value)">'+doc.sections.map(function(s,i){return '<option value="'+i+'" '+(page.section===i?'selected':'')+'>'+trEsc(s.label)+'</option>';}).join('')+'</select><span>'+(page.part+1)+' / '+page.total+'</span></div>';
+            html+='<div class="sc-paper" style="font-size:'+page.font+'px">';
+            page.parts.forEach(function(f){
+                html+='<div class="sc-line" data-row="'+trEsc(f.row)+'" data-column="'+f.column+'">';
+                if(f.hasChords)html+='<div class="sc-chords"><span class="sc-marks">'+trEsc(f.decorations)+'</span>'+f.anchors.map(function(a){return '<b style="left:'+a.offset+'ch" data-column="'+a.offset+'">'+trEsc(a.symbol)+'</b>';}).join('')+'</div>';
+                if(f.hasWords)html+='<div class="sc-words">'+trEsc(f.text||' ')+'</div>';
+                html+='</div>';
+            });
+            if(!page.parts.length)html+='<div class="sc-empty">'+(section.kind==='instrumental'?'Instrumental':'No chart lines supplied')+'</div>';
+            html+='</div><div class="sc-footer"><span>'+(clAlive()?(page.checked?'Cue checked':'Cue estimated'):'Disconnected')+' &middot; '+trTime(page.cue)+' &middot; Page '+(index+1)+' of '+pages.length+'</span><span>'+trEsc(g_chartMessage|| (pages[index+1]?'Next: '+doc.sections[pages[index+1].section].label:'End of chart'))+'</span>';
+            if(g_chartTiming)html+='<button onclick="chartTapPage(false)" '+(g_chartPending?'disabled':'')+'>This page starts now</button><button onclick="chartTapPage(true)" '+(g_chartPending||index===pages.length-1?'disabled':'')+'>Next page starts now</button>';
+            html+='</div>';
+            if(html!==host._chartHtml){host.innerHTML=html;host._chartHtml=html;}
+            updateTopTabs();
+            if(canvasOpen){var canvas=document.getElementById(lyricsOnly?'cw-content-lyrics':'cw-content-chords');if(canvas)canvas.textContent=section.label+'\n'+(lyricsOnly?(section.rows||[]).map(function(r){return r.text;}).join('\n'):(section.progression||[]).join('  '));}
             return true;
         }
-        function sectionEditorOpen(selectCurrent){
-            var doc=g_clData && g_clData.document,host=document.getElementById('section-editor');
-            if(!doc){host.classList.add('hide');return;}host.classList.remove('hide');
-            var select=document.getElementById('section-choice'),value=selectCurrent?chartSectionIndex(doc):Number(select.value)||0;
-            select.innerHTML=doc.sections.map(function(s,i){return '<option value="'+i+'">'+trEsc(s.label)+' · '+trTime(s.start)+'</option>';}).join('');
-            select.value=String(Math.min(value,doc.sections.length-1));sectionEditorSelect();
-        }
-        function sectionEditorSelect(){
-            var doc=g_clData.document,s=doc.sections[Number(document.getElementById('section-choice').value)];
-            document.getElementById('section-label').value=s.label;
-            document.getElementById('section-start').value=s.start.toFixed(2);document.getElementById('section-end').value=s.end.toFixed(2);
-            document.getElementById('section-repeat').value=s.repeat||1;document.getElementById('section-pattern').value='';
-            document.getElementById('section-template').innerHTML='<option value="0">Keep current content</option>'+(doc.templates||[]).map(function(t,i){return '<option value="'+(i+1)+'">Use '+trEsc(t.label)+' progression</option>';}).join('');
-        }
-        function sectionMarkNow(){document.getElementById('section-start').value=Math.max(0,currentPos-g_clData.song.start).toFixed(2);}
-        function sectionSave(){
-            if(!clAlive() || !g_clData || Number(g_clData.song.id)!==g_tr.songId)return trSetStatus('Song changed; reopen repair.');
+        function chartSend(action,data,done){
+            if(g_chartPending || !clAlive() || !g_clData || !g_clData.song)return chartStatus('Connect to REAPER before saving.');
             var nonce=Date.now().toString(36)+Math.random().toString(36).slice(2,7);
-            function field(id){return document.getElementById(id).value.replace(/[|\r\n]/g,' ');}
-            var fields=[nonce,'section',g_tr.songId,Number(field('section-choice'))+1,field('section-start'),field('section-end'),field('section-label'),field('section-template'),field('section-repeat'),g_clData.document.revision,g_clData.project,field('section-pattern')];
-            g_tr.pending=nonce;wwr_req('SET/EXTSTATE/ReaSetCL/want/'+encodeURIComponent(fields.join('|')));trSetStatus('Saving section…');
-            setTimeout(function(){if(g_tr.pending===nonce){g_tr.pending=null;trSetStatus('REAPER did not confirm the section. Check the connection and try again.','bad');}},5000);
+            // REAPER truncates long individual web commands. Hex chunks keep
+            // UTF-8, slashes and separators out of its command parser.
+            var bytes=new TextEncoder().encode(JSON.stringify(data)),hex='';
+            bytes.forEach(function(b){hex+=b.toString(16).padStart(2,'0');});
+            var chunks=hex.match(/.{1,384}/g)||[];
+            if(chunks.length>192)return chartStatus('This chart is too large to save sections.');
+            chunks.forEach(function(chunk,i){wwr_req('SET/EXTSTATE/ReaSetCL/edit:'+nonce+':'+i+'/'+chunk);});
+            var fields=[nonce,action,g_clData.song.id,(g_chartEdit?g_chartEdit.revision:g_clData.document.revision),(g_chartEdit?g_chartEdit.project:g_clData.project),'chunks:'+chunks.length];
+            var command='SET/EXTSTATE/ReaSetCL/want/'+encodeURIComponent(fields.join('|'));
+            g_chartPending={nonce:nonce,done:done,project:g_clData.project,song:g_clData.song.id};
+            wwr_req(command);chartStatus('Saving in REAPER...');
+            setTimeout(function(){if(g_chartPending&&g_chartPending.nonce===nonce){g_chartPending=null;chartStatus('No confirmation from REAPER. Reopen the editor before retrying.');}},6000);
+        }
+        function chartStatus(message){g_chartMessage=message;var status=document.getElementById('chart-edit-status');if(status)status.textContent=message;}
+        function chartEditReply(value){
+            var f=String(value).split('|');if(!g_chartPending||f[0]!==g_chartPending.nonce)return;
+            var pending=g_chartPending;g_chartPending=null;chartStatus(f.slice(2).join(' '));
+            if(f[1]==='ok' && pending.done)pending.done();
+            renderChordsView();renderLyricsView();
+        }
+        function chartTapPage(next){
+            var host=document.getElementById(chordsVisible?'chords-live':'lyrics-live'),index=host._pageIndex+(next?1:0),page=host._pages[index];
+            if(!page)return;
+            var time=Math.max(0,currentPos-g_clData.song.start),first=page.parts[0];
+            var action=page.part===0?'cue':'pagecue';
+            var data={section:page.section+1,time:time};
+            if(action==='pagecue'){data.row=first.row;data.column=first.column;}
+            chartSend(action,data,function(){g_chartPage=index;});
+        }
+        function chartEditorOpen(){
+            if(!g_clData || !g_clData.document)return;
+            var doc=g_clData.document;
+            var source=document.getElementById('chart-source-link'),url=String(doc.source_url||'');
+            source.hidden=!/^https:\/\/(?:tabs\.)?ultimate-guitar\.com\//i.test(url);
+            source.href=source.hidden?'#':url;
+            g_chartEdit={revision:doc.revision,project:g_clData.project,song:g_clData.song.id,
+                sections:JSON.parse(JSON.stringify(doc.sections)),duration:doc.duration};
+            g_chartEdit.sections.forEach(function(s,si){(s.rows||[]).forEach(function(r,ri){r._key=chartRowKey(r,si,ri);});});
+            document.getElementById('chart-editor').classList.remove('hide');chartEditorRender();chartStatus('');
+        }
+        function chartEditorClose(){if(g_chartPending)return;document.getElementById('chart-editor').classList.add('hide');g_chartEdit=null;}
+        function chartEditorRender(){
+            var host=document.getElementById('chart-edit-lines');
+            host.innerHTML=g_chartEdit.sections.map(function(s,si){return '<section class="ce-section"><div class="ce-section-head"><input aria-label="Section name" value="'+trEsc(s.label)+'" onchange="g_chartEdit.sections['+si+'].label=this.value"><label>Start <input aria-label="Section start" type="number" step="0.01" min="0" value="'+s.start+'" onchange="g_chartEdit.sections['+si+'].start=Number(this.value)"></label>'+(si?'<button onclick="chartEditorJoin('+si+')">Join previous</button>':'')+'</div>'+(s.rows||[]).map(function(r,ri){return '<div class="ce-row"><div>'+trEsc(r.text.trim()||((r.anchors||[]).map(function(a){return a.symbol;}).join('  ')||'Instrumental'))+'</div>'+(ri?'<button onclick="chartEditorSplit('+si+','+ri+')">Start section here</button>':'<small>First line</small>')+'</div>';}).join('')+'</section>';}).join('');
+        }
+        function chartEditorSplit(si,ri){
+            var s=g_chartEdit.sections[si],end=g_chartEdit.sections[si+1]?g_chartEdit.sections[si+1].start:g_chartEdit.duration;
+            var cue=s.rows[ri].cue,guess=s.start+(end-s.start)*ri/s.rows.length;
+            var start=Number.isFinite(cue)&&cue>s.start&&cue<end?cue:guess;
+            var section={label:'New section',start:Math.round(start*1000)/1000,end:end,rows:s.rows.splice(ri),repeat:1};
+            g_chartEdit.sections.splice(si+1,0,section);chartEditorRender();
+        }
+        function chartEditorJoin(si){var sections=g_chartEdit.sections;sections[si-1].rows=sections[si-1].rows.concat(sections[si].rows);sections.splice(si,1);chartEditorRender();}
+        function chartEditorSave(){
+            if(!g_chartEdit||g_chartEdit.song!==g_clData.song.id||g_chartEdit.project!==g_clData.project)return chartStatus('Song changed. Close and reopen the editor.');
+            var groups=g_chartEdit.sections.map(function(s){return {label:s.label,start:s.start,repeat:s.repeat||1,rows:s.rows.map(function(r){return r._key;})};});
+            if(groups.some(function(s,i){return !s.label.trim()||!Number.isFinite(s.start)||s.start<0||s.start>=g_chartEdit.duration||(i===0?s.start!==0:s.start<=groups[i-1].start);}))return chartStatus('Give each section a name and increasing start time; the first starts at zero.');
+            chartSend('layout',{sections:groups},function(){chartEditorClose();});
         }
         function openSongUpdates(){
             window.open(location.protocol+'//'+location.hostname+':8765/#updates='+encodeURIComponent(displayList.map(function(s){return s.id;}).join(',')),'jamroom-importer');
@@ -9186,8 +9147,8 @@
         function renderChordsView() {
             var host = document.getElementById('chords-live');
             if (!host) return;
-            if (g_clData && g_clData.document && (g_chordView!=='big' && g_chordView!=='timeline' || !g_preciseFollow || g_clData.document.manual) && renderStructuredChart(host)) return;
-            host.classList.remove('structured-chart');host._chartHtml=null;
+            if (g_clData && g_clData.document && g_chordView!=='big' && g_chordView!=='timeline' && renderStructuredChart(host)) return;
+            host.classList.remove('structured-chart');host._chartHtml=null;document.getElementById('chords-panel').classList.remove('source-chart');document.getElementById('chords-panel').style.bottom='';
             if (!g_clData || !g_clData.chords || !g_clData.chords.length) {
                 host.innerHTML = '<div class="cv-empty">' + (clAlive()
                     ? 'No chords for this song.'
@@ -9368,7 +9329,7 @@
             }
             if (!host) return;
             if (g_clData && g_clData.document && renderStructuredChart(host, true)) return;
-            host.classList.remove('structured-chart');host._chartHtml=null;
+            host.classList.remove('structured-chart');host._chartHtml=null;document.getElementById('chords-panel').classList.remove('source-chart');document.getElementById('chords-panel').style.bottom='';
             if (!g_clData || !g_clData.lyrics || !g_clData.lyrics.length) {host.textContent='No lyrics for this song.';return;}
             var list = g_clData.lyrics;
             var t = currentPos + getLead() * ((g_tkState && g_tkState.rate) || 1.0);

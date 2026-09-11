@@ -736,8 +736,8 @@ def rechord_song(name, chart_url, snap=True, force=False, key_offset=None):
     if res["method"] == "lyrics":
         _ui_log(f"Placed by the words: {res['lines_matched']} of "
                 f"{res['chart_lines']} chart lines matched to sung lines.")
-    _ui_log(f"{len(job['chords'])} detected chords replaced by "
-            f"{len(res['chords'])} chart chords.")
+    _ui_log("Source chart words, chord columns and section order preserved. "
+            "Recording analysis supplies estimated page cues only.")
 
     job["chords"] = res["chords"]
     job["chart"] = {"url": chart_url, "method": res["method"],
@@ -1281,8 +1281,8 @@ class Handler(BaseHTTPRequestHandler):
                     if res["method"] == "lyrics":
                         _ui_log(f"Placed by the words: {res['lines_matched']} of "
                                 f"{res['chart_lines']} chart lines matched.")
-                    _ui_log(f"{len(job.get('chords') or [])} detected chords "
-                            f"replaced by {len(res['chords'])} chart chords.")
+                    _ui_log("Source chart words, chord columns and section order preserved. "
+                            "Recording analysis supplies estimated page cues only.")
                     job["chords"] = res["chords"]
                     job["chart"] = {"url": body.get("url", ""),
                                     "method": res["method"],

@@ -166,7 +166,7 @@
   </div>
 
   <div class="card hide" id="manCard">
-    <label>Songs in the REAPER project — review or repair existing words and chords</label>
+    <label>Song library — source charts, sections and page timing</label>
     <button class="small" onclick="loadSongs(true)">Refresh list</button>
     <button class="primary" onclick="openUpdates()">Update lyrics &amp; chords…</button>
     <div id="updatesBox" class="hide" style="margin:18px 0;padding:16px;border:1px solid #8885;border-radius:12px">
@@ -178,6 +178,7 @@
       <div id="updateSongs"></div>
       <label class="note"><input type="checkbox" id="replaceTiming"> Replace old timing fixes and local chart edits on selected songs</label>
       <button id="updateStart" class="primary" onclick="startUpdates(false,false)">Update selected</button>
+      <button id="updateWholeLibrary" onclick="updateWholeLibrary()">Update whole library</button>
       <button onclick="startUpdates(true,false)">Resume / retry batch</button>
       <button onclick="pauseUpdates()">Pause after this song</button>
       <button onclick="startUpdates(false,true)">Restore selected songs</button>
@@ -185,48 +186,33 @@
       <div id="updateProgress" class="note" aria-live="polite"></div>
     </div>
     <div id="manList"><div class="note">Loading…</div></div>
-    <div class="note" style="margin-top:10px">Repairs keep the song's audio,
+    <div class="note" style="margin-top:10px">Chart updates keep the song's audio,
       stems, routing and setlists exactly as they are. Deleting removes the song's region
       and its stems, lyrics and chords from the project. Your PB and
       <b>[JR:…]</b> buses, every other song, and the paid-for split on Fadr are
       all left alone — and one <b>Ctrl+Z in REAPER</b> puts the song back.</div>
 
     <div id="repairBox" class="hide">
-      <label id="repairFor">Review or repair</label>
-      <div class="note">Choose what is getting in the way. Timing repair opens
-        beside the playing song so you can simply tell JamRoom what should be
-        showing now.</div>
+      <label id="repairFor">Chart tools</label>
+      <div class="note">Edit the full chart's section breaks in ReaSet, then tap page starts while playing.</div>
       <div class="repair-actions">
         <button class="primary" id="repairTimingBtn" onclick="openLiveTimingRepair()">
-          Fix timing while the song plays
-          <small>Handles a simple early/late shift, gradual drift, and individual bad sections.</small>
-        </button>
-        <button onclick="openRelyricFromRepair()">
-          Change the lyrics
-          <small>Pick a different timed version without touching the stems.</small>
+          Edit sections and page timing
+          <small>Source words and chord positions stay together.</small>
         </button>
         <button onclick="openRechordFromRepair()">
-          Change the chord chart
-          <small>Choose the chart you actually play without re-importing audio.</small>
+          Choose source chart
+          <small>Replace the source when you want a different arrangement.</small>
         </button>
       </div>
-      <details style="margin-top:10px">
-        <summary class="note" style="cursor:pointer">More options</summary>
-        <div class="note">A full audio re-import is only needed when the wrong
-          recording or bad stems were imported. Words, chords and timing can all
-          be repaired here without paying for another split.</div>
-      </details>
       <div id="repairLaunchLog" class="note"></div>
     </div>
 
     <div id="rechordBox" class="hide">
       <label id="rechordFor">Chord charts</label>
-      <div class="note">Builds readable <b>song sections</b> from the selected chart
-        and timed lyrics, including instrumental passages and repeated choruses.
-        Printed chord positions stay attached to matching words; uncertain changes
-        remain a visible progression. Individual timings are used only when the
-        audio evidence supports the complete progression. You can fix section
-        boundaries and content in ReaSet. One Ctrl+Z undoes the REAPER change.</div>
+      <div class="note">Preserves the selected chart's words, chord columns, section order and repeats.
+        Timed lyrics estimate page starts only. Choosing a new source replaces local section edits;
+        one Ctrl+Z in REAPER undoes the change.</div>
       <div class="note">Wrong song listed below? Search for it yourself, or
         paste the chart's address straight from Ultimate Guitar.</div>
       <div style="display:flex;gap:8px;margin-top:8px">
@@ -248,27 +234,7 @@
       <div id="rechordLog" class="note"></div>
     </div>
 
-    <div id="relyricBox" class="hide">
-      <label id="relyricFor">Lyrics</label>
-      <div class="note">Replaces this song's timed lyrics, and re-places its
-        chords against the new words — chords are positioned by the words they
-        sit above, so the two have to move together. One Ctrl+Z in REAPER puts
-        both back.</div>
-      <div style="display:flex;gap:8px;margin-top:8px">
-        <input id="relyricQuery" placeholder="song name, or the artist it is filed under">
-        <button id="relyricSearchBtn" class="delbtn" style="white-space:nowrap">Search</button>
-      </div>
-      <div id="relyricResults"></div>
-      <label style="margin-top:12px">Or keep these lyrics and just shift their
-        timing (seconds — positive shows them later)</label>
-      <div style="display:flex;gap:8px">
-        <input type="number" id="relyricOffset" step="0.1" value="0" style="max-width:130px">
-        <button id="relyricShiftBtn" class="delbtn" style="white-space:nowrap">Shift timing</button>
-      </div>
-      <div class="note">Overrides the automatic alignment and is remembered.
-        The chords move with the words, since they are placed against them.</div>
-      <div id="relyricLog" class="note"></div>
-    </div>
+
 
     <div id="orphanWrap" class="hide">
       <label style="margin-top:16px">Downloaded on this PC but not in the project</label>
@@ -368,7 +334,7 @@
 <script>
 // Version of THIS page (served fresh from disk). Compared against the version
 // of the running server. Either side may be older.
-var UI_BUILD = "v3.0";
+var UI_BUILD = "v3.1";
 
 function importerVersionWarning(serverBuild) {
   if (serverBuild === UI_BUILD) return '';
@@ -449,13 +415,11 @@ function resetReviewPanel(){
 
 function resetMaintenancePanels(){
   maintenanceGeneration++;
-  ['repairBox','rechordBox','relyricBox'].forEach(function(id){ $(id).classList.add('hide'); });
-  g_repairSong = null; g_rechordSong = null; g_relyricSong = null;
+  ['repairBox','rechordBox'].forEach(function(id){ $(id).classList.add('hide'); });
+  g_repairSong = null; g_rechordSong = null;
   $('repairLaunchLog').textContent = '';
   $('rechordResults').innerHTML = ''; $('rechordLog').textContent = '';
   $('rechordQuery').value = ''; $('rechordUrl').value = '';
-  $('relyricResults').innerHTML = ''; $('relyricLog').textContent = '';
-  $('relyricQuery').value = ''; $('relyricOffset').value = '0';
 }
 
 function resetReadyState(){
@@ -703,6 +667,16 @@ function startUpdates(resume,restore,ids){
   updateApi('/start',{ids:ids,resume:resume,restore:restore,project:updateProject,replace_edits:$('replaceTiming').checked}).then(loadUpdates).catch(updateError);
 }
 function pauseUpdates(){updateApi('/pause',{}).then(loadUpdates).catch(updateError);}
+function updateWholeLibrary(){
+  $('updateWholeLibrary').disabled=true;
+  updateApi('').then(function(d){
+    updateProject=d.project;updateSongs=d.songs||[];updateSelection={};
+    $('updateScope').value='all';
+    var ids=updateSongs.filter(function(s){return s.eligible&&!s.protected;}).map(function(s){updateSelection[s.id]=true;return s.id;});
+    if(!ids.length){updateError('All available songs are current or kept.');return;}
+    startUpdates(false,false,ids);
+  }).catch(updateError).finally(function(){$('updateWholeLibrary').disabled=false;});
+}
 function restoreBatch(){if(updateBatch)startUpdates(false,true,updateBatch.songs.filter(function(s){return s.status==='done';}).map(function(s){return s.id;}));}
 
 function loadSongs(){
@@ -725,8 +699,8 @@ function loadSongs(){
         + '</span></div>';
       var fx = document.createElement('button');
       fx.className = 'repairbtn';
-      fx.textContent = 'Review or repair';
-      fx.title = 'Fix timing, lyrics or chords without re-importing the audio.';
+      fx.textContent = 'Chart tools';
+      fx.title = 'Open section editing or choose a source chart.';
       fx.onclick = function(){ openRepair(s); };
       row.appendChild(fx);
       var b = document.createElement('button');
@@ -752,16 +726,9 @@ function openRepair(s){
   g_repairSong = s;
   $('repairBox').classList.remove('hide');
   $('rechordBox').classList.add('hide');
-  $('relyricBox').classList.add('hide');
-  $('repairFor').textContent = 'Review or repair “' + s.name + '”';
+  $('repairFor').textContent = 'Chart tools “' + s.name + '”';
   $('repairLaunchLog').textContent = '';
   $('repairBox').scrollIntoView({behavior:'smooth', block:'start'});
-}
-
-function openRelyricFromRepair(){
-  if(!g_repairSong) return;
-  $('repairBox').classList.add('hide');
-  openRelyric(g_repairSong);
 }
 
 function openRechordFromRepair(){
@@ -787,11 +754,11 @@ function openLiveTimingRepair(){
       return;
     }
     var url = location.protocol + '//' + location.hostname + ':' + d.reaper_port
-            + '/ReaSet.html?repair=' + (g_repairSong.repair_scope || 'lyrics');
+            + '/ReaSet.html?sections=1';
     g_timingLaunchedSong = g_repairSong.name;
     if(target) target.location = url; else window.location.href = url;
     $('repairLaunchLog').innerHTML = '<span class="check ok">Song selected. '
-      + 'Use the JamRoom window to mark what should be showing.</span>';
+      + 'Use Edit sections, then Timing in the ReaSet window.</span>';
   }).catch(function(e){
     $('repairTimingBtn').disabled = false;
     if(target) target.close();
@@ -949,291 +916,6 @@ function doRechord(url, btn){
 }
 
 // ── Give an existing song different lyrics (and re-place its chords) ──────
-var g_relyricSong = null;
-
-function openRelyric(s){
-  g_relyricSong = s;
-  $('relyricBox').classList.remove('hide');
-  $('relyricFor').textContent = 'Lyrics for “' + s.name + '”';
-  $('relyricLog').textContent = '';
-  var i = s.name.indexOf(' - ');
-  $('relyricQuery').value = i > 0 ? s.name.slice(0, i) + ' ' + s.name.slice(i+3)
-                                  : s.name;
-  $('relyricSearchBtn').onclick = function(){ searchRelyric(); };
-  $('relyricShiftBtn').onclick = function(){
-    var v = parseFloat($('relyricOffset').value);
-    if(isNaN(v)){ $('relyricLog').textContent = 'Enter a number of seconds.'; return; }
-    applyRelyric({name: g_relyricSong.name, offset: v}, $('relyricShiftBtn'));
-  };
-  searchRelyric();
-}
-
-function searchRelyric(){
-  var generation = ++maintenanceGeneration;
-  $('relyricResults').innerHTML = '<div class="note">Searching…</div>';
-  fetch('/api/lyrics_search', {method:'POST', headers:{'Content-Type':'application/json'},
-    body: JSON.stringify({free: $('relyricQuery').value || '',
-                          duration: g_relyricSong ? g_relyricSong.duration : 0})})
-  .then(r=>r.json()).then(function(d){
-    if(generation !== maintenanceGeneration) return;
-    if(d.error){ $('relyricResults').innerHTML = '<div class="check bad">'+d.error+'</div>'; return; }
-    var rows = (d.results || []).filter(function(c){ return c.synced; });
-    if(!rows.length){
-      $('relyricResults').innerHTML = '<div class="note">Nothing with timings '
-        + 'found. Try just the song name, or the artist it is filed under.</div>';
-      return;
-    }
-    $('relyricResults').innerHTML = '';
-    rows.forEach(function(c){
-      var b = document.createElement('button');
-      b.className = 'result';
-      var m = Math.floor(c.duration/60), sec = ('0'+(c.duration%60)).slice(-2);
-      var dd = (c.dur_delta === null || c.dur_delta === undefined) ? null : c.dur_delta;
-      var durPill = dd === null ? ''
-        : (dd <= 3 ? '<span class="libpill">same length</span>'
-                   : '<span class="libpill warn">' + dd + 's different length</span>');
-      b.innerHTML = c.artist + ' — ' + c.title
-        + '<span class="libpill">timed · ' + c.lines + ' lines</span>' + durPill
-        + '<br><small>' + (c.album || 'no album') + ' · ' + m + ':' + sec
-        + ' (this song is ' + Math.floor(g_relyricSong.duration/60) + ':'
-        + ('0'+Math.round(g_relyricSong.duration%60)).slice(-2) + ')'
-        + '<br>A different length usually means it was timed against another '
-        + 'edit, so every line will be out.</small>';
-      b.onclick = function(){ doRelyric(c.id, b); };
-      $('relyricResults').appendChild(b);
-    });
-  }).catch(function(e){
-    if(generation !== maintenanceGeneration) return;
-    $('relyricResults').innerHTML = '<div class="check bad">Search failed: '
-      + e + '</div>';
-  });
-}
-
-function doRelyric(id, btn){
-  applyRelyric({name: g_relyricSong.name, id: id}, btn);
-}
-
-function applyRelyric(payload, btn){
-  if(!g_relyricSong) return;
-  dismissReceipt();
-  var songName = g_relyricSong.name;
-  btn.disabled = true; btn.style.opacity = '.6';
-  $('relyricLog').textContent = 'Rewriting lyrics and chords in REAPER…';
-  fetch('/api/relyric', {method:'POST', headers:{'Content-Type':'application/json'},
-    body: JSON.stringify(payload)})
-  .then(r=>r.json()).then(function(d){
-    btn.disabled = false; btn.style.opacity = '';
-    if(d.error){
-      $('relyricLog').innerHTML = '<span class="check bad">' + d.error + '</span>'
-        + '<br>' + (d.log || []).join('<br>');
-      return;
-    }
-    showReceipt('Lyrics replaced', songName + ': ' + d.lines
-      + ' timed lyric lines and ' + d.chords + ' chords replaced. '
-      + 'The stems and routing were left unchanged.', d.log || [], false, false);
-  }).catch(function(e){
-    btn.disabled = false; btn.style.opacity = '';
-    $('relyricLog').textContent = 'Failed: ' + e;
-  });
-}
-
-function askDelete(s){
-  dismissReceipt();
-  g_delTarget = s;
-  var m = Math.floor(s.duration/60), sec = ('0'+Math.round(s.duration%60)).slice(-2);
-  $('delWhat').innerHTML = '<div class="note">This removes <b>' + s.name
-    + '</b> (' + m + ':' + sec + ') from the REAPER project: its region, its '
-    + 'stems, and its lyrics and chords.<br><br>Other songs, your buses and the '
-    + 'paid-for split on Fadr are not touched. One Ctrl+Z in REAPER undoes it.</div>';
-  $('delExpect').textContent = s.name;
-  $('delConfirm').value = '';
-  $('delFiles').checked = false;
-  $('delFilesLab').textContent = s.folder_mb
-    ? ('Also delete the downloaded audio (frees ' + s.folder_mb + ' MB)')
-    : 'Also delete the downloaded audio (none found locally)';
-  $('delFilesWhy').innerHTML = s.folder_mb
-    ? ('<b>Leave this unticked</b> and the song appears under "Downloaded on '
-       + 'this PC but not in the project", ready to <b>re-add instantly with no '
-       + 'internet</b>.<br><b>Tick it</b> to reclaim the ' + s.folder_mb
-       + ' MB; putting the song back then means re-importing from Fadr — free, '
-       + 'but a few minutes and it needs Fadr to be up. Either way your group '
-       + 'and name choices are remembered.')
-    : '';
-  $('delFiles').disabled = !s.folder_mb;
-  $('delOverlay').classList.remove('hide');
-  $('delConfirm').focus();
-  delCheck();
-}
-function delCheck(){
-  var ok = g_delTarget && $('delConfirm').value.trim() === g_delTarget.name;
-  $('delGo').disabled = !ok;
-  $('delGo').textContent = ok
-    ? ('Delete permanently' + ($('delFiles').checked ? ' + files' : ''))
-    : 'Type the name above to enable';
-}
-function closeDelete(){
-  $('delOverlay').classList.add('hide');
-  g_delTarget = null;
-}
-function doDelete(){
-  if(!g_delTarget) return;
-  var t = g_delTarget;
-  var removedFiles = $('delFiles').checked;
-  $('delGo').disabled = true; $('delGo').textContent = 'Deleting…';
-  fetch('/api/delete_song', {method:'POST', headers:{'Content-Type':'application/json'},
-    body: JSON.stringify({name:t.name, start:t.start, end:t.end,
-                          delete_files: $('delFiles').checked})})
-  .then(r=>r.json()).then(function(d){
-    closeDelete();
-    if(d.error){ alert('Delete failed:\\n\\n' + d.error); loadSongs(); return; }
-    showReceipt('Song deleted', t.name + ' was removed from the REAPER project.'
-      + (removedFiles ? ' Its downloaded audio was also removed.'
-                      : ' Its downloaded files were kept for an instant re-add.'),
-      d.result ? [d.result] : [], false, false);
-  }).catch(function(e){ closeDelete(); alert('Delete failed: ' + e); });
-}
-
-function loadLibrary(force){
-  if(force) g_library = null;
-  $('libList').innerHTML = '<div class="note">Loading your Fadr library…</div>';
-  fetch('/api/library').then(function(r){
-    // An old server has no such endpoint; say what to do rather than "not found".
-    if(r.status === 404){
-      throw new Error('This importer is running an older version that has no '
-        + 'Fadr library support. Close the Jam Room Importer window and start '
-        + 'JamRoom Importer.bat again.');
-    }
-    return r.json();
-  }).then(function(d){
-    if(d.error){ $('libList').innerHTML = '<div class="check bad">'+d.error+'</div>'; return; }
-    g_library = d.songs || [];
-    if(!g_library.length){
-      $('libList').innerHTML = '<div class="note">Your Fadr account has no '
-        + 'split songs yet. Import one from YouTube first.</div>';
-      return;
-    }
-    renderLibrary();
-  }).catch(function(e){
-    g_library = null;   // let a retry actually retry
-    $('libList').innerHTML = '<div class="check bad">' + e.message + '</div>';
-  });
-}
-
-function renderLibrary(){
-  if(!g_library) return;
-  var f = ($('libFilter').value || '').toLowerCase();
-  var rows = g_library.filter(function(s){ return s.name.toLowerCase().indexOf(f) >= 0; });
-  if(!rows.length){ $('libList').innerHTML = '<div class="note">Nothing matches.</div>'; return; }
-  $('libList').innerHTML = '';
-  rows.forEach(function(s){
-    var b = document.createElement('button');
-    b.className = 'result';
-    var m = Math.floor(s.duration/60), sec = ('0'+Math.round(s.duration%60)).slice(-2);
-    var free = (s.subsplits_done >= 2);
-    b.innerHTML = s.name
-      + (s.named_locally ? '' : '<span class="libpill warn">name unknown</span>')
-      + (s.has_chords ? '<span class="libpill">chords</span>'
-                      : '<span class="libpill warn">no chords</span>')
-      + (free ? '<span class="libpill">fully split · free</span>'
-              : '<span class="libpill warn">extra splits not done</span>')
-      + '<br><small>' + m + ':' + sec + ' · ' + s.stems + ' stems · '
-      + (s.key || 'key ?') + ' · ' + (s.tempo || '?') + ' bpm · added ' + s.created
-      + '</small>';
-    b.onclick = function(){ pickLibrary(s, b); };
-    $('libList').appendChild(b);
-  });
-}
-
-function pickLibrary(s, btn){
-  g_libPicked = s; picked = null;
-  document.querySelectorAll('.result').forEach(function(x){ x.classList.remove('sel'); });
-  btn.classList.add('sel');
-  // Split "Band - Song" when we know it; otherwise the operator names it now.
-  var i = s.name.indexOf(' - ');
-  $('band').value  = i > 0 ? s.name.slice(0, i) : '';
-  $('title').value = i > 0 ? s.name.slice(i + 3) : (s.named_locally ? s.name : '');
-  var extra = $('libExtra');
-  if (s.subsplits_done >= 2) {
-    $('cost').textContent = 'Already fully split on Fadr — this import is free.';
-    $('importBtn').textContent = 'Import this song (no charge)';
-    extra.classList.add('hide');
-  } else {
-    // Honest about cost: the main split is paid for, the sub-splits are not.
-    var mins = Math.max(1, Math.ceil(s.duration/60));
-    $('cost').textContent = 'Main split already paid for. Splitting vocals into '
-      + 'lead/backing and melodies into guitars/keys has NOT been done for this '
-      + 'song yet — doing it now costs about $' + (mins*0.05*2).toFixed(2) + '.';
-    $('importBtn').textContent = 'Import this song';
-    extra.classList.remove('hide');
-  }
-  $('confirmCard').classList.remove('hide');
-}
-
-function doImport(rebuild){
-  if(g_source === 'lib'){ return doImportLibrary(); }
-  if(!picked) return;
-  if(!$('band').value.trim() || !$('title').value.trim()){
-    alert('Please give this song a Band and Song title.'); return;
-  }
-  var importUrl = picked.url;
-  var importBand = $('band').value.trim();
-  var importTitle = $('title').value.trim();
-  dismissReceipt();
-  $('importBtn').disabled = true;
-  setPipelineActive(true);
-  reviewShown = false;
-  fetch('/api/import', {method:'POST', headers:{'Content-Type':'application/json'},
-    body: JSON.stringify({url:importUrl, band:importBand,
-                          title:importTitle, rebuild:!!rebuild})})
-  .then(r=>r.json()).then(function(d){
-    if(d.error){
-      setPipelineActive(false);
-      $('importBtn').disabled = false;
-      if(d.code === 'cached_recording' && !rebuild){
-        if(confirm(d.error + '\n\nReplace all cached audio, stems, lyrics and chord analysis with the newly selected recording? This can incur a new Fadr charge.')){
-          doImport(true);
-        }
-      } else alert(d.error);
-      return;
-    }
-    beginPipeline((rebuild ? 'Rebuilding ' : 'Downloading & splitting ')
-      + importBand + ' - ' + importTitle + ' …');
-    startPolling();
-  }).catch(function(e){
-    setPipelineActive(false);
-    $('importBtn').disabled = false;
-    alert('Could not start the import: ' + e);
-  });
-}
-
-function doImportLibrary(){
-  if(!g_libPicked) return;
-  if(!$('band').value.trim() || !$('title').value.trim()){
-    alert('Please give this song a Band and a Song title — that becomes the region name in REAPER.');
-    return;
-  }
-  var importAsset = g_libPicked;
-  var importBand = $('band').value.trim();
-  var importTitle = $('title').value.trim();
-  $('importBtn').disabled = true;
-  dismissReceipt();
-  setPipelineActive(true);
-  reviewShown = false;
-  fetch('/api/import_library', {method:'POST', headers:{'Content-Type':'application/json'},
-    body: JSON.stringify({id: importAsset.id, band: importBand,
-                          title: importTitle, duration: importAsset.duration,
-                          allow_new_splits: (importAsset.subsplits_done >= 2)
-                              || $('allowSplits').checked})})
-  .then(r=>r.json()).then(function(d){
-    if(d.error){ setPipelineActive(false); alert(d.error); $('importBtn').disabled = false; return; }
-    beginPipeline('Fetching ' + importBand + ' - ' + importTitle + ' from Fadr…');
-    startPolling();
-  }).catch(function(e){
-    setPipelineActive(false);
-    $('importBtn').disabled = false;
-    alert('Could not start the Fadr import: ' + e);
-  });
-}
 
 // ── Stem content: see what is in a track without playing it through ───────
 function stemBadge(st){
@@ -1430,7 +1112,10 @@ function renderChartNow(rv){
   if(c.url){
     // Never state a reason we were not told. An unknown method means the
     // chart is linked but how it was timed was not reported.
-    var how = c.method === 'lyrics'
+    var how = c.method === 'sections'
+      ? ('Source words and chord positions preserved. ' + c.lines_matched + ' of ' + c.chart_lines
+         + ' lines matched for estimated page cues; check page timing in ReaSet.')
+      : c.method === 'lyrics'
       ? ('placed on the words — ' + c.lines_matched + ' of ' + c.chart_lines
          + ' chart lines matched to sung lines')
       : c.method === 'detected'

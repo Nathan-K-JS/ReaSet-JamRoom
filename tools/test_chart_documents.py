@@ -15,7 +15,8 @@ class ChartTests(unittest.TestCase):
         templates=model.parse_chart('[Verse]\n[ch]C[/ch]                    [ch]G[/ch]\nHere we sing')
         doc,_=model.build_document({'duration':20,'lyrics':{'synced':True,'lines':[
             {'time':0,'text':'Here we sing'}]}},templates,[])
-        self.assertEqual(doc['sections'][0]['rows'][0]['anchors'][1]['offset'],len('Here we sing'))
+        self.assertEqual(doc['sections'][0]['rows'][0]['anchors'][1]['offset'],21)
+        self.assertEqual(doc['sections'][0]['rows'][0]['text'],'Here we sing')
 
     def test_header_repeats_and_lead_break_preserve_the_pattern(self):
         templates=model.parse_chart('[Lead break x2]\n[ch]C[/ch] [ch]G[/ch]')
@@ -42,7 +43,7 @@ class ChartTests(unittest.TestCase):
         templates = model.parse_chart('[Intro]\n[ch]Am[/ch] [ch]F[/ch] x2\n\n[Verse]\n[ch]C[/ch]    [ch]G[/ch]\nFirst example line\n\n[Solo]\n[ch]Dm[/ch] [ch]E[/ch]\n\n[Chorus]\n[ch]F[/ch]\nSecond example line')
         doc, events = model.build_document(self.job(), templates, [])
         model.validate_document(doc)
-        self.assertEqual([s["label"] for s in doc["sections"]], ['Intro', 'Verse', 'Solo', 'Chorus', 'Instrumental passage'])
+        self.assertEqual([s["label"] for s in doc["sections"]], ['Intro', 'Verse', 'Solo', 'Chorus'])
         verse = doc["sections"][1]
         self.assertEqual((verse["start"], verse["end"]), (10,12))
         self.assertEqual(doc["sections"][2]["progression"], ['Dm','E'])
@@ -54,18 +55,19 @@ class ChartTests(unittest.TestCase):
         self.assertEqual(t[0]["rows"][0]["repeat"],4)
         self.assertEqual(t[1]["reference"],t[0]["id"])
 
-    def test_abbreviated_chorus_reused_at_later_occurrence(self):
+    def test_missing_source_sections_are_not_invented_from_repeated_lyrics(self):
         job=self.job(); job['lyrics']['lines'][2]['text']='First example line'
         doc,_=model.build_document(job,model.parse_chart('[Chorus]\n[ch]C[/ch]\nFirst example line'),[])
         vocals=[s for s in doc['sections'] if s['kind']=='vocal']
-        self.assertEqual(len(vocals),2)
-        self.assertEqual([s['label'] for s in vocals],['Chorus','Chorus'])
-        self.assertNotEqual(vocals[0]['id'],vocals[1]['id'])
+        self.assertEqual(len(vocals),1)
+        self.assertEqual(vocals[0]['label'],'Chorus')
+        self.assertEqual(len(doc['templates']),1)
 
     def test_conflicting_identical_lyrics_do_not_choose_arbitrary_harmony(self):
         templates=model.parse_chart('[Verse]\n[ch]C[/ch]\nFirst example line\n[Chorus]\n[ch]F#[/ch]\nFirst example line')
         doc,_=model.build_document(self.job(),templates,[])
-        self.assertEqual(doc['sections'][1]['evidence'],'unknown')
+        self.assertEqual([s['progression'] for s in doc['sections']],[['C'],['F#']])
+        self.assertEqual([s['label'] for s in doc['sections']],['Verse','Chorus'])
 
     def test_instrumental_song_and_sustained_chord_are_valid(self):
         doc,events=model.build_document({'duration':60},model.parse_chart('[Intro]\n[ch]C[/ch]'),[{'start':0,'end':60,'chord':'C'}])
@@ -81,8 +83,9 @@ class ChartTests(unittest.TestCase):
         job=self.job();job['lyrics']['offset_override']=2
         doc,_=model.build_document(job,model.parse_chart('[Verse]\n[ch]C[/ch]\nFirst example line'),[])
         verse=next(s for s in doc['sections'] if s['kind']=='vocal')
-        self.assertEqual(verse['start'],12)
-        self.assertEqual(verse['rows'][0]['end'],14)
+        self.assertEqual(verse['rows'][0]['cue'],12)
+        self.assertEqual(verse['rows'][0]['text'],'First example line')
+        self.assertNotIn('start',verse['rows'][0])
 
     def test_actual_correlation_sign_both_directions(self):
         for offset in (-2,0,2):

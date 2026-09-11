@@ -75,9 +75,10 @@ local ok,why=pcall(function()
   check(apply('two').status=='ok','Reapply after restore')
   -- Exercise the persistent chart bridge synchronously, with a private wire
   -- namespace so the running browser bridge is not disturbed.
-  local real_set,real_get=reaper.SetExtState,reaper.GetExtState
+  local real_set,real_get,real_delete=reaper.SetExtState,reaper.GetExtState,reaper.DeleteExtState
   reaper.SetExtState=function(sec,key,value,persist)real_set(sec=='ReaSetCL' and 'ReaSetSmokeCL' or sec,key,value,persist)end
   reaper.GetExtState=function(sec,key)return real_get(sec=='ReaSetCL' and 'ReaSetSmokeCL' or sec,key)end
+  reaper.DeleteExtState=function(sec,key,persist)return real_delete(sec=='ReaSetCL' and 'ReaSetSmokeCL' or sec,key,persist)end
   local tick
   reaper.defer=function(fn)tick=fn end
   reaper.atexit=function()end
@@ -94,13 +95,40 @@ local ok,why=pcall(function()
   check(J.decode(edited).sections[2].start==11 and J.decode(edited).sections[1]['end']==11,'Shared section boundary adjusted')
   fields[1]='stale';real_set('ReaSetSmokeCL','want',table.concat(fields,'|'),false);tick()
   check(real_get('ReaSetSmokeCL','repair'):match('^stale|error|')~=nil,'Stale editor revision rejected')
+  local function chart_edit(nonce,action,data,revision)
+    local _,blob=reaper.GetProjExtState(0,'ReaSetSong','song:'..id..':document')
+    local current=J.decode(blob)
+    local hex=J.encode(data):gsub('.',function(c)return string.format('%02x',c:byte())end)
+    local chunks=0
+    for at=1,#hex,384 do
+      real_set('ReaSetSmokeCL','edit:'..nonce..':'..chunks,hex:sub(at,at+383),false);chunks=chunks+1
+    end
+    real_set('ReaSetSmokeCL','want',table.concat({nonce,action,id,revision or current.revision,'reaset-smoke','chunks:'..chunks},'|'),false)
+    tick()
+    local _,after=reaper.GetProjExtState(0,'ReaSetSong','song:'..id..':document')
+    return J.decode(after),real_get('ReaSetSmokeCL','repair')
+  end
+  local _,prior_blob=reaper.GetProjExtState(0,'ReaSetSong','song:'..id..':document')
+  local prior=J.decode(prior_blob)
+  local cued,reply=chart_edit('cue','cue',{section=2,time=12})
+  check(reply:match('^cue|ok|')~=nil and cued.sections[2].start==12,'Live cue command confirmed')
+  check(J.encode(cued.sections[2].rows)==J.encode(prior.sections[2].rows),'Cue preserves every source word and chord column')
+  local allrows,keys=J.array(),J.array()
+  for si,s in ipairs(cued.sections)do for ri,row in ipairs(s.rows)do
+    allrows[#allrows+1]=row;keys[#keys+1]=row.id or ('legacy-'..si..'-'..ri)
+  end end
+  local joined,layout_reply=chart_edit('layout','layout',{sections={{label='Complete chart',start=0,rows=keys}}})
+  check(layout_reply:match('^layout|ok|')~=nil and #joined.sections==1,'Live full-chart layout command confirmed')
+  check(J.encode(joined.sections[1].rows)==J.encode(allrows),'Joining sections preserves authored rows exactly')
+  local _,rejected=chart_edit('old-layout','layout',{sections={{label='Stale',start=0,rows=keys}}},prior.revision)
+  check(rejected:match('^old%-layout|error|')~=nil,'Stale full-chart editor rejected')
   check(apply('late-restore',{restore=folder..'/two/before.json',expected=folder..'/two/after.json'}).status=='error','Rollback preserves subsequent section edits')
 end)
 -- Always restore the original tab, including on a failed assertion.
 local cleaned,cleanup_error=pcall(function()
   if scratch and scratch~=original and reaper.ValidatePtr(scratch,'ReaProject*')then
     reaper.SelectProjectInstance(scratch)
-    reaper.Main_SaveProjectEx(scratch,folder..'/scratch.RPP',0)
+    reaper.Main_SaveProjectEx(scratch,folder..'/scratch.RPP',8)
     reaper.Main_OnCommand(40860,0)
   end
 end)
