@@ -13,6 +13,15 @@ Current implementation branch: `feature/timing-repair`. The section-chart overha
 is documented in `docs/SONG_CHART_UPDATES.md`; the baseline review and longer-term
 suggestions are in `docs/PROJECT_REVIEW.md`.
 
+This workspace and its running REAPER instance are the **testing workstation**,
+not the jam-room PC. Local deployments, song rebuilds and saved test projects are
+validation only. Deliver all application changes through the standard update
+branch. On the separate jam-room PC, Nathan runs `JamRoom Update.bat`, restarts
+REAPER when scripts change, and uses that PC's importer to update its own library.
+Never imply that changing the test library updates the jam-room library. Released
+features must use installation-relative paths and the jam-room PC's own config,
+cached sources and REAPER project; they cannot depend on test artifacts.
+
 The installed Jam Room update channel is `feature/jamroom-claude`, as used by
 `docs/FRESH_INSTALL.md`. `JamRoom Update.bat` pulls the installation's current
 upstream branch. Release delivery requires pushing the implementation branch
