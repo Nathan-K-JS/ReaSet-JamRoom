@@ -38,7 +38,7 @@ import jamroom_click as click_model
 # what is on disk — the importer server holds its modules in memory, so this is
 # how you tell "did the update take effect?" from "is the old process still up?"
 # BUMP THIS whenever the importer changes, and quote it when handing over.
-BUILD = "v3.4"
+BUILD = "v3.4.1"
 BUILD_DATE = "2026-09-11"
 
 # Fadr's S3 throttles each connection independently, so several transfers at
@@ -2098,7 +2098,9 @@ def stage_mixdown(job, job_dir, cfg, force):
     EXTRA) are summed with ffmpeg (no normalization, we're recombining a
     separation). Single-stem slots reference their stem file directly."""
     if job["stages"].get("mixdown") and not force:
-        click_model.add_slot(job, job_dir)
+        click = click_model.add_slot(job, job_dir)
+        if click.get('analysis_unavailable'):
+            log(click['review'])
         save_job(job_dir, job)
         return
     # Slot assignment happens HERE (not in stage_fadr) so a mapping fix only
@@ -2159,6 +2161,8 @@ def stage_mixdown(job, job_dir, cfg, force):
         job['duration']=max(float(job.get('duration') or 0),duration)
     click = click_model.add_slot(job, job_dir)
     log(f"Click ready: {click['method']}, {len(click['beats'])} beats. Listen against the stems before rehearsal.")
+    if click.get('analysis_unavailable'):
+        log(click['review'])
     job["stages"]["mixdown"] = True
     save_job(job_dir, job)
 

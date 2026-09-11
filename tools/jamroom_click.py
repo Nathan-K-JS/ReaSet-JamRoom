@@ -68,7 +68,7 @@ def ensure_click(job, folder):
     audio_path = next((folder/p for p in candidates if p and (folder/p).is_file()),None)
     signature=hashlib.sha256(json.dumps({'duration':duration,'fadr':fadr,
         'audio':(str(audio_path.relative_to(folder)),audio_path.stat().st_size,audio_path.stat().st_mtime_ns) if audio_path else None},sort_keys=True).encode()).hexdigest()
-    if old.get('generator')==GENERATOR and old.get('source_signature')==signature and (folder/old.get('file','missing')).is_file():
+    if not old.get('analysis_unavailable') and old.get('generator')==GENERATOR and old.get('source_signature')==signature and (folder/old.get('file','missing')).is_file():
         return old
     method, detail = 'recording beats', {}
     times=None
@@ -81,6 +81,8 @@ def ensure_click(job, folder):
             times,detail = beat_times(np.frombuffer(data.stdout,dtype='<f4'),float(fadr.get('tempo') or 120),duration)
         except ValueError as error:
             detail['fallback_reason']=str(error)
+        except (ImportError, OSError) as error:
+            detail.update(analysis_unavailable=True, fallback_reason=str(error))
     if times is None:
         # Old jobs can retain analysis without cached stems. Be explicit about
         # using a rigid estimate instead of claiming audio-following detection.
@@ -96,6 +98,8 @@ def ensure_click(job, folder):
         detail.update(estimated_bpm=60/interval,extrapolated_beats=len(times))
     payload={'generator':GENERATOR,'duration':duration,'source_signature':signature,'beats':times,'method':method,**detail,
              'review':'Estimated click: listen against the recording before rehearsal. No bar accents are assumed.'}
+    if detail.get('analysis_unavailable'):
+        payload['review']='FALLBACK CLICK: recording beat detection is unavailable. This fixed-tempo click may drift. Run JamRoom Update to repair, then update click tracks only.'
     digest=hashlib.sha256(json.dumps(payload,sort_keys=True).encode()).hexdigest()[:16]
     relative='clicks/'+digest+'.wav'
     target=folder/relative;target.parent.mkdir(exist_ok=True)

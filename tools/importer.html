@@ -335,7 +335,7 @@
 <script>
 // Version of THIS page (served fresh from disk). Compared against the version
 // of the running server. Either side may be older.
-var UI_BUILD = "v3.4";
+var UI_BUILD = "v3.4.1";
 
 function importerVersionWarning(serverBuild) {
   if (serverBuild === UI_BUILD) return '';
@@ -648,7 +648,7 @@ function loadUpdates(){
       var row=document.createElement('div');row.className='songrow';
       var box=document.createElement('input');box.type='checkbox';box.checked=!!updateSelection[s.id];box.disabled=s.protected&&!clickUpdatesOnly();
       box.setAttribute('aria-label','Select '+s.name);box.onchange=function(){updateSelection[s.id]=box.checked;};row.appendChild(box);
-      var text=document.createElement('div');text.className='sname';text.textContent=s.name+' · '+s.update_status;row.appendChild(text);
+      var text=document.createElement('div');text.className='sname';text.textContent=s.name+' · '+s.update_status+' · '+(s.click_status||'');row.appendChild(text);
       var keep=document.createElement('label');keep.className='note';var protect=document.createElement('input');protect.type='checkbox';protect.checked=s.protected;
       protect.onchange=function(){updateApi('/protect',{id:s.id,name:s.name,keep:protect.checked,project:updateProject}).then(loadUpdates).catch(updateError);};
       keep.appendChild(protect);keep.appendChild(document.createTextNode('Keep this version'));row.appendChild(keep);$('updateSongs').appendChild(row);

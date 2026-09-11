@@ -81,6 +81,42 @@ text items, and use the same durable snapshots and guarded restore path.
 
 ## Validation
 
+### v3.4.1 Windows audio runtime repair
+
+The first click release checked installed package versions without loading their
+native dependencies. A jam-room import exposed a Numba `_typeconv` DLL load error.
+The launcher and updater now run an actual beat-tracking calculation in a fresh
+Python process. DLL failures trigger installation of the official Microsoft Visual
+C++ runtime matching Python's architecture, with Authenticode verification before
+execution, followed by another beat-tracking check. Windows may request elevation
+or a restart. The exact missing DLL on the remote PC was not identifiable from
+the error alone. Microsoft documents the runtime at
+<https://learn.microsoft.com/en-us/cpp/windows/latest-supported-vc-redist>;
+Numba's installation troubleshooting is at
+<https://numba.readthedocs.io/en/stable/user/faq.html#numba-could-not-be-imported>.
+
+If native analysis remains unavailable, valid cached Fadr beat metadata supplies
+an explicitly labelled fixed-tempo fallback. It may drift against the recording.
+Apply logs, the library chooser and batch results identify that limitation.
+Fallbacks remain eligible for click-only whole-library updates and are retried
+instead of permanently cached as completed beat detection. Existing click media
+remain available for restore. Missing/invalid Fadr metadata still produces an
+actionable failure rather than an invented click.
+
+Run `JamRoom Update.bat`, reopen/refresh the importer, and retry the already-split
+song. Cached stems do not need another Fadr split. After runtime repair, use
+**Click tracks only** to replace any fallback clicks while keeping chart edits.
+
+Validation: 114 automated tests passed, including native-load failure injection,
+fallback recovery and whole-library retry eligibility. The real cached Fly Away
+audio generated a fallback under the injected DLL error, then 297 recording-based
+beats on a healthy retry. Seven live append/playback checks passed in disposable
+REAPER tabs; the original project and state counter were unchanged. Healthy
+updater startup passed locally. The repair must still execute on the jam-room PC;
+this workstation does not reproduce its missing system DLL.
+
+### v3.4 chart and click validation
+
 - 108 automated chart, browser, transaction, batch and audio tests passed; the synthetic
   tempo-drift test checks 95th-percentile click error below 45 ms against known
   attacks. It is a regression test, not a quality score for arbitrary music.

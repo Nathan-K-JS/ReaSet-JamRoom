@@ -47,6 +47,17 @@ class UpdateTests(unittest.TestCase):
 
     def batch(self):return self.up.listing()['batch']
 
+    def test_installed_fallback_remains_eligible_for_whole_library_retry(self):
+        folder=Path(self.songs[0]['folder']);job=ji.load_job(folder)
+        click=ji.click_model.ensure_click(job,folder)
+        click['analysis_unavailable']=True
+        ji.save_job(folder,job)
+        self.up.song_state.return_value={'song:1:click':click['generator']+':'+click['file']}
+        song=self.up.listing()['songs'][0]
+        self.assertFalse(song['click_current'])
+        self.assertTrue(song['click_eligible'])
+        self.assertIn('Fallback',song['click_status'])
+
     def test_protected_and_missing_sources_are_not_preselected(self):
         self.up.protect(1,'Song1',True)
         Path(self.songs[1]['folder'],'job.json').unlink()

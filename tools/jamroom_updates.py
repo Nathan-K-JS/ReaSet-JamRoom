@@ -58,11 +58,14 @@ class Updates:
             revision = states.get(f"song:{song['id']}:revision")
             click = job.get('click') or {}
             click_current = (click.get('generator') == ji.click_model.GENERATOR and
+                             not click.get('analysis_unavailable') and
                              folder is not None and (folder/click.get('file','missing')).is_file() and
                              states.get(f"song:{song['id']}:click") == click.get('generator','')+':'+click.get('file',''))
             manual_edits = bool(revision and revision != generation.get("revision"))
             status = "Keep this version" if protected else "Current" if current else "Update available" if job else "Source files missing"
             out.append(dict(song, project=project, protected=protected, current=current,
+                            click_status=('Fallback click: beat detection unavailable; retry available' if click.get('analysis_unavailable') else
+                                          'Click: '+click.get('method','not generated')),
                             click_current=click_current,click_eligible=bool(job) and not click_current,
                             manual_edits=manual_edits, update_status=status,
                             eligible=bool(job) and not protected and (not current or not click_current)))
@@ -140,6 +143,9 @@ class Updates:
                 try:
                     self.update_one(cfg, root, batch, item)
                     item.update(status="done", message="Restored" if batch["restore"] else "Updated")
+                    installed = ji.load_job(Path(item['folder'])).get('click') or {}
+                    if installed.get('analysis_unavailable'):
+                        item['message'] += ' — fallback fixed-tempo click; beat detection unavailable, retry after JamRoom Update'
                 except Exception as e:
                     item.update(status="failed", message=str(e))
                 write(path,batch)
