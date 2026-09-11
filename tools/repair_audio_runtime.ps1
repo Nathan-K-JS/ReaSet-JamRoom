@@ -1,6 +1,6 @@
 param([ValidateSet('x64', 'x86')][string]$RuntimeArch = 'x64')
 $ErrorActionPreference = 'Stop'
-# Official Microsoft runtime for the native Numba wheels. Verify the downloaded
+# Official Microsoft runtime for native audio-analysis wheels. Verify the downloaded
 # executable before running it; never fetch individual DLLs from third parties.
 $runtimeFolder = Join-Path ([IO.Path]::GetTempPath()) ('reaset-runtime-' + [guid]::NewGuid())
 New-Item -ItemType Directory -Path $runtimeFolder | Out-Null

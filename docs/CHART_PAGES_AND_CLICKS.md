@@ -81,6 +81,9 @@ text items, and use the same durable snapshots and guarded restore path.
 
 ## Validation
 
+The click-generation and fallback descriptions below document the v3.4 release.
+They are superseded by [v3.5 click generation and quality control](CLICK_QUALITY.md).
+
 ### Timing button feedback
 
 Earlier/Later controls now repaint saving, rejection and timeout status immediately,

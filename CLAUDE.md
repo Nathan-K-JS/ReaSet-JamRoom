@@ -38,6 +38,10 @@ ancestry first; never force-push or overwrite divergent changes. Pushing only
 `feature/timing-repair` does not deliver an update to standard installations.
 
 Current architecture:
+- v3.5 replaces click detection and quality control; see `docs/CLICK_QUALITY.md`.
+  Do not restore the Fadr fixed-grid fallback or call an automated timing check
+  listening approval. Flagged click items install muted; whole-library click-only
+  updates preserve charts. Models run locally and are cached under imports/.
 - v3.4 page offsets, previews, instrumental gaps and clicks are documented in
   `docs/CHART_PAGES_AND_CLICKS.md`. Click-only updates must preserve manual charts.
   Runtime dependencies live in `tools/requirements-runtime.txt`; the updater's

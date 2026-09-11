@@ -172,7 +172,7 @@ local function run()
           local item=reaper.GetTrackMediaItem(track,i);local p=reaper.GetMediaItemInfo_Value(item,'D_POSITION')
           if p>=song.s-.001 and p<song.e and C.owned(item) then reaper.DeleteTrackMediaItem(track,item)end
         end
-        C.install(track,click_source,song.s,song.e-song.s,job.region);click_source=nil
+        C.install(track,click_source,song.s,song.e-song.s,job.region,job.click.muted);click_source=nil
         reaper.SetProjExtState(0,'ReaSetSong',prefix..'click',job.click.revision)
       end
     end

@@ -1,0 +1,60 @@
+[
+  {
+    "song": "Lenny Kravitz - Fly Away",
+    "audio_file": "stems/drums.riff.wav",
+    "audio_sha256": "c6a9701c8769c89a6d8419fbd6ee934e926e80a4d4a5de62327a9891d5db7a53",
+    "start": 60,
+    "end": 66,
+    "beats": [
+      60.198185941043086,
+      60.951473922902494,
+      61.699773242630386,
+      62.44807256235828,
+      63.19637188208617,
+      63.94965986394558,
+      64.69795918367346,
+      65.45124716553288
+    ],
+    "provenance": "Manually selected pulse from drum-only low/mid-band waveform, then located nearest raw attack. No candidate click displayed. Visual annotation, not listening-certified."
+  },
+  {
+    "song": "Fleetwood Mac - Dreams",
+    "audio_file": "stems/drums.riff.wav",
+    "audio_sha256": "d67a1381c8398aa94f75e84eb688b3024cd15c2d67b28a4f67c86062f9b59fcc",
+    "start": 60,
+    "end": 66,
+    "beats": [
+      60.06349206349206,
+      60.56734693877551,
+      61.05124716553288,
+      61.56507936507936,
+      62.06394557823129,
+      62.56281179138322,
+      63.05668934240363,
+      63.55555555555556,
+      64.059410430839,
+      64.55827664399092,
+      65.04217687074829,
+      65.55102040816325
+    ],
+    "provenance": "Manually selected pulse from drum-only low/mid-band waveform, then located nearest raw attack. No candidate click displayed. Visual annotation, not listening-certified."
+  },
+  {
+    "song": "Blink 182 - All The Small Things",
+    "audio_file": "stems/drums.riff.wav",
+    "audio_sha256": "589d890574e92f95967aa5657fe3c0991b6688578490871d258676e6a00bbeb2",
+    "start": 62.7,
+    "end": 66,
+    "beats": [
+      62.81224489795918,
+      63.236281179138324,
+      63.63038548752834,
+      64.06439909297052,
+      64.45850340136053,
+      64.8875283446712,
+      65.2766439909297,
+      65.69569160997732
+    ],
+    "provenance": "Manually selected pulse from drum-only low/mid-band waveform, then located nearest raw attack. No candidate click displayed. Visual annotation, not listening-certified."
+  }
+]

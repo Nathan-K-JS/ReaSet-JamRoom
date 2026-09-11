@@ -1,0 +1,33 @@
+<!doctype html><html lang="en"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Click review — __TITLE__</title>
+<style>body{background:#131820;color:#edf2fa;font:16px system-ui;max-width:1100px;margin:30px auto;padding:16px}button,select{font:inherit;padding:8px;margin:4px;background:#293849;color:inherit;border:1px solid #728095;border-radius:5px}canvas{width:100%;height:240px;background:#080d14}audio{width:100%}.warn{color:#ffd583}label{display:inline-block;margin:10px}p{line-height:1.5}</style>
+<h1>__TITLE__: click review</h1><p id="status"></p>
+<p>Blue: drum waveform. Yellow: generated click. One audio file keeps music and click synchronized. The checks below are automatic evidence, not listening approval.</p>
+<audio id="audio" controls preload="metadata" src="__AUDIO__"></audio>
+<label>Music <input id="music" type="range" min="0" max="1" step=".05" value=".7"></label>
+<label>Click <input id="click" type="range" min="0" max="1" step=".05" value="1"></label>
+<div id="jumps"></div><canvas id="wave" width="1100" height="240"></canvas>
+<p id="position"></p><div id="findings"></div>
+<section id="acceptance" hidden><p>This click was installed muted. After checking the flagged passages, stop playback to enable it.</p><button id="acceptClick">I checked the flagged passages — enable this click</button><span id="acceptStatus" role="status"></span></section>
+<script>
+const data=__DATA__,a=document.getElementById('audio'),canvas=document.getElementById('wave'),ctx=canvas.getContext('2d');
+document.getElementById('status').textContent=data.quality.label;
+document.getElementById('status').className=data.quality.status==='checks_passed'?'':'warn';
+const approval=null;
+if(approval){document.getElementById('acceptance').hidden=false;let pending=null;
+document.getElementById('acceptClick').onclick=async function(){this.disabled=true;const status=document.getElementById('acceptStatus');status.textContent='Saving in REAPER...';
+try{let r=await fetch('/api/updates/start',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(pending?{resume:true,project:approval.project}:approval)}),d=await r.json();if(!r.ok)throw Error(d.error);pending=d.id;
+for(let i=0;i<120;i++){await new Promise(resolve=>setTimeout(resolve,500));r=await fetch('/api/updates');d=await r.json();if(!r.ok)throw Error(d.error);const b=d.batch;if(!b||b.id!==pending)throw Error('Update changed; check Song library before retrying.');const item=b.songs[0];if(item.status==='done'){status.textContent='Click enabled in REAPER. Save your project.';return;}if(item.status==='failed')throw Error(item.message);if(b.status==='paused'){status.textContent='Stop REAPER playback, then press Resume.';this.textContent='Resume';this.disabled=false;return;}}
+throw Error('Save not confirmed. Check the Song library update result.');
+}catch(e){status.textContent=e.message;this.disabled=false;}};}
+let ac,music,click;
+function connect(){if(ac)return;ac=new AudioContext();const src=ac.createMediaElementSource(a),split=ac.createChannelSplitter(2);src.connect(split);music=ac.createGain();click=ac.createGain();split.connect(music,0);split.connect(click,1);music.connect(ac.destination);click.connect(ac.destination);levels();}
+function levels(){if(music){music.gain.value=Number(document.getElementById('music').value);click.gain.value=Number(document.getElementById('click').value);}}
+a.addEventListener('play',()=>{connect();ac.resume();});
+document.querySelectorAll('input').forEach(e=>e.oninput=levels);
+const windows=data.quality.windows||[],flagged=windows.filter(w=>w.reasons.length);
+const spots=[{start:data.quality.first_beat,label:'Start'},...flagged.map(w=>({start:w.start,label:'Check '+w.start+'s'})),{start:(data.quality.last_beat||0)/2,label:'Middle'},{start:Math.max(0,(data.quality.last_beat||0)-12),label:'Ending'}];
+spots.forEach(s=>{const b=document.createElement('button');b.textContent=s.label;b.onclick=()=>{a.currentTime=s.start;a.play().catch(e=>{if(e.name!=='AbortError')document.getElementById('status').textContent='Audio could not start: '+e.message;});};document.getElementById('jumps').appendChild(b);});
+for(const w of windows){const p=document.createElement('p');p.className=w.reasons.length?'warn':'';p.textContent=w.start+'–'+w.end.toFixed(1)+'s: '+(w.reasons.join('; ')||'checks passed')+'; drum hits matched '+(w.drum_alignment===null?'not assessable':Math.round(w.drum_alignment*100)+'%')+(w.metre_reconciled?'; half/double-time model interpretations reconciled using drum support':'');document.getElementById('findings').appendChild(p);}
+function draw(){const t=a.currentTime,start=Math.max(0,t-2),span=8,W=canvas.width,H=canvas.height;ctx.clearRect(0,0,W,H);ctx.strokeStyle='#57a5da';ctx.beginPath();for(let x=0;x<W;x++){const n=Math.floor((start+x/W*span)*(data.envelope_rate||22050/220)),v=data.envelope[n]||0;ctx.moveTo(x,H/2-v*90);ctx.lineTo(x,H/2+v*90);}ctx.stroke();ctx.strokeStyle='#ffcf54';for(const b of data.beats){if(b<start||b>start+span)continue;const x=(b-start)/span*W;ctx.beginPath();ctx.moveTo(x,0);ctx.lineTo(x,H);ctx.stroke();}ctx.strokeStyle='white';const x=(t-start)/span*W;ctx.beginPath();ctx.moveTo(x,0);ctx.lineTo(x,H);ctx.stroke();document.getElementById('position').textContent=t.toFixed(2)+'s — displayed window '+start.toFixed(1)+'–'+(start+span).toFixed(1)+'s';requestAnimationFrame(draw);}draw();
+</script></html>

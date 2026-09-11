@@ -246,6 +246,7 @@ for _, s in ipairs(job.slots or {}) do
                 job.region_name .. " — " .. s.label, true)
             if s.slot == 'CLICK' then
                 reaper.GetSetMediaItemInfo_String(it,'P_EXT:ReaSetClick','1',true)
+                reaper.SetMediaItemInfo_Value(it,'B_MUTE',job.click_muted and 1 or 0)
                 placed_click=true
             end
             if len > song_len then song_len = len end

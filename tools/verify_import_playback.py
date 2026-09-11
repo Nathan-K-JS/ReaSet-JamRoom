@@ -37,13 +37,17 @@ def wait_file(path, timeout=30):
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('song', type=Path)
+    parser.add_argument('--candidate',type=Path,help='Audited proposed job; audio stays in the song cache')
     parser.add_argument('--click-library-check', action='store_true',
                         help='Use the real importer UI to add clicks to the scratch library; requires an idle importer')
     parser.add_argument('--apply-script', type=Path, default=ROOT / 'tools/jamroom_import_apply.lua',
                         help='Optional historical script for a regression control')
     args = parser.parse_args()
     source = args.song.resolve()
-    cached = json.loads((source / 'job.json').read_text(encoding='utf-8'))
+    cached = json.loads((args.candidate or source / 'job.json').read_text(encoding='utf-8'))
+    if cached.get('click',{}).get('file'):
+        cached['slots']=[s for s in cached.get('slots',[]) if s.get('slot')!='CLICK']
+        cached['slots'].append({'slot':'CLICK','label':'Click','file':cached['click']['file']})
     session = requests.Session()
     session.trust_env = False
 
@@ -116,7 +120,7 @@ local function run()
   cmd=reaper.AddRemoveReaScript(true,0,folder..'/tools/jamroom_import_apply.lua',true)
   assert(cmd~=0)
   write('ready.json',{command='_'..reaper.ReverseNamedCommandLookup(cmd),existing=existing})
-  local deadline=reaper.time_precise()+300
+  local deadline=reaper.time_precise()+600
   local pending
   local function tick()
     local finish=io.open(folder..'/finish','r')
@@ -132,8 +136,21 @@ local function run()
       local f=io.open(folder..'/request.json','r')
       if f then
         local request=J.decode(f:read('*a'));f:close();os.remove(folder..'/request.json')
+        if request.inspect then
+          local items=J.array()
+          for i=0,reaper.CountMediaItems(0)-1 do
+            local it=reaper.GetMediaItem(0,i);local _,owned=reaper.GetSetMediaItemInfo_String(it,'P_EXT:ReaSetClick','',false)
+            if owned=='1' then
+              local take=reaper.GetActiveTake(it)
+              table.insert(items,{position=reaper.GetMediaItemInfo_Value(it,'D_POSITION'),length=reaper.GetMediaItemInfo_Value(it,'D_LENGTH'),
+                muted=reaper.GetMediaItemInfo_Value(it,'B_MUTE'),rate=reaper.GetMediaItemTakeInfo_Value(take,'D_PLAYRATE'),offset=reaper.GetMediaItemTakeInfo_Value(take,'D_STARTOFFS')})
+            end
+          end
+          write('response.json',{items=items})
+        else
         reaper.SetEditCurPos(request.position,false,true);reaper.OnPlayButton()
         pending={position=request.position,started=reaper.time_precise()}
+        end
       end
     end
     reaper.defer(tick)
@@ -148,6 +165,7 @@ if not ok then write('error.json',{error=tostring(why)})end
     print('Artifacts:', folder, flush=True)
     subprocess.Popen([str(importer.load_config(None)['reaper_exe']), '-nonewinst', str(script)])
     checks = []
+    reviewed_job_before = None
 
     def probe(label, position):
         (folder / 'response.json').unlink(missing_ok=True)
@@ -159,6 +177,11 @@ if not ok then write('error.json',{error=tostring(why)})end
         checks.append(result)
         (folder / 'checks.json').write_text(json.dumps(checks, indent=2))
         assert result['state'] == 1 and position + .15 < result['position'] < position + 5, result
+
+    def inspect_clicks():
+        (folder/'response.json').unlink(missing_ok=True)
+        pending=folder/'request.tmp';pending.write_text(json.dumps({'inspect':True}));pending.replace(folder/'request.json')
+        return wait_file(folder/'response.json')['items']
 
     try:
         ready = wait_file(folder / 'ready.json')
@@ -185,6 +208,10 @@ if not ok then write('error.json',{error=tostring(why)})end
             assert 'stems=0' not in receipt and 'SKIPPED:' not in receipt, receipt
             probe('native existing song after import ' + str(n), ready['existing'])
             probe('native appended song ' + str(n), position)
+            if args.candidate:
+                items=[it for it in inspect_clicks() if abs(it['position']-(position-30))<.01]
+                assert len(items)==1 and items[0]['rate']==1 and items[0]['offset']==0,items
+                assert items[0]['muted']==int(bool(cached['click'].get('muted'))),items
         # A failed source can still create a bus before the import aborts.
         missing = importer.lua_quote((folder / 'missing.wav').as_posix())
         (folder / 'job_for_reaper.lua').write_text(
@@ -225,7 +252,7 @@ if not ok then write('error.json',{error=tostring(why)})end
                 updates.goto(importer_url+'/#updates=1')
                 updates.locator('#updateMode').select_option('clicks')
                 updates.locator('#updateWholeLibrary').click()
-                updates.wait_for_function('updateBatch&&updateBatch.status==="complete"',timeout=180000)
+                updates.wait_for_function('updateBatch&&updateBatch.status==="complete"',timeout=300000)
                 batch=updates.evaluate('updateBatch')
                 assert sorted(s['id'] for s in batch['songs'])==sorted(ids),batch
                 assert all(s['status']=='done' for s in batch['songs']),batch
@@ -235,6 +262,39 @@ if not ok then write('error.json',{error=tostring(why)})end
                 updates.screenshot(path=str(folder/'click-library.png'),full_page=True)
                 (folder/'click-library.json').write_text(json.dumps(batch,indent=2))
                 checks.append({'check':'Whole-library click-only update preserves charts','songs':len(ids)})
+                installed=inspect_clicks()
+                for song in listing['songs']:
+                    if song['id'] not in ids:continue
+                    item=next(it for it in installed if abs(it['position']-song['start'])<.01)
+                    job=importer.load_job(Path(song['folder']))
+                    assert item['muted']==int(bool(job['click'].get('muted'))),song
+                    assert item['rate']==1 and item['offset']==0,item
+                flagged=next((s for s in listing['songs'] if s['id'] in ids and importer.load_job(Path(s['folder']))['click'].get('muted')),None)
+                if flagged:
+                    reviewed_job_before=(Path(flagged['folder'])/'job.json',(Path(flagged['folder'])/'job.json').read_bytes())
+                    review=browser.new_page(viewport={'width':1200,'height':1000})
+                    review_errors=[];review.on('pageerror',lambda e:review_errors.append(str(e)))
+                    review.goto(importer_url+'/api/click-review?id='+str(flagged['id']))
+                    review.wait_for_function('document.getElementById("audio").readyState>=1')
+                    review.get_by_role('button',name='Middle',exact=True).click()
+                    initial_audio_position=review.evaluate('document.getElementById("audio").currentTime')
+                    review.wait_for_function('t=>!document.getElementById("audio").paused&&document.getElementById("audio").readyState>=3&&document.getElementById("audio").currentTime>t+.2',arg=initial_audio_position)
+                    review.screenshot(path=str(folder/'click-review.png'),full_page=True)
+                    review.evaluate('document.getElementById("audio").pause()')
+                    review.get_by_role('button',name='I checked the flagged passages — enable this click',exact=True).click()
+                    review.wait_for_function('document.getElementById("acceptStatus").textContent.startsWith("Click enabled")',timeout=30000)
+                    item=next(it for it in inspect_clicks() if abs(it['position']-flagged['start'])<.01)
+                    assert item['muted']==0 and web(command)==chart_before,item
+                    # This exercises the acceptance UI; it is NOT listening approval.
+                    # Restore the pre-test muted status immediately.
+                    result=session.post(importer_url+'/api/updates/start',json={'ids':[flagged['id']],'restore':True,'project':listing['project']},timeout=30)
+                    result.raise_for_status();batch_id=result.json()['id']
+                    review.wait_for_function('''async id=>{const r=await fetch('/api/updates');const d=await r.json();return d.batch&&d.batch.id===id&&d.batch.status==='complete'}''',arg=batch_id,timeout=30000)
+                    item=next(it for it in inspect_clicks() if abs(it['position']-flagged['start'])<.01)
+                    assert item['muted']==1 and web(command)==chart_before,item
+                    assert not review_errors,review_errors
+                    checks.append({'check':'Review audio, explicit enable and restore; chart preserved','song':flagged['name']})
+                    review.close()
                 updates.close()
             browser.close()
         if args.click_library_check:
@@ -244,6 +304,12 @@ if not ok then write('error.json',{error=tostring(why)})end
     finally:
         (folder / 'finish').touch()
         cleanup = wait_file(folder / 'cleanup.json')
+        if reviewed_job_before:
+            path,original_job=reviewed_job_before
+            current=json.loads(path.read_text(encoding='utf-8'))
+            if current.get('click',{}).get('listening_approved'):
+                # UI automation is never evidence of a musician's approval.
+                path.write_bytes(original_job)
         print('Cleanup:', cleanup)
         assert cleanup['original_unchanged'] and cleanup['state_counter_unchanged'], cleanup
 

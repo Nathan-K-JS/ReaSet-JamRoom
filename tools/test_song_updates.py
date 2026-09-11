@@ -16,6 +16,13 @@ class ImmediateThread:
 
 
 class UpdateTests(unittest.TestCase):
+    def fake_click(self,job,folder,*args):
+        file=Path(folder)/'test-click.wav'
+        ji.click_model.render(file,[0,1,2],job['duration'])
+        job['click']={'file':file.name,'generator':ji.click_model.GENERATOR,'muted':False,
+                      'quality':{'status':'checks_passed'},'review':'Automatic timing checks passed'}
+        return job['click']
+
     def setUp(self):
         self.tmp=tempfile.TemporaryDirectory(); self.folder=Path(self.tmp.name)
         self.cfg={'jobs_dir':str(self.folder)}
@@ -32,6 +39,7 @@ class UpdateTests(unittest.TestCase):
         self.up=Updates(lambda cfg:'P',lambda:copy.deepcopy(self.songs),self.push,threading.Lock(),{'state':'idle'})
         self.up.song_state=Mock(return_value={})
         self.patches=[patch.object(ji,'load_config',return_value=self.cfg),
+                      patch.object(ji.click_model,'ensure_click',side_effect=self.fake_click),
                       patch.object(ji,'stage_lyrics_align'),
                       patch('jamroom_updates.threading.Thread',ImmediateThread),
                       patch('jamroom_updates.requests.get',return_value=Mock(text='TRANSPORT\t0\t0'))]
@@ -56,7 +64,7 @@ class UpdateTests(unittest.TestCase):
         song=self.up.listing()['songs'][0]
         self.assertFalse(song['click_current'])
         self.assertTrue(song['click_eligible'])
-        self.assertIn('Fallback',song['click_status'])
+        self.assertIn('Automatic',song['click_status'])
 
     def test_protected_and_missing_sources_are_not_preselected(self):
         self.up.protect(1,'Song1',True)
@@ -124,6 +132,45 @@ class UpdateTests(unittest.TestCase):
         arguments=self.push.call_args.kwargs
         self.assertIsNone(arguments['document']);self.assertIsNone(arguments['chords']);self.assertIsNone(arguments['lyric_lines'])
         self.assertTrue(Path(arguments['click']['file']).is_file())
+
+    def test_listening_acceptance_uses_reviewed_file_without_regenerating_or_editing_chart(self):
+        folder=Path(self.songs[0]['folder']);job=ji.load_job(folder)
+        click=self.fake_click(job,folder);click['muted']=True;ji.save_job(folder,job)
+        token=click['generator']+':'+click['file']
+        self.up.protect(1,'Song1',True)
+        with patch.object(ji.click_model,'ensure_click',side_effect=AssertionError('Do not replace the auditioned click')):
+            self.up.start([1],clicks_only=True,approve_click=token)
+        self.assertEqual(self.batch()['songs'][0]['status'],'done')
+        self.assertFalse(self.push.call_args.kwargs['click']['muted'])
+        self.assertIsNone(self.push.call_args.kwargs['document'])
+        self.assertTrue(ji.load_job(folder)['click']['listening_approved'])
+
+    def test_accepting_a_stale_listening_report_does_not_change_reaper(self):
+        self.up.start([1],clicks_only=True,approve_click='wrong-file')
+        self.assertEqual(self.batch()['songs'][0]['status'],'failed')
+        self.push.assert_not_called()
+
+    def test_batch_write_retries_windows_reader_lock_without_truncating_old_state(self):
+        target=self.folder/'progress.json';write(target,{'status':'old'})
+        real=Path.replace;attempts=[]
+        def briefly_locked(path,destination):
+            attempts.append(path)
+            if len(attempts)<3:
+                self.assertEqual(read(target),{'status':'old'})
+                raise PermissionError('Windows reader lock')
+            return real(path,destination)
+        with patch.object(Path,'replace',briefly_locked),patch('jamroom_updates.time.sleep'):
+            write(target,{'status':'done'})
+        self.assertEqual(read(target),{'status':'done'})
+        self.assertEqual(len(attempts),3)
+
+    def test_permanent_progress_failure_still_releases_worker_ownership(self):
+        batch={'id':'broken','project':'P','songs':[],'status':'running'}
+        self.up.active='broken';self.up.busy.acquire()
+        with patch('jamroom_updates.write',side_effect=PermissionError('disk locked')):
+            with self.assertRaises(PermissionError):self.up.run(self.cfg,self.root,batch)
+        self.assertIsNone(self.up.active)
+        self.assertFalse(self.up.busy.locked())
 
 
 if __name__=='__main__':unittest.main()

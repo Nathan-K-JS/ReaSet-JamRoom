@@ -33,10 +33,11 @@ function M.owned(item)
   local _,value=reaper.GetSetMediaItemInfo_String(item,'P_EXT:ReaSetClick','',false)
   return value=='1'
 end
-function M.install(track,source,start,duration,name)
+function M.install(track,source,start,duration,name,muted)
   local item=reaper.AddMediaItemToTrack(track)
   reaper.SetMediaItemInfo_Value(item,'D_POSITION',start)
   reaper.SetMediaItemInfo_Value(item,'D_LENGTH',duration)
+  reaper.SetMediaItemInfo_Value(item,'B_MUTE',muted and 1 or 0)
   local take=reaper.AddTakeToMediaItem(item);reaper.SetMediaItemTake_Source(take,source)
   reaper.GetSetMediaItemTakeInfo_String(take,'P_NAME',name..' - Click',true)
   reaper.GetSetMediaItemInfo_String(item,'P_EXT:ReaSetClick','1',true)

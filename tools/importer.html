@@ -171,7 +171,7 @@
     <button class="primary" onclick="openUpdates()">Update charts &amp; click tracks…</button>
     <div id="updatesBox" class="hide" style="margin:18px 0;padding:16px;border:1px solid #8885;border-radius:12px">
       <label>Update existing songs</label>
-      <p class="note">Update charts and add estimated rehearsal clicks, or choose click tracks only to keep section edits. Clicks use the CLICK bus. Listen against the stems before rehearsal. Previous versions are saved for restore.</p>
+      <p class="note">Choose click tracks only to keep section edits. Clicks follow the recording; flagged candidates are installed muted. Use Review click to see the flagged passages and hear music with the click, then enable it after checking. Previous versions are saved for restore.</p>
       <label>Update <select id="updateMode" onchange="updateSelection={};loadUpdates()"><option value="both">Charts and click tracks</option><option value="clicks">Click tracks only (keep charts)</option></select></label>
       <select id="updateScope" onchange="updateSelection={};loadUpdates()"><option value="list">Current setlist</option><option value="all">All songs in this project</option></select>
       <button class="small" onclick="chooseUpdates(true)">Select eligible</button>
@@ -335,7 +335,7 @@
 <script>
 // Version of THIS page (served fresh from disk). Compared against the version
 // of the running server. Either side may be older.
-var UI_BUILD = "v3.4.1";
+var UI_BUILD = "v3.5";
 
 function importerVersionWarning(serverBuild) {
   if (serverBuild === UI_BUILD) return '';
@@ -649,6 +649,7 @@ function loadUpdates(){
       var box=document.createElement('input');box.type='checkbox';box.checked=!!updateSelection[s.id];box.disabled=s.protected&&!clickUpdatesOnly();
       box.setAttribute('aria-label','Select '+s.name);box.onchange=function(){updateSelection[s.id]=box.checked;};row.appendChild(box);
       var text=document.createElement('div');text.className='sname';text.textContent=s.name+' · '+s.update_status+' · '+(s.click_status||'');row.appendChild(text);
+      if(s.click_report){var review=document.createElement('a');review.textContent='Review click';review.href='/api/click-review?id='+encodeURIComponent(s.id);review.target='_blank';review.rel='noopener';row.appendChild(review);}
       var keep=document.createElement('label');keep.className='note';var protect=document.createElement('input');protect.type='checkbox';protect.checked=s.protected;
       protect.onchange=function(){updateApi('/protect',{id:s.id,name:s.name,keep:protect.checked,project:updateProject}).then(loadUpdates).catch(updateError);};
       keep.appendChild(protect);keep.appendChild(document.createTextNode('Keep this version'));row.appendChild(keep);$('updateSongs').appendChild(row);

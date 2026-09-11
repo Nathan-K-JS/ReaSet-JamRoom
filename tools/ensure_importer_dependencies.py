@@ -17,13 +17,18 @@ def probe(code):
         return 'Audio runtime check timed out'
 
 
-AUDIO_PROBE = '''import numpy as np
-import numba
-import librosa
-y = np.zeros(22050 * 5, dtype=np.float32)
-y[::11025] = 1
-librosa.beat.beat_track(y=y, sr=22050, bpm=120, units="time")
-'''
+AUDIO_PROBE = ("import sys; sys.path.insert(0, " + repr(str(Path(__file__).resolve().parent)) +
+               "); from jamroom_beat_runtime import check_runtime; check_runtime()")
+
+
+def diagnostic(error):
+    path=Path(__file__).resolve().parent.parent/'imports'/'.runtime'/'beat-runtime.log'
+    try:
+        path.parent.mkdir(parents=True,exist_ok=True)
+        with path.open('a',encoding='utf-8') as output: output.write(error+'\n')
+    except OSError:
+        print(error,flush=True)
+    return path
 
 
 def repair_audio(error):
@@ -34,38 +39,47 @@ def repair_audio(error):
     else:
         # Replace potentially mixed/broken wheels using this launcher's Python.
         subprocess.check_call([sys.executable, '-m', 'pip', 'install', '--force-reinstall',
-                               '--no-cache-dir', '--only-binary=:all:', 'numba',
-                               'librosa==0.11.0'], timeout=300)
+                               '--no-cache-dir', '--only-binary=:all:', '-r',
+                               str(Path(__file__).with_name('requirements-runtime.txt'))], timeout=300)
 
 def main():
     installed = False
     try:
         metadata.version('requests')
         metadata.version('numpy')
-        if metadata.version('librosa') == '0.11.0':
+        if (metadata.version('beat-this') == '1.1.0' and metadata.version('torch') == '2.14.0'
+                and metadata.version('torchaudio') == '2.11.0' and metadata.version('scipy')):
             installed = True
     except metadata.PackageNotFoundError:
         pass
     if not installed:
         print('Installing audio analysis support for rehearsal clicks...', flush=True)
-        subprocess.check_call([sys.executable,'-m','pip','install','-r',
-                           str(Path(__file__).with_name('requirements-runtime.txt'))])
+        try:
+            subprocess.check_call([sys.executable,'-m','pip','install','-r',
+                               str(Path(__file__).with_name('requirements-runtime.txt'))])
+        except (OSError,subprocess.SubprocessError) as error:
+            print('Analysis package installation did not finish. Details: '+str(diagnostic(str(error))),flush=True)
     core_error = probe('import requests; import numpy')
     if core_error:
         raise RuntimeError('Importer runtime is unavailable: ' + core_error)
+    try:
+        from jamroom_beat_runtime import prepare_models
+        prepare_models(lambda message:print(message,flush=True))
+    except Exception as error:
+        print('Beat model preparation did not finish. Details: '+str(diagnostic(str(error))),flush=True)
     print('Checking recording beat detection...', flush=True)
     error = probe(AUDIO_PROBE)
     if error:
-        print('Repairing audio runtime: ' + error, flush=True)
+        print('Beat analysis check failed; attempting runtime repair. Details: '+str(diagnostic(error)), flush=True)
         try:
             repair_audio(error)
         except (OSError, subprocess.SubprocessError) as failure:
-            print('Audio repair did not complete: ' + str(failure), flush=True)
+            print('Audio repair did not complete. Details: '+str(diagnostic(str(failure))), flush=True)
         error = probe(AUDIO_PROBE)
     if error:
-        print('WARNING: Recording beat detection is unavailable. Imports can use a labelled '
-              'Fadr fixed-tempo click where beat metadata is available. Run JamRoom Update '
-              'again to retry repair.\n' + error, flush=True)
+        print('WARNING: Beat analysis is unavailable. The updater can continue, but songs will '
+              'import without a click until analysis works. No fixed-tempo fallback is used. '
+              'Details: '+str(diagnostic(error)), flush=True)
     else:
         print('Recording beat detection passed.', flush=True)
 

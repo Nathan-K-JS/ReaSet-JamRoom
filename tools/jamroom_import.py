@@ -38,8 +38,8 @@ import jamroom_click as click_model
 # what is on disk — the importer server holds its modules in memory, so this is
 # how you tell "did the update take effect?" from "is the old process still up?"
 # BUMP THIS whenever the importer changes, and quote it when handing over.
-BUILD = "v3.4.1"
-BUILD_DATE = "2026-09-11"
+BUILD = "v3.5"
+BUILD_DATE = "2026-09-12"
 
 # Fadr's S3 throttles each connection independently, so several transfers at
 # once finish far sooner than one at a time. Overridable via config.
@@ -2098,9 +2098,7 @@ def stage_mixdown(job, job_dir, cfg, force):
     EXTRA) are summed with ffmpeg (no normalization, we're recombining a
     separation). Single-stem slots reference their stem file directly."""
     if job["stages"].get("mixdown") and not force:
-        click = click_model.add_slot(job, job_dir)
-        if click.get('analysis_unavailable'):
-            log(click['review'])
+        click_model.add_slot(job, job_dir, log)
         save_job(job_dir, job)
         return
     # Slot assignment happens HERE (not in stage_fadr) so a mapping fix only
@@ -2159,10 +2157,8 @@ def stage_mixdown(job, job_dir, cfg, force):
                                    '-of','default=noprint_wrappers=1:nokey=1',str(job_dir/slot['file'])],capture_output=True,text=True,check=True)
             duration=float(result.stdout.strip())
         job['duration']=max(float(job.get('duration') or 0),duration)
-    click = click_model.add_slot(job, job_dir)
-    log(f"Click ready: {click['method']}, {len(click['beats'])} beats. Listen against the stems before rehearsal.")
-    if click.get('analysis_unavailable'):
-        log(click['review'])
+    click = click_model.add_slot(job, job_dir, log)
+    log(click['review'])
     job["stages"]["mixdown"] = True
     save_job(job_dir, job)
 
@@ -2187,6 +2183,7 @@ def write_reaper_job(job, job_dir):
          f"  job_dir = {lua_quote(jd)},",
          f"  document = {lua_quote(json.dumps(job.get("chart_document"), ensure_ascii=True))},",
          f"  click_revision = {lua_quote((job.get('click') or {}).get('generator','') + ':' + (job.get('click') or {}).get('file',''))},",
+         f"  click_muted = {'true' if (job.get('click') or {}).get('muted') else 'false'},",
          "  slots = {"]
     for s in job.get("slots", []):
         L.append(f"    {{ slot = {lua_quote(s['slot'])}, "

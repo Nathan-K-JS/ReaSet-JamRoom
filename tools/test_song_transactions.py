@@ -33,13 +33,13 @@ reaper={
  GetTrackName=function(tr)return true,tr.name end,
  CountTrackMediaItems=function(tr)return #tr.items end,
  GetTrackMediaItem=function(tr,i)return tr.items[i+1] end,
- GetMediaItemInfo_Value=function(it,key)return key=='D_POSITION' and it.p or it.l end,
+ GetMediaItemInfo_Value=function(it,key)if key=='D_POSITION'then return it.p elseif key=='B_MUTE'then return it.mute or 0 else return it.l end end,
  GetActiveTake=function()return nil end,
  GetItemStateChunk=function(it)return true,J.encode(it)end,
  SetItemStateChunk=function(it,chunk)local restored=J.decode(chunk);for k in pairs(it)do it[k]=nil end;for k,v in pairs(restored)do it[k]=v end;return true end,
  DeleteTrackMediaItem=function(tr,it)for i,x in ipairs(tr.items)do if it==x then table.remove(tr.items,i);return true end end end,
  AddMediaItemToTrack=function(tr)local it={guid='new-'..(#tr.items+1)};table.insert(tr.items,it);return it end,
- SetMediaItemInfo_Value=function(it,key,v)if key=='D_POSITION'then it.p=v else it.l=v end end,
+ SetMediaItemInfo_Value=function(it,key,v)if key=='D_POSITION'then it.p=v elseif key=='B_MUTE'then it.mute=v else it.l=v end end,
  ULT_SetMediaItemNote=function(it,note)if fail_note then fail_note=false;error('injected failure')end;it.note=note end,
  Undo_BeginBlock=function()end,Undo_EndBlock=function()end,UpdateArrange=function()end,MarkProjectDirty=function()end,
  TrackList_AdjustWindows=function()end,
@@ -122,10 +122,12 @@ dofile=function(path)if path:match('jamroom_pending_rechord.lua$')then return jo
         self.lua.execute("table.insert(tracks,{name='[JR:CLICK] Click',items={}})")
         original=self.lua.eval('J.encode({tracks[1],tracks[2]})')
         args={'lyrics':None,'chords':None,'document':None,'revision':None}
-        reply,folder=self.run_job('click',click={'file':'test.wav','revision':'click-1'},**args)
+        reply,folder=self.run_job('click',click={'file':'test.wav','revision':'click-1','muted':True},**args)
         self.assertEqual(reply['status'],'ok',reply)
         self.assertEqual(self.lua.eval('J.encode({tracks[1],tracks[2]})'),original)
         self.assertEqual(self.lua.eval('#tracks[3].items'),1)
+        self.assertEqual(self.lua.eval('tracks[3].items[1].mute'),1)
+        self.assertEqual(self.lua.eval('tracks[3].items[1].l'),60)
         reply,_=self.run_job('restore-click',restore=str(folder/'before.json'),expected=str(folder/'after.json'),**args)
         self.assertEqual(reply['status'],'ok',reply)
         self.assertEqual(self.lua.eval('#tracks[3].items'),0)

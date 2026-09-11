@@ -1,4 +1,4 @@
-"""Recording-relative rehearsal clicks; no project tempo-map changes. GPL-3.0."""
+"""Music-following rehearsal clicks with explicit quality and review evidence."""
 import hashlib
 import json
 import math
@@ -6,36 +6,24 @@ from pathlib import Path
 import shutil
 import subprocess
 import wave
-
 import numpy as np
 
-GENERATOR = 'recording-click-1'
+from jamroom_beat_runtime import MODEL_VERSION, predict
+
+GENERATOR = 'recording-click-2'
 RATE = 22050
 
 
-def beat_times(audio, bpm, duration):
-    import librosa
-    if not np.isfinite(audio).all() or np.max(np.abs(audio), initial=0) < .00001:
-        raise ValueError('No rhythmic audio available for click detection')
-    # Fadr supplies a tempo prior, while detected attacks locate individual
-    # beats. A single fixed BPM would drift against a live drummer.
-    _, beats = librosa.beat.beat_track(y=audio, sr=RATE, hop_length=256,
-                                      bpm=bpm if bpm and 30<=bpm<=300 else None,
-                                      start_bpm=bpm or 120, trim=True, units='time')
-    beats = np.asarray(beats, dtype=float)
-    if len(beats) < 8:
-        raise ValueError('Too few beats to generate a recording-following click')
-    first, last = float(beats[0]), float(beats[-1])
-    head = float(np.median(np.diff(beats[:9])))
-    tail = float(np.median(np.diff(beats[-9:])))
-    if min(head,tail) < .15 or max(head,tail) > 2:
-        raise ValueError('Detected click pace is outside rehearsal limits')
-    before = list(np.arange(first-head, -1e-6, -head)[::-1])
-    after = list(np.arange(last+tail, duration, tail))
-    times = [round(float(t),6) for t in before+list(beats)+after if 0<=t<duration]
-    return times, {'detected_start':first,'detected_end':last,
-                   'estimated_bpm':round(60/float(np.median(np.diff(beats))),2),
-                   'extrapolated_beats':len(before)+len(after)}
+class ClickUnavailable(ValueError):
+    pass
+
+
+def decode_audio(path, duration):
+    ffmpeg=shutil.which('ffmpeg')
+    if not ffmpeg: raise ClickUnavailable('ffmpeg is unavailable')
+    data=subprocess.run([ffmpeg,'-v','error','-i',str(path),'-t',str(duration),
+                         '-ac','1','-ar',str(RATE),'-f','f32le','-'],capture_output=True,check=True)
+    return np.frombuffer(data.stdout,dtype='<f4').copy()
 
 
 def render(path, times, duration):
@@ -54,64 +42,79 @@ def render(path, times, duration):
         out.writeframes((np.clip(samples,-1,1)*32767).astype('<i2').tobytes())
 
 
-def ensure_click(job, folder):
-    folder = Path(folder)
-    duration = float(job.get('duration') or 0)
+def ensure_click(job, folder, log=print):
+    from jamroom_beat import decode_activations
+    from jamroom_click_quality import assess
+    from jamroom_click_report import write_report
+    folder=Path(folder)
+    duration=float(job.get('duration') or 0)
     if not math.isfinite(duration) or not 0<duration<14400:
-        raise ValueError('Recording duration is required for a click')
-    fadr = job.get('fadr') or {}
-    old = job.get('click') or {}
-    candidates = [s['file'] for s in job.get('stems',[]) if s.get('fadr_name','').lower()=='drums']
-    candidates += [s['file'] for s in job.get('slots',[]) if s.get('slot')=='DRUMS']
-    source = job.get('source') or {}
-    candidates += [source.get('audio_file','source.wav'),'source.m4a','source.wav']
-    audio_path = next((folder/p for p in candidates if p and (folder/p).is_file()),None)
-    signature=hashlib.sha256(json.dumps({'duration':duration,'fadr':fadr,
-        'audio':(str(audio_path.relative_to(folder)),audio_path.stat().st_size,audio_path.stat().st_mtime_ns) if audio_path else None},sort_keys=True).encode()).hexdigest()
-    if not old.get('analysis_unavailable') and old.get('generator')==GENERATOR and old.get('source_signature')==signature and (folder/old.get('file','missing')).is_file():
+        raise ClickUnavailable('Recording duration is required for a click')
+    stems=[s for s in job.get('stems',[]) if s.get('file') and s.get('slot')!='CLICK']
+    sources=list(dict.fromkeys(s['file'] for s in stems))
+    if not sources:
+        sources=[s['file'] for s in job.get('slots',[]) if s.get('slot')!='CLICK']
+    if not sources:
+        source=job.get('source') or {}
+        sources=[source.get('audio_file','source.wav')]
+    if not sources or any(not (folder/p).is_file() for p in sources):
+        raise ClickUnavailable('Cached recording/stems are missing; no tempo-only fallback will be generated')
+    drumfiles=[s['file'] for s in stems if s.get('fadr_name','').lower()=='drums']
+    drumfiles+= [s['file'] for s in job.get('slots',[]) if s.get('slot')=='DRUMS']
+    signature=hashlib.sha256(json.dumps({'duration':duration,'model':MODEL_VERSION,
+        'audio':[(p,(folder/p).stat().st_size,(folder/p).stat().st_mtime_ns) for p in sources]},sort_keys=True).encode()).hexdigest()
+    old=job.get('click') or {}
+    if (old.get('generator')==GENERATOR and old.get('source_signature')==signature
+            and old.get('quality') and all((folder/old.get(key,'missing')).is_file()
+                                          for key in ('file','report','review_audio','report_data'))):
         return old
-    method, detail = 'recording beats', {}
-    times=None
-    if audio_path:
-        ffmpeg = shutil.which('ffmpeg')
-        if not ffmpeg: raise ValueError('ffmpeg is required to generate clicks')
-        data = subprocess.run([ffmpeg,'-v','error','-i',str(audio_path),'-t',str(duration),
-                               '-ac','1','-ar',str(RATE),'-f','f32le','-'],capture_output=True,check=True)
-        try:
-            times,detail = beat_times(np.frombuffer(data.stdout,dtype='<f4'),float(fadr.get('tempo') or 120),duration)
-        except ValueError as error:
-            detail['fallback_reason']=str(error)
-        except (ImportError, OSError) as error:
-            detail.update(analysis_unavailable=True, fallback_reason=str(error))
-    if times is None:
-        # Old jobs can retain analysis without cached stems. Be explicit about
-        # using a rigid estimate instead of claiming audio-following detection.
-        sr=float(fadr.get('sample_rate') or 0)
-        length=float(fadr.get('beat_length_samples') or 0)
-        offset=fadr.get('beat_offset_samples')
-        if sr<=0 or length<=0 or offset is None or not all(math.isfinite(x) for x in (sr,length,float(offset))):
-            raise ValueError('Cached audio or Fadr beat metadata is required for a click')
-        interval=length/sr
-        if not .15<=interval<=2: raise ValueError('Invalid Fadr beat interval')
-        times=np.arange((float(offset)/sr)%interval,duration,interval).tolist()
-        method='Fadr fixed grid'
-        detail.update(estimated_bpm=60/interval,extrapolated_beats=len(times))
-    payload={'generator':GENERATOR,'duration':duration,'source_signature':signature,'beats':times,'method':method,**detail,
-             'review':'Estimated click: listen against the recording before rehearsal. No bar accents are assumed.'}
-    if detail.get('analysis_unavailable'):
-        payload['review']='FALLBACK CLICK: recording beat detection is unavailable. This fixed-tempo click may drift. Run JamRoom Update to repair, then update click tracks only.'
+    log('Building the analysis mix from cached music stems (excluding the click)...')
+    mix=np.zeros(round(duration*RATE),np.float32);drums=np.zeros_like(mix)
+    for path in sources:
+        y=decode_audio(folder/path,duration);n=min(len(y),len(mix));mix[:n]+=y[:n]
+        if path in drumfiles:drums[:n]+=y[:n]
+    mix/=max(1,float(np.max(np.abs(mix))))
+    if np.max(np.abs(mix))<1e-5: raise ClickUnavailable('Recording is silent')
+    cache=folder/'clicks';cache.mkdir(exist_ok=True)
+    raw=cache/('analysis-'+signature[:20]+'.npz')
+    if raw.exists():
+        with np.load(raw,allow_pickle=False) as saved:
+            predictions=[{key:saved[str(i)+'_'+key] for key in ('beats','downbeats','beat_logits','downbeat_logits')} for i in range(3)]
+    else:
+        predictions=predict(mix,log)
+        tmp=raw.with_suffix('.tmp')
+        with tmp.open('wb') as output:
+            np.savez_compressed(output,**{str(i)+'_'+k:v for i,p in enumerate(predictions) for k,v in p.items()})
+        tmp.replace(raw)
+    times,detail=decode_activations(predictions)
+    quality=assess(times,detail,drums,duration)
+    if not drumfiles:
+        quality.update(status='needs_review',label='Needs click review: no independent drum stem available')
+    payload={'generator':GENERATOR,'duration':duration,'source_signature':signature,
+             'beats':np.round(times,6).tolist(),'method':'Music beat models with continuous pulse',
+             'estimated_bpm':round(quality['median_bpm'],2),'quality':quality,
+             'muted':quality['status']!='checks_passed','song':job.get('region_name') or folder.name,
+             'review':quality['label'],'model':MODEL_VERSION}
     digest=hashlib.sha256(json.dumps(payload,sort_keys=True).encode()).hexdigest()[:16]
-    relative='clicks/'+digest+'.wav'
-    target=folder/relative;target.parent.mkdir(exist_ok=True)
+    target=cache/(digest+'.wav')
     if not target.exists():
         temporary=target.with_suffix('.tmp.wav');render(temporary,times,duration);temporary.replace(target)
-    payload['file']=relative
+    report,audio,metadata=write_report(cache,digest,mix,drums,target,payload)
+    payload.update(file='clicks/'+target.name,report='clicks/'+report,review_audio='clicks/'+audio,report_data='clicks/'+metadata)
     job['click']=payload
+    log(quality['label']+('; click item will be muted until reviewed.' if payload['muted'] else '.'))
     return payload
 
 
-def add_slot(job, folder):
-    click=ensure_click(job,folder)
+def add_slot(job, folder, log=print):
     job['slots']=[s for s in job.get('slots',[]) if s.get('slot')!='CLICK']
+    try:
+        click=ensure_click(job,folder,log)
+    except (ImportError,OSError,ValueError,subprocess.SubprocessError) as error:
+        # A missing model/runtime must not turn into a random grid or stop the
+        # authorised stem/chart import. Keep this deficiency explicit.
+        click={'generator':GENERATOR,'status':'unavailable','muted':True,
+               'review':'NO CLICK: '+str(error),'quality':{'status':'unavailable'}}
+        job['click']=click;log(click['review']);return click
     job['slots'].append({'slot':'CLICK','label':'Click','file':click['file']})
     return click

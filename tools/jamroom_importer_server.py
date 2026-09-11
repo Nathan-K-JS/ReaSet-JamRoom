@@ -791,6 +791,8 @@ def _push_song_items(cfg, name, song, chords=None, lyric_lines=None,
     if lyric_lines is not None:
         request["lyrics"] = [{"s": l["start"], "e": l["end"], "text": l["text"]} for l in lyric_lines]
     def lua(v):
+        if isinstance(v, bool): return 'true' if v else 'false'
+        if v is None: return 'nil'
         if isinstance(v, dict): return "{" + ",".join("["+ji.lua_quote(k)+"]="+lua(x) for k,x in v.items()) + "}"
         if isinstance(v, list): return "{" + ",".join(lua(x) for x in v) + "}"
         if isinstance(v, str): return ji.lua_quote(v)
@@ -939,6 +941,8 @@ def run_apply(slots, labels, lyrics_offset):
         applied = job_dir / "applied.txt"
         if applied.exists():
             STATE["summary"] = applied.read_text(encoding="utf-8").strip()
+            if job.get('click'):
+                STATE['summary'] += '\n'+job['click'].get('review','')+(' — click muted; review before use.' if job['click'].get('muted') else '')
             STATE["state"] = "done"
             _ui_log("Import complete. Review the song in REAPER, then SAVE "
                     "the project.")
@@ -1014,6 +1018,42 @@ class Handler(BaseHTTPRequestHandler):
         f = (job_dir / "stems" / name).resolve()
         if not f.is_relative_to((Path(job_dir) / "stems").resolve()) or not f.is_file():
             return self._send(404, {"error": "not found"})
+        return self._serve_audio_file(f)
+
+    def _serve_click_review(self):
+        from urllib.parse import parse_qs, quote
+        query=parse_qs(urlparse(self.path).query)
+        try:
+            song=next(s for s in project_songs() if str(s['id'])==query.get('id',[''])[0])
+            folder=Path(song['folder']).resolve()
+            click=ji.load_job(folder).get('click') or {}
+            key='review_audio' if query.get('media')==['1'] else 'report'
+            path=(folder/click.get(key,'missing')).resolve()
+            if not path.is_relative_to(folder/'clicks') or not path.is_file():
+                return self._send(404,{'error':'No click review available; update this song click first'})
+            if key=='review_audio':return self._serve_audio_file(path)
+            page=path.read_text(encoding='utf-8')
+            page=page.replace(Path(click['review_audio']).name,'/api/click-review?id='+quote(str(song['id']))+'&amp;media=1')
+            if click.get('report_data'):
+                data_path=(folder/click['report_data']).resolve()
+                if not data_path.is_relative_to(folder/'clicks'):raise ValueError('Invalid report data path')
+                from jamroom_click_report import render_html
+                page=render_html(json.loads(data_path.read_text(encoding='utf-8')),
+                                 '/api/click-review?id='+quote(str(song['id']))+'&media=1',song['name'])
+            cfg=ji.load_config(None)
+            project=UPDATES.identity(cfg)
+            if click.get('muted'):
+                request={'ids':[song['id']],'project':project,'clicks_only':True,
+                         'approve_click':click['generator']+':'+click['file']}
+                page=page.replace('const approval=null;', 'const approval='+json.dumps(request).replace('<','\\u003c')+';')
+            data=page.encode('utf-8');self.send_response(200);self.send_header('Content-Type','text/html; charset=utf-8')
+            self.send_header('Content-Length',str(len(data)));self.end_headers();self.wfile.write(data)
+        except ConnectionError:
+            return  # Browser cancelled an audio range while seeking/closing.
+        except (StopIteration,KeyError,ValueError,OSError) as error:
+            self._send(404,{'error':'Click review unavailable: '+str(error)})
+
+    def _serve_audio_file(self, f):
         with open(f, "rb") as fh:
             head = fh.read(4)
         ctype = "audio/mpeg" if head[:3] == b"ID3" or head[:2] == b"\xff\xfb" \
@@ -1045,7 +1085,7 @@ class Handler(BaseHTTPRequestHandler):
                     break
                 try:
                     self.wfile.write(chunk)
-                except (ConnectionAbortedError, BrokenPipeError):
+                except ConnectionError:
                     return
                 remaining -= len(chunk)
 
@@ -1080,6 +1120,8 @@ class Handler(BaseHTTPRequestHandler):
                 self._send(200, {"songs": ji.fadr_library(ji.load_config(None))})
             except Exception as e:  # noqa: BLE001
                 self._send(500, {"error": str(e)})
+        elif self.path.startswith('/api/click-review'):
+            self._serve_click_review()
         elif self.path.startswith("/api/audio"):
             self._serve_audio()
         else:
@@ -1092,6 +1134,7 @@ class Handler(BaseHTTPRequestHandler):
                 self._send(200, {"id": UPDATES.start(body.get("ids"),
                     resume=bool(body.get("resume")), restore=bool(body.get("restore")),
                     clicks_only=bool(body.get('clicks_only')),
+                    approve_click=body.get('approve_click'),
                     replace_edits=bool(body.get("replace_edits")), target_project=body.get("project"))})
             elif self.path == "/api/updates/pause":
                 UPDATES.stop.set()
