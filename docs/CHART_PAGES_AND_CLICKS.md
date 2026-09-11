@@ -81,6 +81,24 @@ text items, and use the same durable snapshots and guarded restore path.
 
 ## Validation
 
+### Timing button feedback
+
+Earlier/Later controls now repaint saving, rejection and timeout status immediately,
+including while no transport replies arrive. They disable during a pending save;
+previously another press could report a misleading connection error. Confirmed
+offset saves describe the direction and total shift. The timing panel also shows
+the next page cue to tenths of a second, so a small shift has visible feedback
+even when it does not cross the current page boundary.
+
+The reported jam-room failure to save was not reproduced locally. Both actual
+buttons saved successfully before and after this feedback change. The expanded
+live test verifies that Later 0.5s returns to the preceding page at a boundary and
+Earlier 0.5s returns to the following page, with source rows unchanged. Playback
+page-turn checks also passed; screenshots are in `imports/.visual/song-2iq9yyev/`.
+All 28 browser tests passed, including disconnected, pending, rejected, confirmed
+and timed-out saves without transport polling. Test tabs were discarded and the
+original project/state counter remained unchanged.
+
 ### v3.4.1 Windows audio runtime repair
 
 The first click release checked installed package versions without loading their

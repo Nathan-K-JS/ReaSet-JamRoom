@@ -3562,6 +3562,7 @@
         .sc-preview-label{font:12px system-ui;margin-bottom:4px;color:#8fa2b9}
         .sc-offset{display:flex;flex-wrap:wrap;align-items:center;gap:6px;width:100%}
         .sc-offset input{width:70px;font:inherit;color:inherit;background:#222a35;border:1px solid #455163;border-radius:5px;padding:7px}
+        .sc-offset-summary{font-size:12px;line-height:16px;color:#b8c5d5}
         .structured-chart{position:relative}
         .sc-timing{position:absolute;bottom:0;left:0;right:0;height:118px;overflow:auto;box-sizing:border-box;background:#151c25;border:1px solid #455163;border-radius:8px;padding:8px;z-index:2;font-size:14px}
         .sc-taps{display:flex;gap:8px;margin-bottom:6px}
@@ -8941,8 +8942,13 @@
             return currentPos-g_clData.song.start-(doc.timing_offset||0)+(isPlaying?.75*((g_tkState&&g_tkState.rate)||1):0);
         }
         function chartOffset(seconds){
-            chartSend('offset',{seconds:Math.round(seconds*1000)/1000},chartFollow);
+            seconds=Math.round(seconds*1000)/1000;
+            chartSend('offset',{seconds:seconds},function(){
+                chartFollow();chartStatus('Timing saved: '+chartOffsetLabel(seconds)+'.');
+            });
         }
+        function chartOffsetLabel(seconds){return seconds===0?'original page cues':'all page cues '+Math.abs(seconds).toFixed(1)+'s '+(seconds<0?'earlier':'later');}
+        function chartCueTime(seconds){seconds=Math.round(Math.max(0,seconds)*10)/10;return Math.floor(seconds/60)+':'+(seconds%60).toFixed(1).padStart(4,'0');}
         function chartChooseSection(value){
             var i=g_chartPages.findIndex(function(p){return p.section===Number(value);});
             g_chartPage=Math.max(0,i);renderChordsView();renderLyricsView();
@@ -9102,6 +9108,7 @@
             if(g_chartTiming){
                 var offset=doc.timing_offset||0,disabled=g_chartPending?'disabled':'';
                 html+='<div class="sc-offset"><span>Whole song</span><button '+disabled+' onclick="chartOffset('+(offset-.5)+')">Earlier 0.5s</button><label>Offset (s) <input aria-label="Whole song timing offset" type="number" step="0.1" value="'+offset+'" '+disabled+' onchange="chartOffset(Number(this.value))"></label><button '+disabled+' onclick="chartOffset('+(offset+.5)+')">Later 0.5s</button><button '+disabled+' onclick="chartOffset(0)">Reset</button></div>';
+                html+='<div class="sc-offset-summary" aria-label="Page timing summary">'+trEsc(chartOffsetLabel(offset))+(upcoming?' &middot; Next page cue: '+trEsc(doc.sections[upcoming.section].label)+' at '+chartCueTime(upcoming.cue+offset):'')+' &middot; Pages turn 0.75s early while playing.</div>';
             }
             if(g_chartTiming)html+='</div>';
             if(html!==host._chartHtml){host.innerHTML=html;host._chartHtml=html;}
@@ -9110,7 +9117,8 @@
             return true;
         }
         function chartSend(action,data,done){
-            if(g_chartPending || !clAlive() || !g_clData || !g_clData.song)return chartStatus('Connect to REAPER before saving.');
+            if(g_chartPending)return chartStatus('Saving in REAPER; wait for confirmation.');
+            if(!clAlive() || !g_clData || !g_clData.song)return chartStatus('Not saved: connect to REAPER before adjusting timing.');
             var nonce=Date.now().toString(36)+Math.random().toString(36).slice(2,7);
             // REAPER truncates long individual web commands. Hex chunks keep
             // UTF-8, slashes and separators out of its command parser.
@@ -9123,9 +9131,9 @@
             var command='SET/EXTSTATE/ReaSetCL/want/'+encodeURIComponent(fields.join('|'));
             g_chartPending={nonce:nonce,done:done,project:g_clData.project,song:g_clData.song.id};
             wwr_req(command);chartStatus('Saving in REAPER...');
-            setTimeout(function(){if(g_chartPending&&g_chartPending.nonce===nonce){g_chartPending=null;chartStatus('No confirmation from REAPER. Reopen the editor before retrying.');}},6000);
+            setTimeout(function(){if(g_chartPending&&g_chartPending.nonce===nonce){g_chartPending=null;chartStatus('Save unconfirmed. Save your project, restart REAPER and refresh ReaSet, then check the offset before retrying.');}},6000);
         }
-        function chartStatus(message){g_chartMessage=message;var status=document.getElementById('chart-edit-status');if(status)status.textContent=message;}
+        function chartStatus(message){g_chartMessage=message;var status=document.getElementById('chart-edit-status');if(status)status.textContent=message;renderChordsView();renderLyricsView();}
         function chartEditReply(value){
             var f=String(value).split('|');if(!g_chartPending||f[0]!==g_chartPending.nonce)return;
             var pending=g_chartPending;g_chartPending=null;chartStatus(f.slice(2).join(' '));

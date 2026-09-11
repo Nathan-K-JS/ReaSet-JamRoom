@@ -163,6 +163,41 @@ class BrowserTests(unittest.TestCase):
         for previous,current in zip(result['anchors'],result['anchors'][1:]):
             self.assertGreaterEqual(current['offset']-previous['offset']-len(previous['symbol']),2)
 
+    def test_timing_buttons_show_pending_failure_and_confirmed_cue_without_transport_poll(self):
+        self.load_reaset()
+        self.page.locator('#tab-btn-chords').click()
+        self.page.get_by_role('button',name='Timing',exact=True).click()
+        later=self.page.get_by_role('button',name='Later 0.5s',exact=True)
+        self.page.evaluate('g_clHb.val=null')
+        later.click()
+        self.assertIn('Not saved: connect',self.page.locator('.sc-taps:visible').inner_text())
+        self.page.evaluate('g_clHb={val:1,changedAt:Date.now()}')
+        later.click()
+        self.assertTrue(later.is_disabled())
+        self.assertIn('Saving in REAPER',self.page.locator('.sc-taps:visible').inner_text())
+        self.page.evaluate("chartEditReply(g_chartPending.nonce+'|error|Chart changed; reopen the chart.')")
+        self.assertFalse(later.is_disabled())
+        self.assertIn('Chart changed',self.page.locator('.sc-taps:visible').inner_text())
+        before=self.page.locator('.sc-offset-summary:visible').inner_text()
+        later.click()
+        self.page.evaluate("g_clData.document.timing_offset=.5;chartEditReply(g_chartPending.nonce+'|ok|Saved')")
+        self.assertIn('all page cues 0.5s later',self.page.locator('.sc-taps:visible').inner_text())
+        self.assertNotEqual(before,self.page.locator('.sc-offset-summary:visible').inner_text())
+        self.assertEqual(self.page.get_by_role('spinbutton',name='Whole song timing offset').input_value(),'0.5')
+
+    def test_timing_timeout_is_visible_without_a_transport_reply(self):
+        self.load_reaset()
+        self.page.locator('#tab-btn-chords').click()
+        self.page.get_by_role('button',name='Timing',exact=True).click()
+        self.page.evaluate('''()=>{
+            const timer=window.setTimeout;
+            window.setTimeout=fn=>{window.expireChartSave=fn;return 1};
+            chartOffset(.5);window.setTimeout=timer;
+            window.expireChartSave();
+        }''')
+        self.assertIn('Save unconfirmed',self.page.locator('.sc-taps:visible').inner_text())
+        self.assertFalse(self.page.get_by_role('button',name='Later 0.5s',exact=True).is_disabled())
+
     def test_whole_library_uses_all_project_songs_and_keeps_protected_versions(self):
         songs=[{'id':i,'name':'Song '+str(i),'eligible':i!=2,'protected':i==2,'update_status':'Update available'} for i in (1,2,3)]
         posts=[]
