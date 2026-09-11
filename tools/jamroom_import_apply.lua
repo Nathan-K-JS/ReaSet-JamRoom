@@ -247,6 +247,8 @@ end
 
 if song_len == 0 then
     reaper.PreventUIRefresh(-1)
+    reaper.TrackList_AdjustWindows(false)
+    reaper.UpdateArrange()
     reaper.Undo_EndBlock("JR import (aborted)", -1)
     return fail("no stems placed and no duration in job — nothing to import")
 end
@@ -310,6 +312,10 @@ if job.chords and #job.chords > 0 then
 end
 
 reaper.PreventUIRefresh(-1)
+-- Commit track/folder changes to REAPER before reporting success. Redrawing
+-- the arrange view alone can leave native playback jumping to zero after an
+-- append import into an existing library (reproduced in REAPER 7.75).
+reaper.TrackList_AdjustWindows(false)
 reaper.UpdateArrange()
 reaper.Undo_EndBlock("JR import: " .. job.region_name, -1)
 

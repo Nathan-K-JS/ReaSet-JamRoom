@@ -133,12 +133,17 @@ python -m pip install -r tools/requirements-dev.txt
 python -m unittest discover -s tools -p "test_*.py"
 python tools/verify_reaper_live.py
 python tools/verify_song_visual.py "imports/The Darkness - I Believe in a Thing Called Love" --edit-check
+python tools/verify_import_playback.py "imports/Lenny Kravitz - Fly Away"
 ```
 
-The last two commands use real REAPER scratch projects and require stopped
+The last three commands use real REAPER scratch projects and require stopped
 playback. The visual check imports cached stems, photographs the actual browser,
 splits a section and taps a cue through REAPER's web interface, then confirms
 that source rows did not change and the original project was preserved.
+The append check requires a saved, populated library. It imports cached stems
+twice into a disposable template of that library and checks native and browser
+Play without restarting REAPER. This catches transport failures that an empty
+scratch project can miss. It also checks playback after an aborted import.
 
 Full section saves use small UTF-8 hex chunks: REAPER truncates large individual
 web commands, so a direct Lua-only save test cannot validate the browser path.

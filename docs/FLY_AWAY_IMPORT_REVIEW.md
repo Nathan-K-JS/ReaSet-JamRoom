@@ -83,6 +83,25 @@ reported playback near zero despite a successful seek, including through native
 ReaScript. Saving and restarting the session cleared that state. Its underlying
 cause was not established; this was not treated as a chart-generation error.
 
+### Follow-up: playback after import (v3.3.1)
+
+The import failure was subsequently reproduced in a disposable copy of the full
+library, using cached Fly Away stems and the production apply action over HTTP.
+Native Play worked before import, then played near zero despite a cursor in the
+appended song. `UpdateTimeline()` alone did not recover it;
+`TrackList_AdjustWindows(false)` did, without saving or restarting REAPER.
+The importer now performs that refresh before its success receipt, and on its
+explicit no-duration abort path. The existing arrange redraw alone was insufficient.
+
+The new `tools/verify_import_playback.py` checks native Play before import, existing
+and appended songs after two successive imports (new buses, then reused buses),
+an aborted import, and the actual ReaSet Play button. It uses the last saved
+populated library as a disposable template and verifies the original is unchanged.
+The historical script fails this check: a requested position of 1661 seconds
+instead played at 0.997 seconds. The patched script passes. Empty-project import
+tests had missed this failure, so populated-library playback is now a separate
+release check. This changes the shared import method, with no song-specific repair.
+
 Local evidence is under `imports/.visual/fly-away/`: recording/allocation captures,
 baseline and final live screenshots, source candidates, library update receipt,
 test log, and five-song layout checks. The evidence contains source chart text

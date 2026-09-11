@@ -16,6 +16,10 @@ The fresh-import findings and shared generation fixes are in
 `docs/FLY_AWAY_IMPORT_REVIEW.md`. Visual verification now supports
 `tools/verify_song_visual.py <cached-song-folder> --playback-check --edit-check`;
 stopped-position screenshots and text-match counts alone do not verify playback.
+For importer changes, also run `tools/verify_import_playback.py <cached-song-folder>`
+against a stopped, saved, populated library. In REAPER 7.75, omitting
+`TrackList_AdjustWindows(false)` after import can make native Play jump to zero;
+an arrange/timeline redraw and empty-project tests did not catch or fix this.
 
 This workspace and its running REAPER instance are the **testing workstation**,
 not the jam-room PC. Local deployments, song rebuilds and saved test projects are
