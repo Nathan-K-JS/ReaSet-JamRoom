@@ -64,12 +64,11 @@ class BrowserTests(unittest.TestCase):
         self.assertIn('Sections saved', self.page.evaluate('g_chartMessage'))
         self.assertIn('|layout|', self.page.evaluate('decodeURIComponent(sent[sent.length-1])'))
 
-    def test_precise_chords_clear_during_rest_and_old_repair_links_request_upgrade(self):
+    def test_removed_precise_view_uses_chart_and_old_repair_links_request_upgrade(self):
         self.load_reaset()
-        self.page.evaluate("g_chordView='big';g_preciseFollow=true;currentPos=15;renderChordsView()")
-        self.assertIn('No chord sounding', self.page.locator('#chords-live').inner_text())
-        self.page.evaluate("currentPos=10;renderChordsView()")
-        self.assertEqual(self.page.locator('.cv-big').inner_text(), 'C')
+        self.page.evaluate("setChordView('big');currentPos=15;renderChordsView()")
+        self.assertEqual(self.page.evaluate('g_chordView'),'sheet')
+        self.assertEqual(self.page.locator('.cv-big').count(),0)
         self.page.evaluate("window.alert=m=>window.upgradeMessage=m;g_clData.document=null;openTimingRepair('lyrics')")
         self.assertIn('Update this song', self.page.evaluate('upgradeMessage'))
         self.assertEqual(self.page.locator('.timing-fix-btn,#timing-repair').count(),0)
@@ -112,7 +111,7 @@ class BrowserTests(unittest.TestCase):
         self.load_reaset()
         rows='\n'.join('[ch]C[/ch]     [ch]G[/ch]\nAn original line for the musicians' for _ in range(9))
         doc,_=chart.build_document({'duration':60},chart.parse_chart('[Verse]\n'+rows+'\n[ch]C[/ch] [ch]G[/ch]'),[])
-        pages=self.page.evaluate("doc=>chartBuildPages(doc,1440,650,'sheet',0)",doc)
+        pages=self.page.evaluate("doc=>chartBuildPages(doc,1440,732,'sheet',0)",doc)
         self.assertEqual(len(pages),2,'Two pages fit; balancing must not introduce a third')
         self.assertTrue(any(p['hasWords'] for p in pages[-1]['parts']))
         self.assertFalse(pages[-1]['parts'][-1]['hasWords'])
@@ -133,6 +132,22 @@ class BrowserTests(unittest.TestCase):
         self.assertTrue(all(len(c)<500 for c in commands))
         payload=bytes.fromhex(''.join(c.rsplit('/',1)[1] for c in commands)).decode('utf-8')
         self.assertIn('sections',json.loads(payload))
+
+    def test_page_turn_lead_offset_preview_and_removed_views(self):
+        self.load_reaset()
+        self.assertEqual(self.page.locator('[data-cv="big"],[data-cv="timeline"]').count(),0)
+        self.page.evaluate("setChordView('big')")
+        self.assertEqual(self.page.evaluate('g_chordView'),'sheet')
+        self.assertIn('Here we sing',self.page.locator('#chords-live .sc-preview').inner_text())
+        for playing,position,offset,expected in [(False,9.5,0,9.5),(True,9.5,0,10.25),(True,9.5,2,8.25)]:
+            actual=self.page.evaluate('v=>{isPlaying=v[0];currentPos=v[1];return chartDisplayTime({timing_offset:v[2]})}',[playing,position,offset])
+            self.assertAlmostEqual(actual,expected)
+        self.page.locator('#tab-btn-chords').click()
+        pages=self.page.evaluate('JSON.stringify(document.getElementById("chords-live")._pages)')
+        self.page.evaluate('g_chartTiming=true;renderChordsView()')
+        self.assertEqual(self.page.evaluate('JSON.stringify(document.getElementById("chords-live")._pages)'),pages)
+        self.page.get_by_role('button',name='Later 0.5s',exact=True).click()
+        self.assertIn('|offset|',self.page.evaluate('decodeURIComponent(sent[sent.length-1])'))
 
     def test_transposed_repeats_have_space_without_moving_word_anchors(self):
         self.load_reaset()

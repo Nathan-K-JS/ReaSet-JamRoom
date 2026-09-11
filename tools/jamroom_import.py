@@ -25,18 +25,20 @@ import subprocess
 import sys
 import threading
 import time
+import wave
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 
 import requests
 
 import jamroom_chart as chart_model
+import jamroom_click as click_model
 
 # Stamped into the CODE, so it reports what is actually running rather than
 # what is on disk — the importer server holds its modules in memory, so this is
 # how you tell "did the update take effect?" from "is the old process still up?"
 # BUMP THIS whenever the importer changes, and quote it when handing over.
-BUILD = "v3.3.1"
+BUILD = "v3.4"
 BUILD_DATE = "2026-09-11"
 
 # Fadr's S3 throttles each connection independently, so several transfers at
@@ -687,6 +689,8 @@ def stage_fadr(job, job_dir, cfg, force):
     raw_dump["main_asset"] = main_asset
 
     md = main_asset.get("metaData") or {}
+    if not job.get('duration') and md.get('length') and md.get('sampleRate'):
+        job['duration'] = md['length']/md['sampleRate']
     job["fadr"].update({
         "key": md.get("key"), "tempo": md.get("tempo"),
         "sample_rate": md.get("sampleRate"),
@@ -2094,6 +2098,8 @@ def stage_mixdown(job, job_dir, cfg, force):
     EXTRA) are summed with ffmpeg (no normalization, we're recombining a
     separation). Single-stem slots reference their stem file directly."""
     if job["stages"].get("mixdown") and not force:
+        click_model.add_slot(job, job_dir)
+        save_job(job_dir, job)
         return
     # Slot assignment happens HERE (not in stage_fadr) so a mapping fix only
     # needs --force-mixdown, never a re-download. Per-job overrides (from the
@@ -2139,6 +2145,20 @@ def stage_mixdown(job, job_dir, cfg, force):
                              "label": label_overrides.get(slot) or
                                       labels.get(slot, slot.title()),
                              "file": out})
+    log('Generating the rehearsal click from cached audio...')
+    # Stem codecs can add padding beyond the source video's rounded duration.
+    # Generate the click through the same end REAPER will use for the region.
+    for slot in job['slots']:
+        try:
+            with wave.open(str(job_dir/slot['file']),'rb') as audio:
+                duration=audio.getnframes()/audio.getframerate()
+        except wave.Error:
+            result=subprocess.run([shutil.which('ffprobe') or 'ffprobe','-v','error','-show_entries','format=duration',
+                                   '-of','default=noprint_wrappers=1:nokey=1',str(job_dir/slot['file'])],capture_output=True,text=True,check=True)
+            duration=float(result.stdout.strip())
+        job['duration']=max(float(job.get('duration') or 0),duration)
+    click = click_model.add_slot(job, job_dir)
+    log(f"Click ready: {click['method']}, {len(click['beats'])} beats. Listen against the stems before rehearsal.")
     job["stages"]["mixdown"] = True
     save_job(job_dir, job)
 
@@ -2162,6 +2182,7 @@ def write_reaper_job(job, job_dir):
          f"  tempo = {((job.get('fadr') or {}).get('tempo')) or 'nil'},",
          f"  job_dir = {lua_quote(jd)},",
          f"  document = {lua_quote(json.dumps(job.get("chart_document"), ensure_ascii=True))},",
+         f"  click_revision = {lua_quote((job.get('click') or {}).get('generator','') + ':' + (job.get('click') or {}).get('file',''))},",
          "  slots = {"]
     for s in job.get("slots", []):
         L.append(f"    {{ slot = {lua_quote(s['slot'])}, "

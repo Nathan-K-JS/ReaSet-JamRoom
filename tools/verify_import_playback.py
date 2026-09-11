@@ -37,6 +37,8 @@ def wait_file(path, timeout=30):
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('song', type=Path)
+    parser.add_argument('--click-library-check', action='store_true',
+                        help='Use the real importer UI to add clicks to the scratch library; requires an idle importer')
     parser.add_argument('--apply-script', type=Path, default=ROOT / 'tools/jamroom_import_apply.lua',
                         help='Optional historical script for a regression control')
     args = parser.parse_args()
@@ -103,7 +105,7 @@ local function run()
   assert(scratch~=original)
   reaper.Main_openProject('template:'..path)
   assert(reaper.CountMediaItems(0)>0,'Use a populated saved library')
-  reaper.SetProjExtState(0,'ReaSet','projectId','append-'..tostring(reaper.time_precise()))
+  reaper.SetProjExtState(0,'ReaSet','projectId','append-'..tostring(math.floor(reaper.time_precise()*1000)))
   reaper.SetMediaTrackInfo_Value(reaper.GetMasterTrack(0),'B_MUTE',1)
   local existing
   for i=0,reaper.CountProjectMarkers(0)-1 do
@@ -114,7 +116,7 @@ local function run()
   cmd=reaper.AddRemoveReaScript(true,0,folder..'/tools/jamroom_import_apply.lua',true)
   assert(cmd~=0)
   write('ready.json',{command='_'..reaper.ReverseNamedCommandLookup(cmd),existing=existing})
-  local deadline=reaper.time_precise()+180
+  local deadline=reaper.time_precise()+300
   local pending
   local function tick()
     local finish=io.open(folder..'/finish','r')
@@ -210,7 +212,33 @@ if not ok then write('error.json',{error=tostring(why)})end
             checks.append({'check':'ReaSet Play after imports','expected':position,'position':float(state[2]),'state':1})
             page.screenshot(path=str(folder / 'reaset-playing.png'))
             web('1016')
+            if args.click_library_check:
+                importer_url='http://127.0.0.1:8765'
+                status=session.get(importer_url+'/api/status',timeout=5).json()
+                assert status['state']=='idle','Finish the active import first'
+                listing=session.get(importer_url+'/api/updates',timeout=10).json()
+                ids=[s['id'] for s in listing['songs'] if s['click_eligible']]
+                assert ids,'The scratch library needs at least one missing click'
+                command=';'.join('GET/PROJEXTSTATE/ReaSetSong/song:'+str(i)+':document' for i in ids)
+                chart_before=web(command)
+                updates=browser.new_page(viewport={'width':1200,'height':1000})
+                updates.goto(importer_url+'/#updates=1')
+                updates.locator('#updateMode').select_option('clicks')
+                updates.locator('#updateWholeLibrary').click()
+                updates.wait_for_function('updateBatch&&updateBatch.status==="complete"',timeout=180000)
+                batch=updates.evaluate('updateBatch')
+                assert sorted(s['id'] for s in batch['songs'])==sorted(ids),batch
+                assert all(s['status']=='done' for s in batch['songs']),batch
+                assert web(command)==chart_before,'Click-only batch changed chart documents'
+                listing=session.get(importer_url+'/api/updates',timeout=10).json()
+                assert all(s['click_current'] for s in listing['songs'] if s['id'] in ids)
+                updates.screenshot(path=str(folder/'click-library.png'),full_page=True)
+                (folder/'click-library.json').write_text(json.dumps(batch,indent=2))
+                checks.append({'check':'Whole-library click-only update preserves charts','songs':len(ids)})
+                updates.close()
             browser.close()
+        if args.click_library_check:
+            probe('native playback after whole-library clicks',ready['existing'])
         (folder / 'checks.json').write_text(json.dumps(checks, indent=2))
         print(json.dumps(checks, indent=2))
     finally:

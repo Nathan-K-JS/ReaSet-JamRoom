@@ -171,6 +171,11 @@ do
         return fail("the active project tab has no PB buses - switch REAPER " ..
                     "to the Jam Room project tab, then apply again")
     end
+    for _,slot in ipairs(job.slots or {}) do
+        if slot.slot=='CLICK' and not find_track_named(tracks,'PB CLICK') then
+            return fail('PB CLICK bus is missing. Run Build buses before importing this song.')
+        end
+    end
 end
 
 -- Refuse a duplicate import: a region with this exact name already exists.
@@ -215,7 +220,7 @@ local song_pos = proj_end == 0 and 0 or (math.ceil(proj_end) + SONG_GAP)
 reaper.Undo_BeginBlock()
 reaper.PreventUIRefresh(1)
 
-local placed, skipped = 0, {}
+local placed, skipped, placed_click = 0, {}, false
 local song_len = job.duration or 0
 
 for _, s in ipairs(job.slots or {}) do
@@ -239,6 +244,10 @@ for _, s in ipairs(job.slots or {}) do
             reaper.SetMediaItemInfo_Value(it, "D_LENGTH", len)
             reaper.GetSetMediaItemTakeInfo_String(take, "P_NAME",
                 job.region_name .. " — " .. s.label, true)
+            if s.slot == 'CLICK' then
+                reaper.GetSetMediaItemInfo_String(it,'P_EXT:ReaSetClick','1',true)
+                placed_click=true
+            end
             if len > song_len then song_len = len end
             placed = placed + 1
         end
@@ -255,6 +264,9 @@ end
 
 local song_id = reaper.AddProjectMarker2(0, true, song_pos, song_pos + song_len,
                          job.region_name, -1, 0)
+if placed_click and job.click_revision and job.click_revision~=':' then
+    reaper.SetProjExtState(0,'ReaSetSong','song:'..song_id..':click',job.click_revision)
+end
 if job.document then
     local J = dofile(script_dir .. "../Requirements/ReaSet_JSON.lua")
     local doc = J.decode(job.document)

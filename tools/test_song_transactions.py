@@ -42,6 +42,13 @@ reaper={
  SetMediaItemInfo_Value=function(it,key,v)if key=='D_POSITION'then it.p=v else it.l=v end end,
  ULT_SetMediaItemNote=function(it,note)if fail_note then fail_note=false;error('injected failure')end;it.note=note end,
  Undo_BeginBlock=function()end,Undo_EndBlock=function()end,UpdateArrange=function()end,MarkProjectDirty=function()end,
+ TrackList_AdjustWindows=function()end,
+ PCM_Source_CreateFromFile=function(path)return {file=path}end,
+ GetMediaSourceLength=function()return 60 end,PCM_Source_Destroy=function()end,
+ AddTakeToMediaItem=function(it)it.take={};return it.take end,
+ SetMediaItemTake_Source=function(take,src)take.source=src end,
+ GetSetMediaItemTakeInfo_String=function(take,key,value)take.name=value;return true,value end,
+ GetSetMediaItemInfo_String=function(it,key,value,set)if set then it.owned=value end;return true,it.owned or '' end,
  PreventUIRefresh=function(n)refresh=refresh+n end
 }
 real_dofile=dofile
@@ -57,6 +64,7 @@ dofile=function(path)if path:match('jamroom_pending_rechord.lua$')then return jo
              'lyrics':[{'s':20,'e':22,'text':'new lyric'}], 'chords':[{'s':20,'e':22,'name':'G'}],
              'document':json.dumps({'schema':2,'sections':[],'revision':'new'}),'revision':'new'}
         job.update(kwargs)
+        job={k:v for k,v in job.items() if v is not None}
         self.lua.globals().job_json=json.dumps(job)
         self.lua.execute('job=J.decode(job_json)')
         self.lua.globals().transaction=str(ROOT/'tools/jamroom_song_transaction.lua')
@@ -109,6 +117,25 @@ dofile=function(path)if path:match('jamroom_pending_rechord.lua$')then return jo
         self.lua.execute('playing=1')
         reply,_=self.run_job();self.assertEqual(reply['status'],'error')
         self.assertEqual(self.lua.eval('tracks[1].items[1].note'),'old lyric')
+
+    def test_click_only_replace_and_restore_keep_chart_and_other_audio(self):
+        self.lua.execute("table.insert(tracks,{name='[JR:CLICK] Click',items={}})")
+        original=self.lua.eval('J.encode({tracks[1],tracks[2]})')
+        args={'lyrics':None,'chords':None,'document':None,'revision':None}
+        reply,folder=self.run_job('click',click={'file':'test.wav','revision':'click-1'},**args)
+        self.assertEqual(reply['status'],'ok',reply)
+        self.assertEqual(self.lua.eval('J.encode({tracks[1],tracks[2]})'),original)
+        self.assertEqual(self.lua.eval('#tracks[3].items'),1)
+        reply,_=self.run_job('restore-click',restore=str(folder/'before.json'),expected=str(folder/'after.json'),**args)
+        self.assertEqual(reply['status'],'ok',reply)
+        self.assertEqual(self.lua.eval('#tracks[3].items'),0)
+        self.assertEqual(self.lua.eval('J.encode({tracks[1],tracks[2]})'),original)
+
+    def test_click_update_refuses_an_unowned_existing_click(self):
+        self.lua.execute("table.insert(tracks,{name='[JR:CLICK] Click',items={{p=0,l=60,note='My click'}}})")
+        reply,_=self.run_job(click={'file':'test.wav','revision':'click-1'})
+        self.assertEqual(reply['status'],'error')
+        self.assertEqual(self.lua.eval('tracks[3].items[1].note'),'My click')
 
     def test_json_roundtrip_unicode_arrays_and_null(self):
         value={'words':'é 🎵 \\ "','empty':[], 'bool':False, 'null':None}

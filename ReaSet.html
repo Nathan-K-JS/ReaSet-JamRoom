@@ -3539,7 +3539,7 @@
         #chords-panel.source-chart,#lyrics-panel.source-chart{padding:12px 20px;align-items:stretch;justify-content:flex-start;overflow:hidden;box-sizing:border-box;gap:8px}
         .source-chart>.cv-tabs{flex:none;margin:0;min-height:34px}
         .source-chart>.lead-row,.source-chart>.timing-fix-btn{display:none!important}
-        #chords-live.structured-chart,#lyrics-live.structured-chart{display:grid!important;grid-template-rows:auto auto minmax(0,1fr) auto;gap:12px;flex:1;min-width:0;min-height:0!important;max-height:none!important;width:100%;padding:0!important;overflow:hidden;text-align:left;align-items:stretch;justify-content:stretch;white-space:normal;font-size:16px!important}
+        #chords-live.structured-chart,#lyrics-live.structured-chart{display:grid!important;grid-template-rows:auto auto minmax(0,1fr) auto auto;gap:12px;flex:1;min-width:0;min-height:0!important;max-height:none!important;width:100%;padding:0!important;overflow:hidden;text-align:left;align-items:stretch;justify-content:stretch;white-space:normal;font-size:16px!important}
         #lyrics-panel.source-chart .lyrics-content{padding:0;min-height:0;display:flex;align-items:stretch;justify-content:flex-start;white-space:normal}
         .structured-chart button,.structured-chart select,#chart-editor button,#chart-editor input{font:inherit;color:#e5eaf1;background:#222a35;border:1px solid #455163;border-radius:7px;padding:9px 13px;min-height:40px}
         .structured-chart button:disabled{opacity:.35}.structured-chart button.on{background:#235a80}
@@ -3558,6 +3558,13 @@
         .sc-empty{font-family:var(--font-ui);font-size:24px;color:#a5b1c3;padding:24px 0}
         .sc-footer{display:flex;gap:10px;justify-content:space-between;align-items:center;flex-wrap:wrap;font-size:13px;color:#a5b1c3;border-top:1px solid #303b49;padding-top:8px;min-height:34px}
         .sc-footer button{font-size:14px;min-height:40px}
+        .sc-preview{height:72px;overflow:hidden;border-top:1px solid #303b49;padding:6px 8px 0;font:16px Consolas,'Liberation Mono',monospace;white-space:pre;color:#b7c6d9}
+        .sc-preview-label{font:12px system-ui;margin-bottom:4px;color:#8fa2b9}
+        .sc-offset{display:flex;flex-wrap:wrap;align-items:center;gap:6px;width:100%}
+        .sc-offset input{width:70px;font:inherit;color:inherit;background:#222a35;border:1px solid #455163;border-radius:5px;padding:7px}
+        .structured-chart{position:relative}
+        .sc-timing{position:absolute;bottom:0;left:0;right:0;height:118px;overflow:auto;box-sizing:border-box;background:#151c25;border:1px solid #455163;border-radius:8px;padding:8px;z-index:2;font-size:14px}
+        .sc-taps{display:flex;gap:8px;margin-bottom:6px}
         #chart-editor{position:fixed;inset:60px 3vw 20px;z-index:1200;background:#141a22;border:1px solid #455163;border-radius:12px;display:flex;flex-direction:column;padding:20px;color:#e5eaf1;box-shadow:0 0 0 100vmax #0009;font:16px var(--font-ui)}
         #chart-editor.hide{display:none}.ce-head{display:flex;justify-content:space-between;align-items:center;gap:12px}
         #chart-editor h2{margin:0;font-size:24px}#chart-editor p{font-size:14px;color:#a5b1c3;line-height:1.5}
@@ -4000,8 +4007,6 @@
         <span class="chord-close-btn" onclick="toggleChordsPanel()">✕</span>
         <div class="cv-tabs">
             <button class="cv-tab on" data-cv="chart"    onclick="setChordView('chart')">Chart</button>
-            <button class="cv-tab"    data-cv="big"      onclick="setChordView('big')">Big</button>
-            <button class="cv-tab"    data-cv="timeline" onclick="setChordView('timeline')">Timeline</button>
             <button class="cv-tab"    data-cv="sheet"    onclick="setChordView('sheet')">+ Lyrics</button>
         </div>
         <div id="chords-live"></div>
@@ -4721,17 +4726,9 @@
             + '.cv-cell.ahead{opacity:.45;padding:8px 2px}'
             + '.cv-cell.empty{background:transparent}'
             + '.cv-cell.on{background:#17304d;border-color:#2f6fed;color:#fff}'
-            + '.cv-big{font-size:clamp(3rem,22vw,9rem);font-weight:800;line-height:1}'
-            + '.cv-next{color:#9aa0a6;font-size:clamp(.9rem,4vw,1.4rem);letter-spacing:.04em}'
-            + '.cv-tl{display:flex;width:100%;gap:3px;align-items:stretch}'
-            + '.cv-tl-cell{background:#1b1e25;border-radius:8px;padding:16px 1px;'
-            + 'text-align:center;font-weight:700;overflow:hidden;min-width:0;'
-            + 'white-space:nowrap;color:#c9ced8}'
             + '.tk-warn{background:#3a2f1c;border:1px solid #f0b429;color:#ffe9bf;'
             + 'border-radius:10px;padding:10px 12px;font-size:.82rem;'
             + 'line-height:1.4;margin-bottom:8px}'
-            + '.cv-tl-cell.on{background:#17304d;color:#fff;outline:2px solid #2f6fed}'
-            + '.cv-tl-now{width:2px;height:14px;background:#ef5350;margin-left:12.5%}'
             // Chord sheet: a whole section at once, chords sitting above the
             // words they are played on — how a printed chart reads, but
             // following the song. Left-aligned and scrollable, unlike the
@@ -5239,8 +5236,7 @@
             if (v) v.textContent = getCapo() === 0 ? 'off' : ('fret ' + getCapo());
         }
 
-        // Chord view mode: 'chart' (rows of 4), 'big' (one large + strip),
-        // 'timeline' (width proportional to duration).
+        // Source chart, with optional lyrics. Retire old precision-view preferences.
         var g_preciseBySong = {};
         function _preciseKey() { return 'reaset_precise_follow' + _pkSuffix(); }
         function loadPreciseSettings() {
@@ -5250,12 +5246,7 @@
         loadPreciseSettings();
         var g_preciseFollow = g_preciseBySong[currentLeadSongKey()] === true;
         var g_chordView = localStorage.getItem('reaset_chord_view') || 'chart';
-        // Big and Timeline make a moment look exact. Do not silently restore
-        // either from an older session unless the performer opted into exact
-        // following; the broad chart is the honest default for unreviewed data.
-        if (!g_preciseFollow && (g_chordView === 'big' || g_chordView === 'timeline')) {
-            g_chordView = 'chart';
-        }
+        if (g_chordView !== 'chart' && g_chordView !== 'sheet') g_chordView = 'sheet';
         function setPreciseFollow(on) {
             g_preciseFollow = !!on;
             g_preciseBySong[currentLeadSongKey()] = g_preciseFollow;
@@ -5285,13 +5276,7 @@
             }
         }
         function setChordView(mode) {
-            if ((mode === 'big' || mode === 'timeline') && !g_preciseFollow) {
-                g_preciseFollow = true;
-                g_preciseBySong[currentLeadSongKey()] = true;
-                localStorage.setItem(_preciseKey(), JSON.stringify(g_preciseBySong));
-                var precise = document.getElementById('tr-precise');
-                if (precise) precise.checked = true;
-            }
+            if (mode !== 'chart' && mode !== 'sheet') mode = 'sheet';
             g_chordView = mode;
             localStorage.setItem('reaset_chord_view', mode);
             document.querySelectorAll('.cv-tab').forEach(function (b) {
@@ -8941,7 +8926,7 @@
         var g_sectionBrowse = null, g_chartPage = null, g_chartPages = [], g_chartTiming = false;
         var g_chartEdit = null, g_chartPending = null, g_chartMessage = '';
         function chartSectionIndex(doc) {
-            var t=currentPos-g_clData.song.start+getLead()*((g_tkState && g_tkState.rate)||1);
+            var t=chartDisplayTime(doc);
             for(var i=0;i<doc.sections.length;i++) if(t>=doc.sections[i].start && t<doc.sections[i].end)return i;
             return t<doc.sections[0].start?0:doc.sections.length-1;
         }
@@ -8952,6 +8937,12 @@
             renderChordsView();renderLyricsView();
         }
         function chartFollow(){g_chartPage=null;g_sectionBrowse=null;renderChordsView();renderLyricsView();}
+        function chartDisplayTime(doc){
+            return currentPos-g_clData.song.start-(doc.timing_offset||0)+(isPlaying?.75*((g_tkState&&g_tkState.rate)||1):0);
+        }
+        function chartOffset(seconds){
+            chartSend('offset',{seconds:Math.round(seconds*1000)/1000},chartFollow);
+        }
         function chartChooseSection(value){
             var i=g_chartPages.findIndex(function(p){return p.section===Number(value);});
             g_chartPage=Math.max(0,i);renderChordsView();renderLyricsView();
@@ -9026,10 +9017,10 @@
                 }
                 function cost(f){return (f.hasWords?1.35:0)+(f.hasChords?1.2:0)+.45;}
                 for(var size=preferred;size>=20;size--){
-                    var trial=layout(size),room=Math.max(3.1,(height-198-(g_chartTiming?56:0))/size);
+                    var trial=layout(size),room=Math.max(3.1,(height-280)/size);
                     if(trial.reduce(function(n,f){return n+cost(f);},0)<=room){font=size;break;}
                 }
-                fragments=layout(font);budget=Math.max(3.1,(height-198-(g_chartTiming?56:0))/font);
+                fragments=layout(font);budget=Math.max(3.1,(height-280)/font);
                 // Pack whole lyric rows whenever they fit. Optimise page count
                 // first, then balance space: a guessed target height could make
                 // three pages where two fit and orphan the final riff.
@@ -9083,7 +9074,7 @@
             var width=host.clientWidth||innerWidth-40,height=host.clientHeight||innerHeight-160;
             var cacheKey=[songKey,doc.revision,width,height,mode,semis,g_chartTiming].join('|');
             if(host._layoutKey!==cacheKey){host._layoutKey=cacheKey;host._pages=chartBuildPages(doc,width,height,mode,semis);host._chartHtml=null;}
-            var pages=host._pages,t=currentPos-g_clData.song.start+getLead()*((g_tkState&&g_tkState.rate)||1),active=0;
+            var pages=host._pages,t=chartDisplayTime(doc),active=0;
             pages.forEach(function(p,i){if(t>=p.cue)active=i;});
             var index=g_chartPage===null?active:Math.min(g_chartPage,pages.length-1),page=pages[index],section=doc.sections[page.section];
             host._pageIndex=index;
@@ -9097,10 +9088,22 @@
                 if(f.hasWords)html+='<div class="sc-words">'+trEsc(f.text||' ')+'</div>';
                 html+='</div>';
             });
-            if(!page.parts.length)html+='<div class="sc-empty">'+(section.kind==='instrumental'?'Instrumental':'No chart lines supplied')+'</div>';
-            html+='</div><div class="sc-footer"><span>'+(clAlive()?(page.checked?'Cue checked':'Cue estimated'):'Disconnected')+' &middot; '+trTime(page.cue)+' &middot; Page '+(index+1)+' of '+pages.length+'</span><span>'+trEsc(g_chartMessage|| (pages[index+1]?'Next: '+doc.sections[pages[index+1].section].label:'End of chart'))+'</span>';
-            if(g_chartTiming)html+='<button onclick="chartTapPage(false)" '+(g_chartPending?'disabled':'')+'>This page starts now</button><button onclick="chartTapPage(true)" '+(g_chartPending||index===pages.length-1?'disabled':'')+'>Next page starts now</button>';
+            if(!page.parts.length)html+='<div class="sc-empty">'+(section.kind==='instrumental'?'Instrumental'+(section.missing_source_chords?' — chords not supplied':''):'No chart lines supplied')+'</div>';
+            html+='</div><div class="sc-preview" aria-label="Next page preview">';
+            var upcoming=pages[index+1],peek=upcoming&&upcoming.parts[0];
+            html+='<div class="sc-preview-label">'+(upcoming?'Next: '+trEsc(doc.sections[upcoming.section].label):'End of song')+'</div>';
+            if(peek){
+                if(peek.hasChords)html+='<div class="sc-chords"><span class="sc-marks">'+trEsc(peek.decorations)+'</span>'+peek.anchors.map(function(a){return '<b style="left:'+a.offset+'ch">'+trEsc(a.symbol)+'</b>';}).join('')+'</div>';
+                if(peek.hasWords)html+='<div class="sc-words">'+trEsc(peek.text)+'</div>';
+            }else if(upcoming)html+='<div>Instrumental</div>';
+            html+='</div><div class="sc-footer"><span>'+(clAlive()?(page.checked?'Cue checked':'Cue estimated'):'Disconnected')+' &middot; '+trTime(Math.max(0,page.cue+(doc.timing_offset||0)))+' &middot; Page '+(index+1)+' of '+pages.length+'</span><span>'+trEsc(g_chartMessage|| (pages[index+1]?'Next: '+doc.sections[pages[index+1].section].label:'End of chart'))+'</span>';
             html+='</div>';
+            if(g_chartTiming)html+='<div class="sc-timing"><div class="sc-taps"><button onclick="chartTapPage(false)" '+(g_chartPending?'disabled':'')+'>This page starts now</button><button onclick="chartTapPage(true)" '+(g_chartPending||index===pages.length-1?'disabled':'')+'>Next page starts now</button><span role="status" style="align-self:center;font-size:12px">'+trEsc(g_chartMessage||'Pages turn 0.75s early during playback.')+'</span></div>';
+            if(g_chartTiming){
+                var offset=doc.timing_offset||0,disabled=g_chartPending?'disabled':'';
+                html+='<div class="sc-offset"><span>Whole song</span><button '+disabled+' onclick="chartOffset('+(offset-.5)+')">Earlier 0.5s</button><label>Offset (s) <input aria-label="Whole song timing offset" type="number" step="0.1" value="'+offset+'" '+disabled+' onchange="chartOffset(Number(this.value))"></label><button '+disabled+' onclick="chartOffset('+(offset+.5)+')">Later 0.5s</button><button '+disabled+' onclick="chartOffset(0)">Reset</button></div>';
+            }
+            if(g_chartTiming)html+='</div>';
             if(html!==host._chartHtml){host.innerHTML=html;host._chartHtml=html;}
             updateTopTabs();
             if(canvasOpen){var canvas=document.getElementById(lyricsOnly?'cw-content-lyrics':'cw-content-chords');if(canvas)canvas.textContent=section.label+'\n'+(lyricsOnly?(section.rows||[]).map(function(r){return r.text;}).join('\n'):(section.progression||[]).join('  '));}
@@ -9132,7 +9135,7 @@
         function chartTapPage(next){
             var host=document.getElementById(chordsVisible?'chords-live':'lyrics-live'),index=host._pageIndex+(next?1:0),page=host._pages[index];
             if(!page)return;
-            var time=Math.max(0,currentPos-g_clData.song.start),first=page.parts[0];
+            var time=Math.max(0,currentPos-g_clData.song.start-(g_clData.document.timing_offset||0)),first=page.parts[0];
             var action=page.part===0?'cue':'pagecue';
             var data={section:page.section+1,time:time};
             if(action==='pagecue'){data.row=first.row;data.column=first.column;}
@@ -9145,7 +9148,7 @@
             source.hidden=!/^https:\/\/(?:tabs\.)?ultimate-guitar\.com\//i.test(url);
             source.href=source.hidden?'#':url;
             g_chartEdit={revision:doc.revision,project:g_clData.project,song:g_clData.song.id,
-                sections:JSON.parse(JSON.stringify(doc.sections)),duration:doc.duration,review:doc.review};
+                sections:JSON.parse(JSON.stringify(doc.sections)),duration:doc.duration,offset:doc.timing_offset||0,review:doc.review};
             g_chartEdit.sections.forEach(function(s,si){(s.rows||[]).forEach(function(r,ri){r._key=chartRowKey(r,si,ri);});});
             document.getElementById('chart-editor').classList.remove('hide');chartEditorRender();chartStatus('');
         }
@@ -9153,7 +9156,7 @@
         function chartEditorRender(){
             var host=document.getElementById('chart-edit-lines');
             var review=g_chartEdit.review;
-            host.innerHTML=(review?'<p>'+trEsc(review.message)+'</p>'+review.issues.map(function(issue){return '<p>'+trEsc(issue.message)+'</p>';}).join(''):'')+g_chartEdit.sections.map(function(s,si){return '<section class="ce-section"><div class="ce-section-head"><input aria-label="Section name" value="'+trEsc(s.label)+'" onchange="g_chartEdit.sections['+si+'].label=this.value"><label>Start <input aria-label="Section start" type="number" step="0.01" min="0" value="'+s.start+'" onchange="g_chartEdit.sections['+si+'].start=Number(this.value)"></label>'+(si?'<button onclick="chartEditorJoin('+si+')">Join previous</button>':'')+'</div>'+(s.rows||[]).map(function(r,ri){return '<div class="ce-row"><div>'+trEsc(r.text.trim()||((r.anchors||[]).map(function(a){return a.symbol;}).join('  ')||'Instrumental'))+'</div>'+(ri?'<button onclick="chartEditorSplit('+si+','+ri+')">Start section here</button>':'<small>First line</small>')+'</div>';}).join('')+'</section>';}).join('');
+            host.innerHTML=(review?'<p>'+trEsc(review.message)+'</p>'+review.issues.map(function(issue){return '<p>'+trEsc(issue.message)+'</p>';}).join(''):'')+g_chartEdit.sections.map(function(s,si){return '<section class="ce-section"><div class="ce-section-head"><input aria-label="Section name" value="'+trEsc(s.label)+'" onchange="g_chartEdit.sections['+si+'].label=this.value"><label>Start <input aria-label="Section start" type="number" step="0.01" min="0" value="'+(s.start+(si?g_chartEdit.offset:0))+'" onchange="g_chartEdit.sections['+si+'].start=Number(this.value)-'+(si?g_chartEdit.offset:0)+'"></label>'+(si?'<button onclick="chartEditorJoin('+si+')">Join previous</button>':'')+'</div>'+(s.rows||[]).map(function(r,ri){return '<div class="ce-row"><div>'+trEsc(r.text.trim()||((r.anchors||[]).map(function(a){return a.symbol;}).join('  ')||'Instrumental'))+'</div>'+(ri?'<button onclick="chartEditorSplit('+si+','+ri+')">Start section here</button>':'<small>First line</small>')+'</div>';}).join('')+'</section>';}).join('');
         }
         function chartEditorSplit(si,ri){
             var s=g_chartEdit.sections[si],end=g_chartEdit.sections[si+1]?g_chartEdit.sections[si+1].start:g_chartEdit.duration;
@@ -9176,7 +9179,7 @@
         function renderChordsView() {
             var host = document.getElementById('chords-live');
             if (!host) return;
-            if (g_clData && g_clData.document && g_chordView!=='big' && g_chordView!=='timeline' && renderStructuredChart(host)) return;
+            if (g_clData && g_clData.document && renderStructuredChart(host)) return;
             host.classList.remove('structured-chart');host._chartHtml=null;document.getElementById('chords-panel').classList.remove('source-chart');document.getElementById('chords-panel').style.bottom='';
             if (!g_clData || !g_clData.chords || !g_clData.chords.length) {
                 host.innerHTML = '<div class="cv-empty">' + (clAlive()
@@ -9192,9 +9195,6 @@
             var tkSemis = (g_tkState && g_tkState.semis) || 0;
             var t = currentPos + getLead() * tkRate;
             var cur = clIndexAtOrBefore(list, t);
-            if (g_chordView==='big' && (!clAlive() || cur < 0 || t >= list[cur][1])) {
-                host.innerHTML='<div class="cv-empty">'+(!clAlive()?'Disconnected — waiting for live timing.':'No chord sounding here.')+'</div>';return;
-            }
             if (cur < 0) cur = 0;
             // What the player should FINGER: the sounding chord, moved by any
             // audio key change, then down by the capo fret.
@@ -9213,34 +9213,7 @@
                 return 'clamp(0.85rem,' + vw.toFixed(2) + 'vw,' + rem.toFixed(2) + 'rem)';
             }
             var html;
-            if (g_chordView === 'big') {
-                var nextTxt = [];
-                for (var i = cur + 1; i < Math.min(cur + 5, list.length); i++) nextTxt.push(X(list[i][2]));
-                var bigName = X(list[cur][2]);
-                html = '<div class="cv-big" style="font-size:'
-                     + cvFontFor([bigName], true) + '">' + trEsc(bigName) + '</div>'
-                     + '<div class="cv-next">' + (nextTxt.length
-                         ? 'next: ' + nextTxt.join(' · ') : '&nbsp;') + '</div>';
-            } else if (g_chordView === 'timeline') {
-                // Width proportional to duration, over a fixed lookahead window
-                var WIN = 16, from = t - 2, cells = [], tlNames = [];
-                for (var j = 0; j < list.length; j++) {
-                    var s = list[j][0], e = list[j][1];
-                    if (e < from || s > from + WIN) continue;
-                    tlNames.push(X(list[j][2]));
-                }
-                var tlFont = cvFontFor(tlNames, false);
-                for (var j2 = 0, ci = 0; j2 < list.length; j2++) {
-                    var s2 = list[j2][0], e2 = list[j2][1];
-                    if (e2 < from || s2 > from + WIN) continue;
-                    var w = Math.max(2, ((Math.min(e2, from + WIN) - Math.max(s2, from)) / WIN) * 100);
-                    cells.push('<div class="cv-tl-cell' + (g_preciseFollow && j2 === cur ? ' on' : '')
-                        + '" style="width:' + w.toFixed(2) + '%;font-size:' + tlFont
-                        + '">' + trEsc(tlNames[ci++]) + '</div>');
-                }
-                html = '<div class="cv-tl">' + cells.join('') + '</div>'
-                     + '<div class="cv-tl-now"></div>';
-            } else if (g_chordView === 'sheet') {
+            if (g_chordView === 'sheet') {
                 // A whole section at once: each sung line with its chords
                 // above the words they fall on. The importer places chords
                 // against the lyrics, so a chord's position within a line is

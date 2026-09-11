@@ -1,7 +1,8 @@
--- Replace/restore song text data with durable snapshots and guarded receipts.
--- GPL-3.0. Invoked by jamroom_rechord.lua; never touches audio or regions.
+-- Replace/restore chart data and owned clicks with durable guarded snapshots.
+-- GPL-3.0. Musical stems and song regions are never replaced.
 local dir = debug.getinfo(1,"S").source:match("@?(.*[\\/])") or ""
 local J = dofile(dir .. "../Requirements/ReaSet_JSON.lua")
+local C = dofile(dir .. "../Requirements/ReaSet_Click.lua")
 local ok, job = pcall(dofile, dir .. "jamroom_pending_rechord.lua")
 if not ok or type(job) ~= "table" then return end
 local function write(path, value)
@@ -31,6 +32,8 @@ local function run()
   end
   assert(song,"Song identity or boundaries changed; refresh the song list")
   local prefix="song:" .. song.id .. ":"
+  local restored=job.restore and J.decode(read(job.restore)) or nil
+  local with_click=job.click or (restored and restored.items.click)
   local _, previous_op = reaper.GetProjExtState(0,"ReaSetSong",prefix .. "operation")
   if previous_op == job.operation then reply("ok","Already applied"); return end
   local tracks={}
@@ -65,14 +68,39 @@ local function run()
     for _,field in ipairs({"lyrics","chords","lyrics:reviewed","chords:reviewed"}) do
       local _,v=reaper.GetProjExtState(0,"ReaSetCLRepair",prefix .. field); data.ext["repair:" .. field]=v
     end
+    if with_click then
+      local _,value=reaper.GetProjExtState(0,'ReaSetSong',prefix..'click');data.ext.click=value
+      data.items.click=J.array()
+      local track=C.track(false)
+      for i=0,(track and reaper.CountTrackMediaItems(track) or 0)-1 do
+        local item=reaper.GetTrackMediaItem(track,i)
+        local p=reaper.GetMediaItemInfo_Value(item,'D_POSITION')
+        local e=p+reaper.GetMediaItemInfo_Value(item,'D_LENGTH')
+        if p<song.e and e>song.s then
+          assert(p>=song.s-.001 and e<=song.e+.001 and C.owned(item),'Existing click is not owned by the importer; keep it')
+          local ok,chunk=reaper.GetItemStateChunk(item,'',false);assert(ok);table.insert(data.items.click,chunk)
+        end
+      end
+    end
     return data
   end
   local before=snapshot()
   if job.expected then
     local expected=J.decode(read(job.expected))
-    assert(J.encode(before)==J.encode(expected),"Song was edited since this revision; keep it or explicitly rebuild")
+    local comparison=J.decode(J.encode(before))
+    if not expected.items.click then comparison.items.click=nil end
+    if expected.ext.click==nil then comparison.ext.click=nil end
+    assert(J.encode(comparison)==J.encode(expected),"Song was edited since this revision; keep it or explicitly rebuild")
   end
-  local restored=job.restore and J.decode(read(job.restore)) or nil
+  local click_source
+  if job.click then
+    assert(type(job.click.file)=='string' and type(job.click.revision)=='string','Invalid click request')
+    click_source=reaper.PCM_Source_CreateFromFile(job.click.file)
+    if click_source and reaper.GetMediaSourceLength(click_source)<song.e-song.s-.02 then
+      reaper.PCM_Source_Destroy(click_source);click_source=nil
+    end
+    assert(click_source,'Click audio is missing or too short')
+  end
   if not restored then
     for _,name in ipairs({"lyrics","chords"}) do
       for _,event in ipairs(job[name] or {}) do
@@ -103,6 +131,18 @@ local function run()
       local repair=field:match("^repair:(.*)")
       reaper.SetProjExtState(0,repair and "ReaSetCLRepair" or "ReaSetSong",prefix .. (repair or field),v)
     end
+    if data.items.click then
+      local track=C.track(#data.items.click>0)
+      if track then
+        for i=reaper.CountTrackMediaItems(track)-1,0,-1 do
+          local item=reaper.GetTrackMediaItem(track,i);local p=reaper.GetMediaItemInfo_Value(item,'D_POSITION')
+          if p>=song.s-.001 and p<song.e and C.owned(item) then reaper.DeleteTrackMediaItem(track,item)end
+        end
+        for _,chunk in ipairs(data.items.click) do
+          local item=reaper.AddMediaItemToTrack(track);assert(reaper.SetItemStateChunk(item,chunk,false))
+        end
+      end
+    end
   end
   reaper.Undo_BeginBlock(); reaper.PreventUIRefresh(1)
   local success,err=pcall(function()
@@ -122,8 +162,19 @@ local function run()
           end
         end
       end
-      reaper.SetProjExtState(0,"ReaSetSong",prefix .. "document",job.document or "")
-      reaper.SetProjExtState(0,"ReaSetSong",prefix .. "revision",job.revision or "")
+      if job.document then
+        reaper.SetProjExtState(0,"ReaSetSong",prefix .. "document",job.document)
+        reaper.SetProjExtState(0,"ReaSetSong",prefix .. "revision",job.revision or "")
+      end
+      if job.click then
+        local track=C.track(true)
+        for i=reaper.CountTrackMediaItems(track)-1,0,-1 do
+          local item=reaper.GetTrackMediaItem(track,i);local p=reaper.GetMediaItemInfo_Value(item,'D_POSITION')
+          if p>=song.s-.001 and p<song.e and C.owned(item) then reaper.DeleteTrackMediaItem(track,item)end
+        end
+        C.install(track,click_source,song.s,song.e-song.s,job.region);click_source=nil
+        reaper.SetProjExtState(0,'ReaSetSong',prefix..'click',job.click.revision)
+      end
     end
     reaper.SetProjExtState(0,"ReaSetSong",prefix .. "operation",job.operation)
     write(job.after,J.encode(snapshot()))
@@ -132,10 +183,11 @@ local function run()
     local recovered,why=pcall(install_snapshot,before)
     if not recovered then err=tostring(err) .. "; restore from " .. job.before .. ": " .. tostring(why) end
   end
-  reaper.PreventUIRefresh(-1); reaper.UpdateArrange(); reaper.MarkProjectDirty(0)
-  reaper.Undo_EndBlock((restored and "Restore" or "Update") .. " lyrics & chords: " .. job.region,-1)
+  reaper.PreventUIRefresh(-1); reaper.TrackList_AdjustWindows(false); reaper.UpdateArrange(); reaper.MarkProjectDirty(0)
+  if click_source then reaper.PCM_Source_Destroy(click_source)end
+  reaper.Undo_EndBlock((restored and "Restore" or "Update") .. (job.click and " chart/click: " or " lyrics & chords: ") .. job.region,-1)
   assert(success,err)
-  reply("ok",restored and "Previous song version restored" or "Lyrics and chords updated")
+  reply("ok",restored and "Previous song version restored" or job.click and (job.document and "Chart and click updated" or "Click updated; chart preserved") or "Lyrics and chords updated")
 end
 local success,err=pcall(run)
 if not success then reply("error",err); reaper.ShowConsoleMsg("[JamRoom update] " .. tostring(err) .. "\n") end

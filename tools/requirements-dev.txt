@@ -1,4 +1,3 @@
-requests
-numpy
+-r requirements-runtime.txt
 lupa==2.8
 playwright==1.62.0

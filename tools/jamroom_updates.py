@@ -35,7 +35,7 @@ class Updates:
         return cfg, project, root
 
     def song_state(self, cfg, songs):
-        keys = [f"song:{s['id']}:{field}" for s in songs for field in ("revision",)]
+        keys = [f"song:{s['id']}:{field}" for s in songs for field in ("revision","click")]
         if not keys: return {}
         result = requests.get(ji_url(cfg) + "/_/" + ";".join("GET/PROJEXTSTATE/ReaSetSong/" + k for k in keys), timeout=10)
         result.raise_for_status()
@@ -56,11 +56,16 @@ class Updates:
             current = (generation.get("generator") == ji.chart_model.GENERATOR and
                        states.get(f"song:{song['id']}:revision") == generation.get("revision"))
             revision = states.get(f"song:{song['id']}:revision")
+            click = job.get('click') or {}
+            click_current = (click.get('generator') == ji.click_model.GENERATOR and
+                             folder is not None and (folder/click.get('file','missing')).is_file() and
+                             states.get(f"song:{song['id']}:click") == click.get('generator','')+':'+click.get('file',''))
             manual_edits = bool(revision and revision != generation.get("revision"))
             status = "Keep this version" if protected else "Current" if current else "Update available" if job else "Source files missing"
             out.append(dict(song, project=project, protected=protected, current=current,
+                            click_current=click_current,click_eligible=bool(job) and not click_current,
                             manual_edits=manual_edits, update_status=status,
-                            eligible=bool(job) and not protected and not current))
+                            eligible=bool(job) and not protected and (not current or not click_current)))
         latest = read(root / "latest.json", {})
         batch = read(root / (latest.get("id", "none") + ".json"), None)
         if batch and batch["status"] == "running" and self.active != batch["id"]:
@@ -78,7 +83,7 @@ class Updates:
             else: values.pop(str(song_id), None)
             write(root / "settings.json", values)
 
-    def start(self, ids=None, resume=False, restore=False, replace_edits=False, target_project=None):
+    def start(self, ids=None, resume=False, restore=False, replace_edits=False, target_project=None, clicks_only=False):
         if not self.busy.acquire(blocking=False):
             raise ValueError("Another import or change is running")
         try:
@@ -98,9 +103,10 @@ class Updates:
             else:
                 if not isinstance(ids, list) or not ids: raise ValueError("Select songs to update")
                 chosen = [s for s in listing["songs"] if s["id"] in ids and
-                          (restore or not s["protected"] and (not s["current"] or replace_edits))]
+                          (restore or clicks_only and s['click_eligible'] or not s["protected"] and (s['eligible'] or replace_edits))]
                 batch = {"id": uuid.uuid4().hex, "project": project, "status": "running",
                          "restore": bool(restore), "replace_edits": bool(replace_edits),
+                         "clicks_only":bool(clicks_only),
                          "songs": [dict(s, status="pending", message="") for s in chosen]}
                 if not batch["songs"]: raise ValueError("Selected songs are protected, already current, or unavailable")
             batch["status"] = "running"
@@ -128,7 +134,7 @@ class Updates:
                 if int(transport.text.split("\t")[1]) != 0:
                     batch["status"] = "paused"; break
                 settings = read(root / "settings.json", {})
-                if not batch["restore"] and settings.get(str(item["id"])) == item["name"]:
+                if not batch["restore"] and not batch.get('clicks_only') and settings.get(str(item["id"])) == item["name"]:
                     item.update(status="skipped", message="Keep this version"); write(path,batch); continue
                 item["status"] = "working"; write(path,batch)
                 try:
@@ -177,28 +183,33 @@ class Updates:
         else:
             original = ji.load_job(folder)
             if not (folder / "job.json").is_file(): raise ValueError("No saved source job")
-            if not ((original.get("lyrics") or {}).get("lines") or
+            if not batch.get('clicks_only') and not ((original.get("lyrics") or {}).get("lines") or
                     (original.get("lyrics") or {}).get("plain") or
                     (original.get("chart") or {}).get("url") or ji.detected_chords(original,folder)):
                 raise ValueError("Cached lyrics and chord sources are missing; previous song retained")
-            if (item.get("manual_edits") or "Timing adjusted" in item.get("review_status", "")) and not batch["replace_edits"]:
+            if not batch.get('clicks_only') and (item.get("manual_edits") or "Timing adjusted" in item.get("review_status", "")) and not batch["replace_edits"]:
                 raise ValueError("Saved timing fixes: select 'Replace old timing fixes' to rebuild, or keep this version")
             write(op / "job-before.json", original)
             write(op / "installation-before.json", installed)
             candidate = copy.deepcopy(original)
             candidate["duration"] = item["end"] - item["start"]
-            ji.stage_lyrics_align(candidate, folder, False, persist=False)
-            ji.prepare_chart_document(candidate, folder)
+            if not batch.get('clicks_only'):
+                ji.stage_lyrics_align(candidate, folder, False, persist=False)
+                ji.prepare_chart_document(candidate, folder)
+            ji.click_model.ensure_click(candidate,folder)
             write(candidate_path,candidate)
-        expected = None if batch["replace_edits"] else installed.get("after")
-        self.push(cfg, item["name"], item, chords=candidate["chords"],
-                  lyric_lines=ji.chart_model.lyric_items(candidate), document=candidate["chart_document"],
+        expected = None if batch["replace_edits"] or batch.get('clicks_only') else installed.get("after")
+        click=candidate['click']
+        self.push(cfg, item["name"], item, chords=None if batch.get('clicks_only') else candidate["chords"],
+                  lyric_lines=None if batch.get('clicks_only') else ji.chart_model.lyric_items(candidate),
+                  document=None if batch.get('clicks_only') else candidate["chart_document"],
+                  click={'file':str(folder/click['file']),'revision':click['generator']+':'+click['file']},
                   operation_dir=op, expected=expected)
         ji.save_job(folder,candidate)
         write(installed_path, {"before": str(op / "before.json"), "after": str(op / "after.json"),
                               "job_before": str(op / "job-before.json"),
                               "installation_before": str(op / "installation-before.json"),
-                              "revision": candidate["chart_document"]["revision"]})
+                              "revision": candidate.get("chart_document",{}).get("revision","")})
 
 
 def ji_url(cfg):

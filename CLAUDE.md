@@ -38,6 +38,10 @@ ancestry first; never force-push or overwrite divergent changes. Pushing only
 `feature/timing-repair` does not deliver an update to standard installations.
 
 Current architecture:
+- v3.4 page offsets, previews, instrumental gaps and clicks are documented in
+  `docs/CHART_PAGES_AND_CLICKS.md`. Click-only updates must preserve manual charts.
+  Runtime dependencies live in `tools/requirements-runtime.txt`; the updater's
+  recovery helper and importer launcher install missing analysis dependencies.
 - `ReaSet.html`: single-file browser app, legacy timelines plus schema-2 section charts.
 - `tools/jamroom_importer_server.py`: optional local Python importer on port 8765.
 - `tools/jamroom_chart.py`: pure chart parsing and shared document generation.

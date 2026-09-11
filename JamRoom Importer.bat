@@ -3,6 +3,8 @@ title Jam Room Importer
 cd /d "%~dp0"
 
 setlocal
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File "%~dp0tools\ensure_importer_dependencies.ps1"
+if errorlevel 1 goto stopped
 rem The server detects an occupied port itself. Never kill another process or
 rem interrupt an in-progress import just because it owns port 8765.
 

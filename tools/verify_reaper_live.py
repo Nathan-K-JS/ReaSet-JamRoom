@@ -9,12 +9,14 @@ import subprocess
 import tempfile
 import time
 import jamroom_chart as chart
+import jamroom_click as click
 
 ROOT=Path(__file__).resolve().parent.parent
 
 
 def main():
     folder=Path(tempfile.mkdtemp(prefix='reaset-live-'))
+    click.render(folder/'click.wav',[.25+i*.5 for i in range(120)],60)
     doc,_=chart.build_document({'duration':60,'lyrics':{'synced':True,'lines':[
         {'time':10,'text':'Here we sing'},{'time':20,'text':''},
         {'time':40,'text':'Here we sing'},{'time':50,'text':''}]}},
@@ -73,6 +75,18 @@ local ok,why=pcall(function()
   check(apply('restore',{restore=folder..'/one/before.json',expected=folder..'/one/after.json'}).status=='ok','Restore actual REAPER item chunks')
   check(reaper.ULT_GetMediaItemNote(reaper.GetTrackMediaItem(reaper.GetTrack(0,0),0))=='old lyric','Original lyric restored')
   check(apply('two').status=='ok','Reapply after restore')
+  reaper.InsertTrackAtIndex(reaper.CountTracks(0),false)
+  reaper.GetSetMediaTrackInfo_String(reaper.GetTrack(0,reaper.CountTracks(0)-1),'P_NAME','PB CLICK',true)
+  local _,chart_before_click=reaper.GetProjExtState(0,'ReaSetSong','song:'..id..':document')
+  check(apply('click',{lyrics=false,chords=false,document=false,click={file=folder..'/click.wav',revision='test-click'}}).status=='ok','Click-only transaction applies')
+  local C=real_dofile(root..'/Requirements/ReaSet_Click.lua')
+  local ct=C.track(false);check(ct and reaper.CountTrackMediaItems(ct)==1,'One click item on CLICK bus')
+  local ci=reaper.GetTrackMediaItem(ct,0)
+  check(C.owned(ci) and math.abs(reaper.GetMediaItemInfo_Value(ci,'D_LENGTH')-60)<.001,'Click item owns full recording duration')
+  local _,chart_after_click=reaper.GetProjExtState(0,'ReaSetSong','song:'..id..':document')
+  check(chart_before_click==chart_after_click,'Click-only update preserves saved chart exactly')
+  check(apply('click-again',{lyrics=false,chords=false,document=false,click={file=folder..'/click.wav',revision='test-click'}}).status=='ok' and reaper.CountTrackMediaItems(ct)==1,'Click replacement does not duplicate clicks')
+  check(apply('click-restore',{restore=folder..'/click/before.json',expected=folder..'/click-again/after.json'}).status=='ok' and reaper.CountTrackMediaItems(ct)==0,'Click backup restores no-click state')
   -- Exercise the persistent chart bridge synchronously, with a private wire
   -- namespace so the running browser bridge is not disturbed.
   local real_set,real_get,real_delete=reaper.SetExtState,reaper.GetExtState,reaper.DeleteExtState
@@ -114,6 +128,9 @@ local ok,why=pcall(function()
   local cued,reply=chart_edit('cue','cue',{section=2,time=12})
   check(reply:match('^cue|ok|')~=nil and cued.sections[2].start==12,'Live cue command confirmed')
   check(J.encode(cued.sections[2].rows)==J.encode(prior.sections[2].rows),'Cue preserves every source word and chord column')
+  local shifted,shift_reply=chart_edit('shift','offset',{seconds=-1.5})
+  check(shift_reply:match('^shift|ok|')~=nil and shifted.timing_offset==-1.5,'Whole-song offset saved through live bridge')
+  check(J.encode(shifted.sections)==J.encode(cued.sections),'Whole-song offset preserves individual page cues')
   local allrows,keys=J.array(),J.array()
   for si,s in ipairs(cued.sections)do for ri,row in ipairs(s.rows)do
     allrows[#allrows+1]=row;keys[#keys+1]=row.id or ('legacy-'..si..'-'..ri)

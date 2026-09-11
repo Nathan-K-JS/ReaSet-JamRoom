@@ -168,10 +168,11 @@
   <div class="card hide" id="manCard">
     <label>Song library — source charts, sections and page timing</label>
     <button class="small" onclick="loadSongs(true)">Refresh list</button>
-    <button class="primary" onclick="openUpdates()">Update lyrics &amp; chords…</button>
+    <button class="primary" onclick="openUpdates()">Update charts &amp; click tracks…</button>
     <div id="updatesBox" class="hide" style="margin:18px 0;padding:16px;border:1px solid #8885;border-radius:12px">
       <label>Update existing songs</label>
-      <p class="note">Rebuild lyrics and charts using the latest importer. Your audio, routing and setlists stay in place. Previous versions are saved for restore.</p>
+      <p class="note">Update charts and add estimated rehearsal clicks, or choose click tracks only to keep section edits. Clicks use the CLICK bus. Listen against the stems before rehearsal. Previous versions are saved for restore.</p>
+      <label>Update <select id="updateMode" onchange="updateSelection={};loadUpdates()"><option value="both">Charts and click tracks</option><option value="clicks">Click tracks only (keep charts)</option></select></label>
       <select id="updateScope" onchange="updateSelection={};loadUpdates()"><option value="list">Current setlist</option><option value="all">All songs in this project</option></select>
       <button class="small" onclick="chooseUpdates(true)">Select eligible</button>
       <button class="small" onclick="chooseUpdates(false)">Deselect all</button>
@@ -334,7 +335,7 @@
 <script>
 // Version of THIS page (served fresh from disk). Compared against the version
 // of the running server. Either side may be older.
-var UI_BUILD = "v3.3.1";
+var UI_BUILD = "v3.4";
 
 function importerVersionWarning(serverBuild) {
   if (serverBuild === UI_BUILD) return '';
@@ -632,6 +633,8 @@ function openUpdates(){
   if(!updateScopeIds){$('updateScope').value='all';$('updateScope').options[0].disabled=true;}
   loadUpdates();
 }
+function clickUpdatesOnly(){return $('updateMode').value==='clicks';}
+function updateEligible(s){return clickUpdatesOnly()?s.click_eligible:s.eligible;}
 function loadUpdates(){
   clearTimeout(updateTimer);
   updateApi('').then(function(d){
@@ -640,10 +643,10 @@ function loadUpdates(){
     var shown=updateSongs.filter(function(s){return $('updateScope').value==='all'||!updateScopeIds||updateScopeIds.indexOf(s.id)>=0;});
     $('updateSongs').innerHTML='';
     shown.forEach(function(s){
-      if(updateSelection[s.id]===undefined)updateSelection[s.id]=s.eligible;
-      if(s.protected)updateSelection[s.id]=false;
+      if(updateSelection[s.id]===undefined)updateSelection[s.id]=updateEligible(s);
+      if(s.protected&&!clickUpdatesOnly())updateSelection[s.id]=false;
       var row=document.createElement('div');row.className='songrow';
-      var box=document.createElement('input');box.type='checkbox';box.checked=!!updateSelection[s.id];box.disabled=s.protected;
+      var box=document.createElement('input');box.type='checkbox';box.checked=!!updateSelection[s.id];box.disabled=s.protected&&!clickUpdatesOnly();
       box.setAttribute('aria-label','Select '+s.name);box.onchange=function(){updateSelection[s.id]=box.checked;};row.appendChild(box);
       var text=document.createElement('div');text.className='sname';text.textContent=s.name+' · '+s.update_status;row.appendChild(text);
       var keep=document.createElement('label');keep.className='note';var protect=document.createElement('input');protect.type='checkbox';protect.checked=s.protected;
@@ -659,12 +662,12 @@ function loadUpdates(){
   }).catch(updateError);
 }
 function updateError(e){$('updateProgress').textContent=e.message||String(e);$('updateStart').disabled=false;}
-function chooseUpdates(on){updateSongs.forEach(function(s){updateSelection[s.id]=on&&s.eligible;});loadUpdates();}
+function chooseUpdates(on){updateSongs.forEach(function(s){updateSelection[s.id]=on&&updateEligible(s);});loadUpdates();}
 function startUpdates(resume,restore,ids){
   ids=ids||updateSongs.filter(function(s){return updateSelection[s.id]&&($('updateScope').value==='all'||!updateScopeIds||updateScopeIds.indexOf(s.id)>=0);}).map(function(s){return s.id;});
   if(!resume&&!ids.length)return updateError('Select at least one song.');
   $('updateStart').disabled=true;$('updateProgress').textContent=restore?'Restoring saved versions…':'Preparing song updates…';
-  updateApi('/start',{ids:ids,resume:resume,restore:restore,project:updateProject,replace_edits:$('replaceTiming').checked}).then(loadUpdates).catch(updateError);
+  updateApi('/start',{ids:ids,resume:resume,restore:restore,project:updateProject,clicks_only:clickUpdatesOnly(),replace_edits:$('replaceTiming').checked}).then(loadUpdates).catch(updateError);
 }
 function pauseUpdates(){updateApi('/pause',{}).then(loadUpdates).catch(updateError);}
 function updateWholeLibrary(){
@@ -672,7 +675,7 @@ function updateWholeLibrary(){
   updateApi('').then(function(d){
     updateProject=d.project;updateSongs=d.songs||[];updateSelection={};
     $('updateScope').value='all';
-    var ids=updateSongs.filter(function(s){return s.eligible&&!s.protected;}).map(function(s){updateSelection[s.id]=true;return s.id;});
+    var ids=updateSongs.filter(function(s){return updateEligible(s)&&(!s.protected||clickUpdatesOnly());}).map(function(s){updateSelection[s.id]=true;return s.id;});
     if(!ids.length){updateError('All available songs are current or kept.');return;}
     startUpdates(false,false,ids);
   }).catch(updateError).finally(function(){$('updateWholeLibrary').disabled=false;});

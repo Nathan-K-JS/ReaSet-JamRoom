@@ -394,7 +394,7 @@ local function process_repair_command(want, song)
         return repair_reply(nonce, false,
             "Open the song you want to repair, then try again.")
     end
-    if action == "layout" or action == "cue" or action == "pagecue" then
+    if action == "layout" or action == "cue" or action == "pagecue" or action == "offset" then
         local _,project=reaper.GetProjExtState(0,'ReaSet','projectId')
         if project~=f[5] then return repair_reply(nonce,false,'Project changed; reopen the chart.') end
         local key='song:'..song.id..':'
@@ -431,7 +431,7 @@ local function process_repair_command(want, song)
         reaper.SetProjExtState(0,'ReaSetSong',key..'revision',result.revision)
         reaper.MarkProjectDirty(0)
         reaper.Undo_EndBlock('Edit chart '..action,-1)
-        repair_reply(nonce,true,action=='layout' and 'Sections saved. Chord positions preserved.' or 'Page timing saved. Chart content preserved.')
+        repair_reply(nonce,true,action=='layout' and 'Sections saved. Chord positions preserved.' or action=='offset' and 'Whole-song offset saved.' or 'Page timing saved. Chart content preserved.')
         return true
     end
     if action == "section" then return section_command(f,song) end

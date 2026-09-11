@@ -43,7 +43,7 @@ class ChartTests(unittest.TestCase):
         templates = model.parse_chart('[Intro]\n[ch]Am[/ch] [ch]F[/ch] x2\n\n[Verse]\n[ch]C[/ch]    [ch]G[/ch]\nFirst example line\n\n[Solo]\n[ch]Dm[/ch] [ch]E[/ch]\n\n[Chorus]\n[ch]F[/ch]\nSecond example line')
         doc, events = model.build_document(self.job(), templates, [])
         model.validate_document(doc)
-        self.assertEqual([s["label"] for s in doc["sections"]], ['Intro', 'Verse', 'Solo', 'Chorus'])
+        self.assertEqual([s["label"] for s in doc["sections"]], ['Intro', 'Verse', 'Solo', 'Chorus', 'Outro'])
         verse = doc["sections"][1]
         self.assertEqual((verse["start"], verse["end"]), (10,12))
         self.assertEqual(doc["sections"][2]["progression"], ['Dm','E'])
@@ -66,8 +66,8 @@ class ChartTests(unittest.TestCase):
     def test_conflicting_identical_lyrics_do_not_choose_arbitrary_harmony(self):
         templates=model.parse_chart('[Verse]\n[ch]C[/ch]\nFirst example line\n[Chorus]\n[ch]F#[/ch]\nFirst example line')
         doc,_=model.build_document(self.job(),templates,[])
-        self.assertEqual([s['progression'] for s in doc['sections']],[['C'],['F#']])
-        self.assertEqual([s['label'] for s in doc['sections']],['Verse','Chorus'])
+        self.assertEqual([s['progression'] for s in doc['sections'] if s['rows']],[['C'],['F#']])
+        self.assertEqual([s['label'] for s in doc['sections'] if s['rows']],['Verse','Chorus'])
 
     def test_instrumental_song_and_sustained_chord_are_valid(self):
         doc,events=model.build_document({'duration':60},model.parse_chart('[Intro]\n[ch]C[/ch]'),[{'start':0,'end':60,'chord':'C'}])

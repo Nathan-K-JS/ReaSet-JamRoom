@@ -110,6 +110,9 @@ function Restart-Importer {
 
 # Dot-sourcing exposes functions for isolated tests without stopping anything.
 if ($MyInvocation.InvocationName -ne '.') {
-    try { Restart-Importer; exit 0 }
+    try {
+        & (Join-Path $PSScriptRoot 'ensure_importer_dependencies.ps1')
+        Restart-Importer; exit 0
+    }
     catch { Write-Host "IMPORTER RECOVERY FAILED: $($_.Exception.Message)"; exit 1 }
 }

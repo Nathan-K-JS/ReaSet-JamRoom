@@ -185,6 +185,9 @@ if not ok then write('error.json',{error=tostring(why)});cleanup()end
                     page.evaluate('chartFollow()')
                     try:
                         session.get(WEB+'/_/1007',timeout=5).raise_for_status()
+                        page.wait_for_function('t=>currentPos>=t-.5&&currentPos<t',arg=section['start'],timeout=8000)
+                        early_label=page.get_by_role('combobox',name='Chart section').locator('option:checked').inner_text()
+                        assert early_label==section['label'],('Page did not turn early',early_label,section)
                         page.wait_for_function('t=>currentPos>=t&&currentPos<t+5',arg=section['start']+.5,timeout=8000)
                         state=session.get(WEB+'/_/TRANSPORT',timeout=5).text.split('\t')
                         label=page.get_by_role('combobox',name='Chart section').locator('option:checked').inner_text()
@@ -219,6 +222,14 @@ if not ok then write('error.json',{error=tostring(why)});cleanup()end
                 assert abs(cued['sections'][1]['start']-target) < .02
                 assert [r for s in edited['sections'] for r in s['rows']] == [r for s in cued['sections'] for r in s['rows']]
                 page.screenshot(path=str(folder / 'cue-confirmed.png'), full_page=True)
+                offset=page.get_by_role('spinbutton',name='Whole song timing offset')
+                offset.fill('1.2');offset.press('Tab')
+                page.wait_for_function('g_clData.document.timing_offset===1.2')
+                shifted=page.evaluate('g_clData.document')
+                assert shifted['sections']==cued['sections'],'Offset changed individual cues or source rows'
+                page.screenshot(path=str(folder/'whole-song-offset.png'),full_page=True)
+                page.get_by_role('button',name='Reset',exact=True).click()
+                page.wait_for_function('g_clData.document.timing_offset===0')
                 (folder / 'edits.json').write_text(json.dumps({'split_confirmed':True,'cue_confirmed':True,'source_rows_unchanged':True},indent=2))
             evidence = page.evaluate('({song:g_clData.song,chords:g_clData.chords.length,lyrics:g_clData.lyrics.length,bridgeAlive:clAlive(),mode:g_chordView})')
             browser.close()

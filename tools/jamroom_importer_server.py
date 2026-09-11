@@ -770,7 +770,7 @@ def project_identity(cfg=None):
 
 
 def _push_song_items(cfg, name, song, chords=None, lyric_lines=None,
-                     document=None, operation_dir=None, expected=None, restore=None):
+                     document=None, operation_dir=None, expected=None, restore=None, click=None):
     """Shared durable transaction for repairs and batch upgrades."""
     operation_dir = Path(operation_dir or (Path(cfg["jobs_dir"]) / ".updates" / project_identity(cfg) / uuid.uuid4().hex))
     operation_dir.mkdir(parents=True, exist_ok=True)
@@ -782,6 +782,7 @@ def _push_song_items(cfg, name, song, chords=None, lyric_lines=None,
                "after": str(operation_dir / "after.json"), "receipt": str(receipt)}
     if expected: request["expected"] = str(expected)
     if restore: request["restore"] = str(restore)
+    if click is not None: request['click'] = click
     if document is not None:
         request["document"] = json.dumps(document, ensure_ascii=True)
         request["revision"] = document.get("revision", "")
@@ -1090,6 +1091,7 @@ class Handler(BaseHTTPRequestHandler):
             if self.path == "/api/updates/start":
                 self._send(200, {"id": UPDATES.start(body.get("ids"),
                     resume=bool(body.get("resume")), restore=bool(body.get("restore")),
+                    clicks_only=bool(body.get('clicks_only')),
                     replace_edits=bool(body.get("replace_edits")), target_project=body.get("project"))})
             elif self.path == "/api/updates/pause":
                 UPDATES.stop.set()

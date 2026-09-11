@@ -23,7 +23,7 @@ class UpdateTests(unittest.TestCase):
         self.songs=[]
         for i in (1,2):
             folder=self.folder/('Song'+str(i))
-            ji.save_job(folder, {'duration':60,'stages':{},'lyrics':{'synced':True,
+            ji.save_job(folder, {'duration':60,'stages':{},'fadr':{'sample_rate':44100,'beat_length_samples':22050,'beat_offset_samples':0},'lyrics':{'synced':True,
                 'lines':[{'time':10,'text':'Song words'},{'time':20,'text':''}]},
                 'chords_detected':[{'start':0,'end':30,'chord':'C'}]})
             self.songs.append({'id':i,'name':folder.name,'start':(i-1)*60,'end':i*60,
@@ -102,6 +102,17 @@ class UpdateTests(unittest.TestCase):
         self.up.start([1]);self.push.assert_not_called()
         self.up.start([1],replace_edits=True)
         self.assertEqual(self.batch()['songs'][0]['status'],'done')
+
+    def test_click_only_updates_kept_manual_chart_without_regenerating_it(self):
+        self.up.protect(1,'Song1',True)
+        self.songs[0]['review_status']='Timing adjusted'
+        with patch.object(ji,'prepare_chart_document') as generate:
+            self.up.start([1],clicks_only=True)
+        self.assertEqual(self.batch()['songs'][0]['status'],'done')
+        generate.assert_not_called()
+        arguments=self.push.call_args.kwargs
+        self.assertIsNone(arguments['document']);self.assertIsNone(arguments['chords']);self.assertIsNone(arguments['lyric_lines'])
+        self.assertTrue(Path(arguments['click']['file']).is_file())
 
 
 if __name__=='__main__':unittest.main()

@@ -9,7 +9,10 @@ function M.apply(doc,action,data,duration)
   require_ok(type(doc)=='table' and type(doc.sections)=='table','No chart to edit')
   require_ok(type(data)=='table' and finite(duration) and duration>0,'Invalid edit')
   local function array() return setmetatable({},getmetatable(doc.sections)) end
-  if action=='layout' then
+  if action=='offset' then
+    require_ok(finite(data.seconds) and math.abs(data.seconds)<duration,'Offset must be shorter than the song')
+    doc.timing_offset=data.seconds
+  elseif action=='layout' then
     local rows,order={},{}
     for si,s in ipairs(doc.sections) do
       for ri,row in ipairs(s.rows or {}) do

@@ -10,7 +10,7 @@ import json
 import math
 import re
 
-GENERATOR = "source-pages-4"
+GENERATOR = "source-pages-5"
 PARSER = 3
 SCHEMA = 2
 CH = re.compile(r"\[ch\](.*?)\[/ch\]", re.I)
@@ -206,6 +206,11 @@ def source_sections(templates):
                     labels.add(re.sub(r'\s*\d+\s*$', '', candidate['label']).strip())
         label = next(iter(labels)) if len(labels) == 1 else 'Vocal section'
         first = next(i for i, r in enumerate(section['rows']) if _tokens(r['text']))
+        if first == 0 and re.match(r'^(interlude|break)\b', section['label'], re.I):
+            # Interludes/breaks can legitimately contain vocals. Repeated words
+            # do not make an earlier occurrence an outro.
+            sections.append(section)
+            continue
         if first:
             lead = copy.deepcopy(section)
             lead.update(rows=section['rows'][:first], kind='instrumental')
@@ -216,6 +221,64 @@ def source_sections(templates):
         issues.append({'code':'heading_contains_vocals', 'row':vocal[0]['id'],
                        'message':f"{original['label']} contains lyrics; separated as {label}. Check the section name."})
     return sections, issues
+
+
+def include_instrumental_gaps(sections, lyrics, duration, issues):
+    """Expose explicit lyric gaps without inventing source chords or words."""
+    if not lyrics:
+        return sections
+    gaps = []
+    if lyrics[0]['start'] >= 4:
+        gaps.append((0., lyrics[0]['start']))
+    for i, line in enumerate(lyrics):
+        end = lyrics[i+1]['start'] if i+1 < len(lyrics) else duration
+        if line.get('ended_by_gap') and end-line['end'] >= 4:
+            gaps.append((line['end'], end))
+    out = []
+    for section in sections:
+        a, b = section['start'], section['end']
+        cuts = sorted({a,b} | {max(a,min(b,t)) for gap in gaps for t in gap})
+        pieces = []
+        for start, end in zip(cuts,cuts[1:]):
+            gap = any(x <= start+.001 and end <= y+.001 for x,y in gaps)
+            # Authored instrumental sections already carry the right content.
+            if section['kind'] == 'instrumental':
+                pieces = [copy.deepcopy(section)]
+                break
+            piece = copy.deepcopy(section)
+            piece.update(start=start,end=end,rows=[],progression=[])
+            if gap:
+                piece.update(label='Intro' if start==0 else 'Outro' if end==duration else 'Instrumental',
+                             kind='instrumental',evidence='lyric gap',confidence='estimated',
+                             missing_source_chords=True)
+            pieces.append(piece)
+        if section['kind'] != 'instrumental':
+            previous = 0
+            for row in section['rows']:
+                cue = row.get('cue', a)
+                target = next((i for i,p in enumerate(pieces) if p['start']<=cue<p['end']),len(pieces)-1)
+                target = max(previous,target)
+                if pieces[target].get('missing_source_chords') and not row['text'].strip() and row.get('anchors'):
+                    pieces[target]['missing_source_chords']=False
+                elif pieces[target].get('evidence')=='lyric gap' and row['text'].strip():
+                    available = [i for i,p in enumerate(pieces) if p.get('evidence')!='lyric gap' and i>=previous]
+                    if available:
+                        target = min(available,key=lambda i:abs(i-target))
+                    else:
+                        # No defensible split: keep the authored passage intact.
+                        pieces=[copy.deepcopy(section)];break
+                pieces[target]['rows'].append(row)
+                pieces[target]['progression'].extend(x['symbol'] for x in row.get('anchors',[]))
+                previous=target
+        for piece in pieces:
+            if piece.get('missing_source_chords'):
+                issues.append({'code':'instrumental_gap','message':f"Instrumental gap at {piece['start']:.1f}s has no supplied chart chords. Check its cue and the recording version."})
+            if piece['kind']=='vocal' and not piece['rows']:
+                piece.update(kind='unscored',label='Chart passage missing')
+        out.extend(pieces)
+    for i, section in enumerate(out):
+        section['id']=f'section-{i}'
+    return out
 
 
 def build_document(job, templates, detected, transpose=lambda x: x):
@@ -329,7 +392,7 @@ def build_document(job, templates, detected, transpose=lambda x: x):
                            'message':'Instrumental boundary has no usable interval; passage kept with the preceding section. Split and tap its start if needed.'})
         else:
             grouped.append(section)
-    sections = grouped
+    sections = include_instrumental_gaps(grouped, lyrics, duration, issues)
     source_count = len(source_words)
     matched_words = sum(len(matches) for matches in row_matches.values())
     if matched_words < source_count * .9:
