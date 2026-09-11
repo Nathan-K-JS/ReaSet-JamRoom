@@ -503,7 +503,12 @@ local function publish(json)
     reaper.SetExtState(SEC, "meta", s_gen .. ":" .. n, false)  -- commit record
 end
 
+-- Command-line script launches can bypass REAPER's usual task-control dialog.
+-- Let the newest instance own publication; an older instance must not erase it.
+local instance=tostring(reaper.time_precise())..':'..tostring({})
 local function clear_all()
+    if reaper.GetExtState(SEC,'instance')~=instance then return end
+    reaper.SetExtState(SEC,'instance','',false)
     reaper.SetExtState(SEC, "meta", "", false)
     reaper.SetExtState(SEC, "heartbeat", "", false)
     reaper.SetExtState(SEC, "want", "", false)
@@ -516,6 +521,7 @@ local s_hb, s_hb_next, s_last_csc, s_last_proj, s_last_song = 0, 0, -1, nil, nil
 local s_last_want, s_force = nil, false
 
 local function main_loop()
+    if reaper.GetExtState(SEC,'instance')~=instance then return end
     local now = reaper.time_precise()
     if now >= s_hb_next then
         s_hb = s_hb + 1
@@ -560,6 +566,7 @@ local function main_loop()
 end
 
 reaper.atexit(clear_all)
+reaper.SetExtState(SEC,'instance',instance,false)
 reaper.SetExtState(SEC, 'build', 'source-pages-2', false)
 reaper.SetToggleCommandState(({ reaper.get_action_context() })[3],
                              ({ reaper.get_action_context() })[4], 1)

@@ -78,3 +78,14 @@ passed. This distinction is why mocked transport tests alone are insufficient.
 These are readable source charts with editable page cues. They are not an
 assertion of accurate automatic audible synchronization. Review playback and
 correct estimated cues with Timing on the performance screen.
+
+The live session also exposed duplicate background publishers left by repeated
+command-line launches. A clean REAPER restart removed the older instances.
+The bridge now gives ownership to its newest instance; older loops exit without
+clearing the new publisher's state. The live REAPER check verifies this handoff.
+
+Final repeat: `imports/.visual/song-97zn4z_w/` passed the browser split/cue checks
+and cleanup. Cleanup compares complete track chunks, regions, chart documents,
+legacy corrections and ReaSet project settings, plus the cursor. It records the
+raw project change counter separately because legacy publishers update their
+current-text fields during normal operation. Both checks passed in this run.

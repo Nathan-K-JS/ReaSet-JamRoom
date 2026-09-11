@@ -57,6 +57,31 @@ def main():
 local root,folder=ROOT,FOLDER
 local J=dofile(root..'/Requirements/ReaSet_JSON.lua')
 local original=reaper.EnumProjects(-1,'')
+local function song_snapshot(project)
+  local parts={}
+  for i=-1,reaper.CountTracks(project)-1 do
+    local track=i<0 and reaper.GetMasterTrack(project) or reaper.GetTrack(project,i)
+    local ok,chunk=reaper.GetTrackStateChunk(track,'',false);assert(ok)
+    parts[#parts+1]=chunk
+  end
+  local i=0
+  while true do
+    local ok,region,a,b,name,id,color=reaper.EnumProjectMarkers3(project,i)
+    if ok==0 then break end
+    parts[#parts+1]=J.encode({region=region,start=a,finish=b,name=name,id=id,color=color});i=i+1
+  end
+  for _,section in ipairs({'ReaSetSong','ReaSetCLRepair','ReaSet'}) do
+    local entries={};local i=0
+    while true do
+      local ok,key,value=reaper.EnumProjExtState(project,section,i)
+      if not ok then break end
+      entries[#entries+1]=key..'='..value;i=i+1
+    end
+    table.sort(entries);parts[#parts+1]=table.concat(entries,'\n')
+  end
+  return table.concat(parts,'\n---\n')
+end
+local original_snapshot=song_snapshot(original)
 local count=reaper.GetProjectStateChangeCount(original)
 local cursor=reaper.GetCursorPosition()
 local scratch,closed=nil,false
@@ -72,7 +97,8 @@ local function cleanup()
     reaper.Main_OnCommand(40860,0)
   end
   reaper.SelectProjectInstance(original)
-  write('cleanup.json',{original_unchanged=reaper.GetProjectStateChangeCount(original)==count and reaper.GetCursorPosition()==cursor})
+  write('cleanup.json',{original_unchanged=song_snapshot(original)==original_snapshot and reaper.GetCursorPosition()==cursor,
+    state_counter_unchanged=reaper.GetProjectStateChangeCount(original)==count})
 end
 local exit_callback
 reaper.atexit(function()if exit_callback then exit_callback()end;cleanup()end)

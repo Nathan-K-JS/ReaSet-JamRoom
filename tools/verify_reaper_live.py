@@ -81,7 +81,8 @@ local ok,why=pcall(function()
   reaper.DeleteExtState=function(sec,key,persist)return real_delete(sec=='ReaSetCL' and 'ReaSetSmokeCL' or sec,key,persist)end
   local tick
   reaper.defer=function(fn)tick=fn end
-  reaper.atexit=function()end
+  local bridge_exit
+  reaper.atexit=function(fn)bridge_exit=fn end
   reaper.SetToggleCommandState=function()end
   reaper.SetEditCurPos(10,false,false)
   real_dofile(root..'/Requirements/ReaSet_ChordsLyrics.lua')
@@ -123,6 +124,11 @@ local ok,why=pcall(function()
   local _,rejected=chart_edit('old-layout','layout',{sections={{label='Stale',start=0,rows=keys}}},prior.revision)
   check(rejected:match('^old%-layout|error|')~=nil,'Stale full-chart editor rejected')
   check(apply('late-restore',{restore=folder..'/two/before.json',expected=folder..'/two/after.json'}).status=='error','Rollback preserves subsequent section edits')
+  local old_tick,old_exit=tick,bridge_exit
+  real_dofile(root..'/Requirements/ReaSet_ChordsLyrics.lua')
+  local owner,meta=real_get('ReaSetSmokeCL','instance'),real_get('ReaSetSmokeCL','meta')
+  old_tick();old_exit()
+  check(owner==real_get('ReaSetSmokeCL','instance') and meta==real_get('ReaSetSmokeCL','meta') and tick~=old_tick,'Duplicate publisher yields without clearing the new instance')
 end)
 -- Always restore the original tab, including on a failed assertion.
 local cleaned,cleanup_error=pcall(function()
