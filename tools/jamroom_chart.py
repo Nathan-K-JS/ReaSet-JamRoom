@@ -10,7 +10,7 @@ import json
 import math
 import re
 
-GENERATOR = "source-pages-2"
+GENERATOR = "source-pages-3"
 PARSER = 2
 SCHEMA = 2
 CH = re.compile(r"\[ch\](.*?)\[/ch\]", re.I)
@@ -133,18 +133,54 @@ def _tokens(text):
     return re.findall(r"[a-z0-9]+", re.sub(r"['\u2019\-]", "", text.casefold()))
 
 
+def source_sections(templates):
+    """Headings can be wrong; words, columns and occurrence order cannot change."""
+    sections, issues = [], []
+    instrumental = re.compile(r"^(instrumental|solo|guitar solo|lead break|interlude|riff|break)\b", re.I)
+    for ti, original in enumerate(templates):
+        section = copy.deepcopy(original)
+        section['template'] = ti
+        vocal = [r for r in section['rows'] if _tokens(r['text'])]
+        if not instrumental.match(section['label']) or not vocal:
+            sections.append(section)
+            continue
+        words = [w for r in vocal for w in _tokens(r['text'])]
+        labels = set()
+        for candidate in templates:
+            if instrumental.match(candidate['label']):
+                continue
+            other = [w for r in candidate['rows'] for w in _tokens(r['text'])]
+            # Require a whole repeated passage, not a common phrase or a guess
+            # based on harmony. Ambiguous verse/chorus matches stay unnamed.
+            if len(vocal) >= 2 and len(words) >= 8 and other:
+                if difflib.SequenceMatcher(None, words, other, autojunk=False).ratio() >= .9:
+                    labels.add(re.sub(r'\s*\d+\s*$', '', candidate['label']).strip())
+        label = next(iter(labels)) if len(labels) == 1 else 'Vocal section'
+        first = next(i for i, r in enumerate(section['rows']) if _tokens(r['text']))
+        if first:
+            lead = copy.deepcopy(section)
+            lead.update(rows=section['rows'][:first], kind='instrumental')
+            sections.append(lead)
+        section.update(rows=section['rows'][first:], label=label, kind='vocal',
+                       source_label=original['label'], structure_confidence='inferred')
+        sections.append(section)
+        issues.append({'code':'heading_contains_vocals', 'row':vocal[0]['id'],
+                       'message':f"{original['label']} contains lyrics; separated as {label}. Check the section name."})
+    return sections, issues
+
+
 def build_document(job, templates, detected, transpose=lambda x: x):
     if not templates:
         return _build_unscored_document(job, [], detected, transpose)
     duration = float(job.get("duration") or 0)
     if not math.isfinite(duration) or duration <= 0:
         raise ValueError("Recording duration is missing or invalid")
-    sections = copy.deepcopy(templates)
+    sections, issues = source_sections(templates)
     source_words, source_owner = [], []
     for si, section in enumerate(sections):
-        section.update(id=f"section-{si}", template=si, evidence="chart", confidence="estimated", event_timing="unresolved")
+        section.update(id=f"section-{si}", evidence="chart", confidence="estimated", event_timing="unresolved")
         for ri, row in enumerate(section["rows"]):
-            row["id"] = f"source-{si}-{ri}"
+            row.setdefault("id", f"source-{si}-{ri}")
             for anchor in row["anchors"]:
                 anchor["symbol"] = transpose(anchor["symbol"])
             tokens = _tokens(row["text"])
@@ -209,11 +245,42 @@ def build_document(job, templates, detected, transpose=lambda x: x):
         section["start"] = round(starts[si],3)
     for si, section in enumerate(sections):
         section["end"] = sections[si+1]["start"] if si+1<len(sections) else duration
+    # LRC line ends often mean "next lyric starts", not "singing stopped".
+    # Do not manufacture a standalone instrumental page in that zero-width gap.
+    # Keep its written passage on the preceding page, where it remains available
+    # until the next vocal entrance. The section editor can split it again once
+    # the musician supplies the missing boundary.
+    grouped = []
+    for section in sections:
+        if grouped and section['kind'] == 'instrumental' and section['end']-section['start'] < 2:
+            previous = grouped[-1]
+            if section['rows']:
+                section['rows'][0]['source_section'] = section['label']
+            previous['rows'].extend(section['rows'])
+            previous['progression'].extend(section['progression'])
+            previous['end'] = section['end']
+            previous['label'] += ' / ' + section['label']
+            issues.append({'code':'unresolved_instrumental_boundary', 'section':previous['id'],
+                           'message':'Instrumental boundary has no usable interval; passage kept with the preceding section. Split and tap its start if needed.'})
+        else:
+            grouped.append(section)
+    sections = grouped
+    source_count = len(source_words)
+    matched_words = sum(len(matches) for matches in row_matches.values())
+    if matched_words < source_count * .9:
+        issues.append({'code':'unmatched_source_words', 'message':'Some chart words have no reliable recording match. Check the source version and page cues.'})
+    if matched_words < len(sung_words) * .9:
+        issues.append({'code':'unrepresented_recording_words', 'message':'Some timed recording words are absent from the chart. Check for missing passages or a different song version.'})
+    for section in sections:
+        if section['end']-section['start'] < 2:
+            issues.append({'code':'short_section', 'section':section['id'], 'message':'Section lasts less than two seconds; check its boundary.'})
     doc = {"schema":SCHEMA,"generator":GENERATOR,"source_preserved":True,"duration":duration,
            "sections":sections,"templates":copy.deepcopy(templates),
            "source_hash":fingerprint(templates),"lyrics_hash":fingerprint(job.get("lyrics",{})),
            "alignment":{"matched_rows":matched_rows,"source_rows":sum(bool(r["text"].strip()) for s in sections for r in s["rows"]),
-                        "purpose":"section cues only"}}
+                        "purpose":"section cues only"},
+           "review":{"status":"needs_review", "issues":issues,
+                     "timing":"estimated", "message":"Source chord placement preserved. Section names and playback cues still need review; text matching does not verify musical timing."}}
     doc["revision"] = fingerprint(doc)
     # Precise views retain measured evidence, distinct from the authored chart.
     events = [dict(c) for c in detected if 0 <= c["start"] < c["end"] <= duration]

@@ -36,7 +36,7 @@ import jamroom_chart as chart_model
 # what is on disk — the importer server holds its modules in memory, so this is
 # how you tell "did the update take effect?" from "is the old process still up?"
 # BUMP THIS whenever the importer changes, and quote it when handing over.
-BUILD = "v3.1"
+BUILD = "v3.2"
 BUILD_DATE = "2026-09-11"
 
 # Fadr's S3 throttles each connection independently, so several transfers at
@@ -224,7 +224,7 @@ YTDLP_CLIENTS = [
 
 
 def _ytdlp_download(out, url, extractor_args):
-    args = ["--no-playlist", "-f", "bestaudio", "-x", "--audio-format", "wav",
+    args = ["--no-playlist", "-f", "bestaudio[ext=m4a]/bestaudio", "-x", "--audio-format", "m4a",
             "--write-info-json", "-o", str(out)]
     if extractor_args:
         args += ["--extractor-args", extractor_args]
@@ -233,7 +233,7 @@ def _ytdlp_download(out, url, extractor_args):
 
 
 def _download_any_client(out, url, wav):
-    """Try each client config until one produces the WAV."""
+    """Try each client config until one produces the requested audio file."""
     last = None
     for cfg in YTDLP_CLIENTS:
         wav.unlink(missing_ok=True)
@@ -274,9 +274,10 @@ def stage_download(job, job_dir, url, force):
     if job["stages"].get("download") and not force:
         log("Download stage already done — skipping.")
         return
-    log("Downloading best-quality audio (yt-dlp -> WAV)...")
+    started = time.monotonic()
+    log("Downloading compressed audio (prefer native M4A; convert only if unavailable)...")
     out = job_dir / "source.%(ext)s"
-    wav = job_dir / "source.wav"
+    wav = job_dir / "source.m4a"
     ok, last = _download_any_client(out, url, wav)
     if not ok:
         # Nine times out of ten the real problem is that yt-dlp itself is out of
@@ -297,7 +298,8 @@ def stage_download(job, job_dir, url, force):
                         "-of", "csv=p=0", str(wav)], capture_output=True, text=True)
     duration = round(float(pr.stdout.strip()), 3)
     job["duration"] = duration
-    job["source"]["audio_file"] = "source.wav"
+    job["source"]["audio_file"] = wav.name
+    job.setdefault("performance", {})["download_seconds"] = round(time.monotonic()-started, 2)
     job["stages"]["download"] = True
     save_job(job_dir, job)
     log(f"Downloaded: {wav.name} ({duration:.1f}s)")
@@ -325,20 +327,27 @@ class Fadr:
         # in the Fadr library, and it is how an already-paid-for split is found
         # again later instead of being re-uploaded and re-charged.
         name = sanitize_filename(display_name or path.name)
-        if not name.lower().endswith(".wav"):
-            name += ".wav"
+        extension = path.suffix.lower().lstrip('.')
+        content_type = {'wav':'audio/wav', 'mp3':'audio/mpeg', 'm4a':'audio/mp4',
+                        'aac':'audio/aac', 'flac':'audio/flac', 'aif':'audio/aiff'}.get(extension)
+        if not content_type:
+            die(f"Unsupported Fadr upload format: {path.suffix}")
+        if not name.lower().endswith('.' + extension):
+            name += '.' + extension
         j = self._check(self.s.post(f"{FADR_API}/assets/upload2",
-                                    json={"name": name, "extension": "wav"},
+                                    json={"name": name, "extension": extension},
                                     timeout=60), "create upload URL")
         url, s3path = j["url"], j["s3Path"]
         log(f"Uploading {name} ({path.stat().st_size / 1e6:.1f} MB) to Fadr...")
+        started = time.monotonic()
         with open(path, "rb") as f:
-            r = requests.put(url, data=f, headers={"Content-Type": "audio/wav"},
+            r = requests.put(url, data=f, headers={"Content-Type": content_type},
                              timeout=600)
         if r.status_code >= 400:
             die(f"Fadr file upload failed (HTTP {r.status_code})")
+        log(f"Fadr upload took {time.monotonic()-started:.1f}s.")
         j = self._check(self.s.post(f"{FADR_API}/assets",
-                                    json={"name": name, "extension": "wav",
+                                    json={"name": name, "extension": extension,
                                           "group": f"{name}-group", "s3Path": s3path},
                                     timeout=60), "create asset")
         return j["asset"]
@@ -583,7 +592,7 @@ def stage_fadr(job, job_dir, cfg, force):
         except SystemExit:
             raise
     if main_asset is None:
-        src_asset = fadr.upload(job_dir / "source.wav",
+        src_asset = fadr.upload(job_dir / (job.get("source", {}).get("audio_file") or "source.wav"),
                                 display_name=job.get("region_name"))
         task = fadr.wait_task(fadr.stem_task(src_asset["_id"])["_id"],
                               "main stem split")

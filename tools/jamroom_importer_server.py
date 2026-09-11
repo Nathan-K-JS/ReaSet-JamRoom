@@ -217,7 +217,8 @@ def build_review(job, job_dir, cfg):
                       "key_offset": chart.get("key_offset", 0),
                       "lines_matched": chart.get("lines_matched"),
                       "chart_lines": chart.get("chart_lines"),
-                      "fallback_reason": chart.get("fallback_reason", "")},
+                      "fallback_reason": chart.get("fallback_reason", ""),
+                      "review": (job.get("chart_document") or {}).get("review")},
             "lyrics_source": ly.get("source"),
             "slot_labels": {sid: cfg["slot_labels"].get(sid, name)
                             for sid, name in SLOT_CHOICES if sid != "SKIP"},
@@ -280,7 +281,7 @@ def run_prepare(url, band, title, rebuild=False):
         old_job = ji.load_job(job_dir)
         if (old_job.get("audio_deleted") or
                 (old_job.get("stages", {}).get("download") and
-                 not (job_dir / "source.wav").is_file())):
+                 not (job_dir / (old_job.get("source", {}).get("audio_file") or "source.wav")).is_file())):
             rebuild = True
         if rebuild:
             # A replacement recording must not inherit completed pipeline
@@ -559,10 +560,11 @@ def delete_song_audio(cfg, name):
         if p.is_dir():
             freed += _dir_size(p)
             shutil.rmtree(p, ignore_errors=True)
-    src = folder / "source.wav"
-    if src.is_file():
-        freed += src.stat().st_size
-        src.unlink(missing_ok=True)
+    for filename in ("source.wav", "source.m4a"):
+        src = folder / filename
+        if src.is_file():
+            freed += src.stat().st_size
+            src.unlink(missing_ok=True)
     # Mark it so the UI knows the audio is gone without statting every file.
     try:
         job = ji.load_job(folder)
@@ -581,7 +583,7 @@ def job_has_audio(folder):
 def job_has_cached_audio(folder):
     """Whether any recording data could be reused by a resumed pipeline."""
     folder = Path(folder)
-    return (folder / "source.wav").is_file() or job_has_audio(folder)
+    return any((folder / name).is_file() for name in ("source.wav", "source.m4a")) or job_has_audio(folder)
 
 
 def orphan_jobs():

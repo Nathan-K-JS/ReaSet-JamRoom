@@ -108,6 +108,15 @@ class BrowserTests(unittest.TestCase):
         self.assertEqual(self.page.locator('#chords-live .sc-words').count(),0)
         self.assertIn('C',self.page.locator('#chords-live .sc-paper').inner_text())
 
+    def test_pagination_does_not_orphan_transition_on_an_extra_page(self):
+        self.load_reaset()
+        rows='\n'.join('[ch]C[/ch]     [ch]G[/ch]\nAn original line for the musicians' for _ in range(9))
+        doc,_=chart.build_document({'duration':60},chart.parse_chart('[Verse]\n'+rows+'\n[ch]C[/ch] [ch]G[/ch]'),[])
+        pages=self.page.evaluate("doc=>chartBuildPages(doc,1440,650,'sheet',0)",doc)
+        self.assertEqual(len(pages),2,'Two pages fit; balancing must not introduce a third')
+        self.assertTrue(any(p['hasWords'] for p in pages[-1]['parts']))
+        self.assertFalse(pages[-1]['parts'][-1]['hasWords'])
+
     def test_full_chart_editor_keeps_unsaved_changes_local(self):
         self.load_reaset()
         self.page.evaluate('chartEditorOpen()')
@@ -280,6 +289,20 @@ class BrowserTests(unittest.TestCase):
                 self.assertIn(expected, message)
                 self.assertNotIn('Stop-Process', message)
         self.assertEqual(self.page.evaluate("importerVersionWarning('v3.0.0')"), '')
+
+    def test_importer_review_does_not_treat_a_perfect_match_as_quality_approval(self):
+        def route(req):
+            if '/api/' in req.request.url:req.fulfill(json={'songs':[],'state':'idle'})
+            else:req.fulfill(path=str(ROOT/'tools/importer.html'))
+        self.page.route('**/*',route)
+        self.page.goto('http://importer.test/')
+        self.page.evaluate("""renderChartNow({chart:{url:'https://tabs.ultimate-guitar.com/test',method:'sections',lines_matched:50,chart_lines:50,
+          review:{issues:[{message:'Missing passage <example>'}]}}})""")
+        text=self.page.locator('#chartNow').inner_text()
+        self.assertIn('Text matching does not verify musical timing',text)
+        self.assertIn('Missing passage <example>',text)
+        self.assertNotIn('50 of 50',text)
+        self.assertEqual(self.page.locator('#chartNow example').count(),0)
 
     def test_fadr_picker_starts_default_import_through_visible_buttons(self):
         song={'id':'split-song','name':'Paramore - Misery Business','duration':199.3,

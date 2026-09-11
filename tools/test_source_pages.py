@@ -36,6 +36,39 @@ class JobPersistenceTests(unittest.TestCase):
             self.assertEqual(json.loads((target/'job.json').read_text()),{'old':True})
 
 class SourceChartTests(unittest.TestCase):
+    def test_mislabeled_repeated_passage_keeps_every_source_column(self):
+        chorus='[ch]C[/ch]   [ch]G[/ch]\nWe are singing in the rain\n[ch]Am[/ch]\nEvery little light will shine'
+        templates=chart.parse_chart('[Chorus]\n'+chorus+'\n[Instrumental]\n[ch]F[/ch]\n\n'+chorus)
+        before=copy.deepcopy(templates)
+        doc,_=chart.build_document({'duration':60},templates,[])
+        self.assertEqual([s['label'] for s in doc['sections']],['Chorus','Instrumental','Chorus'])
+        fields=lambda sections:[(r['id'],r['text'],r['anchors']) for s in sections for r in s['rows']]
+        self.assertEqual(fields(templates),fields(doc['sections']))
+        self.assertEqual(templates,before)
+        self.assertEqual(doc['review']['status'],'needs_review')
+
+    def test_unknown_vocals_are_not_arbitrarily_named_chorus(self):
+        templates=chart.parse_chart('[Solo]\n[ch]C[/ch]\nThese are some entirely new words\n[ch]G[/ch]\nWith another line to sing')
+        doc,_=chart.build_document({'duration':30},templates,[])
+        self.assertEqual(doc['sections'][0]['label'],'Vocal section')
+
+    def test_zero_instrumental_gap_does_not_make_a_flashing_page(self):
+        templates=chart.parse_chart('[Verse]\n[ch]C[/ch]\nHere we are now\n[Instrumental]\n[ch]D[/ch]\n[Chorus]\n[ch]G[/ch]\nThere we go again')
+        job={'duration':40,'lyrics':{'synced':True,'lines':[{'time':5,'text':'Here we are now'},{'time':15,'text':'There we go again'}]}}
+        doc,_=chart.build_document(job,templates,[])
+        self.assertEqual(len(doc['sections']),2)
+        self.assertEqual([r['id'] for s in doc['sections'] for r in s['rows']],['source-0-0','source-1-0','source-2-0'])
+        self.assertEqual(doc['sections'][1]['start'],15)
+        self.assertTrue(any(i['code']=='unresolved_instrumental_boundary' for i in doc['review']['issues']))
+        self.assertEqual(doc['alignment']['matched_rows'],2)
+        self.assertEqual(doc['review']['status'],'needs_review','Perfect text match is not musical verification')
+
+    def test_missing_recording_passage_is_flagged_even_if_all_chart_words_match(self):
+        templates=chart.parse_chart('[Verse]\n[ch]C[/ch]\nHere we are now')
+        job={'duration':40,'lyrics':{'synced':True,'lines':[{'time':5,'text':'Here we are now'},{'time':15,'text':'Entirely different missing passage after the verse'}]}}
+        doc,_=chart.build_document(job,templates,[])
+        self.assertTrue(any(i['code']=='unrepresented_recording_words' for i in doc['review']['issues']))
+
     def test_merged_lyric_lines_do_not_erase_authored_changes(self):
         source='[Pre-Chorus]\n[ch]E[/ch]   [ch]F#m[/ch]\n        Touch the sky\n[ch]E[/ch]   [ch]F#m[/ch]\n        Touch the sea\n[Chorus]\n[ch]C[/ch]          [ch]G[/ch]\nKeep the light on\n[Post-Chorus]\n[ch]Am[/ch]\nLa la la'
         templates=chart.parse_chart(source)

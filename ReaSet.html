@@ -4897,7 +4897,7 @@
         // Old repair links now open the one section workflow.
         function openTimingRepair(scope, quiet) {
             if (!g_clData || !g_clData.song || !clAlive()) return false;
-            if (g_clData.document && g_clData.document.generator === 'source-pages-2') {
+            if (g_clData.document && g_clData.document.source_preserved) {
                 chartEditorOpen();
             } else {
                 alert('Update this song from Song library to use section editing and page timing.');
@@ -9030,16 +9030,32 @@
                     if(trial.reduce(function(n,f){return n+cost(f);},0)<=room){font=size;break;}
                 }
                 fragments=layout(font);budget=Math.max(3.1,(height-198-(g_chartTiming?56:0))/font);
-                var total=fragments.reduce(function(n,f){return n+cost(f);},0);
-                // Balance pages so a long verse doesn't leave one orphan line.
-                var target=Math.min(budget,total/Math.max(1,Math.ceil(total/budget))+.1);
-                var sectionPages=[],page={section:si,parts:[],font:font},used=0;
+                // Pack whole lyric rows whenever they fit. Optimise page count
+                // first, then balance space: a guessed target height could make
+                // three pages where two fit and orphan the final riff.
+                var blocks=[];
                 fragments.forEach(function(f){
-                    var amount=cost(f);
-                    if(page.parts.length && used+amount>target){sectionPages.push(page);page={section:si,parts:[],font:font};used=0;}
-                    page.parts.push(f);used+=amount;
+                    var last=blocks[blocks.length-1];
+                    if(last && last.row===f.row && last.cost+cost(f)<=budget){last.parts.push(f);last.cost+=cost(f);}
+                    else blocks.push({row:f.row,parts:[f],cost:cost(f)});
                 });
-                sectionPages.push(page);
+                var best=[{count:0,score:0,previous:0}];
+                for(var end=1;end<=blocks.length;end++){
+                    var sum=0,choice=null;
+                    for(var begin=end-1;begin>=0;begin--){
+                        sum+=blocks[begin].cost;if(sum>budget+.001)break;
+                        var prior=best[begin],score=prior.score+Math.pow(budget-sum,2),count=prior.count+1;
+                        if(!choice || count<choice.count || (count===choice.count && score<choice.score))choice={count:count,score:score,previous:begin};
+                    }
+                    best.push(choice);
+                }
+                var sectionPages=[];
+                for(var end=blocks.length;end>0;){
+                    var begin=best[end].previous,parts=[];
+                    for(var k=begin;k<end;k++)parts=parts.concat(blocks[k].parts);
+                    sectionPages.unshift({section:si,parts:parts,font:font});end=begin;
+                }
+                if(!sectionPages.length)sectionPages.push({section:si,parts:[],font:font});
                 sectionPages.forEach(function(p,i){
                     p.part=i;p.total=sectionPages.length;
                     var first=p.parts[0], guess=section.start+(section.end-section.start)*i/sectionPages.length;
@@ -9129,14 +9145,15 @@
             source.hidden=!/^https:\/\/(?:tabs\.)?ultimate-guitar\.com\//i.test(url);
             source.href=source.hidden?'#':url;
             g_chartEdit={revision:doc.revision,project:g_clData.project,song:g_clData.song.id,
-                sections:JSON.parse(JSON.stringify(doc.sections)),duration:doc.duration};
+                sections:JSON.parse(JSON.stringify(doc.sections)),duration:doc.duration,review:doc.review};
             g_chartEdit.sections.forEach(function(s,si){(s.rows||[]).forEach(function(r,ri){r._key=chartRowKey(r,si,ri);});});
             document.getElementById('chart-editor').classList.remove('hide');chartEditorRender();chartStatus('');
         }
         function chartEditorClose(){if(g_chartPending)return;document.getElementById('chart-editor').classList.add('hide');g_chartEdit=null;}
         function chartEditorRender(){
             var host=document.getElementById('chart-edit-lines');
-            host.innerHTML=g_chartEdit.sections.map(function(s,si){return '<section class="ce-section"><div class="ce-section-head"><input aria-label="Section name" value="'+trEsc(s.label)+'" onchange="g_chartEdit.sections['+si+'].label=this.value"><label>Start <input aria-label="Section start" type="number" step="0.01" min="0" value="'+s.start+'" onchange="g_chartEdit.sections['+si+'].start=Number(this.value)"></label>'+(si?'<button onclick="chartEditorJoin('+si+')">Join previous</button>':'')+'</div>'+(s.rows||[]).map(function(r,ri){return '<div class="ce-row"><div>'+trEsc(r.text.trim()||((r.anchors||[]).map(function(a){return a.symbol;}).join('  ')||'Instrumental'))+'</div>'+(ri?'<button onclick="chartEditorSplit('+si+','+ri+')">Start section here</button>':'<small>First line</small>')+'</div>';}).join('')+'</section>';}).join('');
+            var review=g_chartEdit.review;
+            host.innerHTML=(review?'<p>'+trEsc(review.message)+'</p>'+review.issues.map(function(issue){return '<p>'+trEsc(issue.message)+'</p>';}).join(''):'')+g_chartEdit.sections.map(function(s,si){return '<section class="ce-section"><div class="ce-section-head"><input aria-label="Section name" value="'+trEsc(s.label)+'" onchange="g_chartEdit.sections['+si+'].label=this.value"><label>Start <input aria-label="Section start" type="number" step="0.01" min="0" value="'+s.start+'" onchange="g_chartEdit.sections['+si+'].start=Number(this.value)"></label>'+(si?'<button onclick="chartEditorJoin('+si+')">Join previous</button>':'')+'</div>'+(s.rows||[]).map(function(r,ri){return '<div class="ce-row"><div>'+trEsc(r.text.trim()||((r.anchors||[]).map(function(a){return a.symbol;}).join('  ')||'Instrumental'))+'</div>'+(ri?'<button onclick="chartEditorSplit('+si+','+ri+')">Start section here</button>':'<small>First line</small>')+'</div>';}).join('')+'</section>';}).join('');
         }
         function chartEditorSplit(si,ri){
             var s=g_chartEdit.sections[si],end=g_chartEdit.sections[si+1]?g_chartEdit.sections[si+1].start:g_chartEdit.duration;
