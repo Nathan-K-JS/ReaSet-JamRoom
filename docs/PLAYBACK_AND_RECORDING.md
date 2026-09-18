@@ -479,6 +479,11 @@ scratch projects as described in the release verification above:
 
 ## Agreed upgrades
 
+The next proposed upgrade is [a listening recording to take home](LISTENING_RECORDINGS.md):
+one selected take rendered by REAPER to a stereo WAV/MP3, with preview and local
+QR download. It is planned, not implemented. The approved launch UX fixes are
+tracked in [LAUNCH_UX_FIXES.md](LAUNCH_UX_FIXES.md).
+
 **Delivered in ReaSet v3.8:** [Free-jam recording with optional click and count-in](FREE_JAM_RECORDING.md),
 using the existing input selection, take management, recovery and export workflow.
 

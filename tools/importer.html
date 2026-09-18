@@ -118,6 +118,8 @@
   #importQueue h2{color:#a1eac9}#queueMessage,#queueRecovery{margin-top:12px;line-height:1.5}
   #queueRecovery:empty{display:none}#queueRecovery{padding:12px;border:1px solid #59636e;border-radius:10px}
   #queueRecovery select{width:100%}
+  #rechordKey{width:100%;min-width:0;max-width:100%}
+  #rechordBox input{min-width:0;flex:1;font:inherit;padding:10px;border:1px solid #3a3f47;border-radius:8px;background:#12141a;color:#e8eaed}
   @media(max-width:500px){body{padding:10px}.srctabs{flex-wrap:wrap}.srctab{flex-basis:40%}}
 </style>
 </head>
@@ -177,7 +179,7 @@
   <div class="card hide" id="manCard">
     <label>Song library — source charts, sections and page timing</label>
     <button class="small" onclick="loadSongs(true)">Refresh list</button>
-    <button class="primary" onclick="openUpdates()">Update charts &amp; click tracks…</button>
+    <button class="primary" onclick="openUpdates()">Update charts, click &amp; playback levels…</button>
     <div id="updatesBox" class="hide" style="margin:18px 0;padding:16px;border:1px solid #8885;border-radius:12px">
       <label>Update existing songs</label>
       <p class="note">Choose click tracks only to keep section edits. Clicks follow the recording; flagged candidates are installed muted. Use Review click to see the flagged passages and hear music with the click, then enable it after checking. Previous versions are saved for restore.</p>
@@ -237,7 +239,7 @@
       </div>
       <label style="margin-top:10px">Key of the chart against the recording</label>
       <select id="rechordKey">
-        <option value="">Automatic — keep chart key unless evidence supports a shift</option>
+        <option value="">Automatic</option>
       </select>
       <div class="note">Charts are often written in an easier key than the
         record, and that shift is detected from the audio. If it lands in the
@@ -346,7 +348,7 @@
 <script>
 // Version of THIS page (served fresh from disk). Compared against the version
 // of the running server. Either side may be older.
-var UI_BUILD = "v3.9";
+var UI_BUILD = "v3.10";
 
 function importerVersionWarning(serverBuild) {
   if (serverBuild === UI_BUILD) return '';

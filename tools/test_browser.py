@@ -226,6 +226,106 @@ class BrowserTests(unittest.TestCase):
             self.assertLessEqual(result['content'], result['bar'] + 1)
             self.assertLessEqual(result['last'], result['bar'] + 1)
 
+    def test_more_menu_is_clickable_and_fullscreen_exit_restores_transport(self):
+        self.load_reaset()
+        for width,height in ((1280,800),(768,1024),(390,844),(320,568),(844,390)):
+            self.page.set_viewport_size({'width':width,'height':height})
+            self.page.evaluate('liveFontScale=1')
+            self.page.locator('#more-views-toggle').click()
+            self.page.locator('#tab-btn-live').click()
+            self.assertTrue(self.page.locator('#live-view').is_visible())
+            self.page.evaluate('adjustLiveSize(0)')
+            before=self.page.locator('#live-song-name').evaluate('e=>parseFloat(getComputedStyle(e).fontSize)')
+            self.page.evaluate('adjustLiveSize(-1)')
+            after=self.page.locator('#live-song-name').evaluate('e=>parseFloat(getComputedStyle(e).fontSize)')
+            self.assertLess(after,before)
+            self.page.locator('#tab-btn-show').click()
+            self.assertFalse(self.page.locator('#live-view').is_visible())
+            self.page.locator('#more-views-toggle').click()
+            self.page.locator('#tab-btn-canvas').click()
+            self.page.evaluate('closeCanvasMode()')
+            self.assertTrue(self.page.locator('#main-play-btn').is_visible())
+            bounds=self.page.locator('#more-views-toggle').bounding_box()
+            self.assertLessEqual(bounds['x']+bounds['width'],width+1)
+        self.page.locator('#more-views-toggle').click()
+        self.page.set_viewport_size({'width':390,'height':844})
+        self.page.wait_for_timeout(100)
+        self.assertFalse(self.page.locator('#more-views-menu').is_visible())
+
+    def test_dialogs_cover_performance_bar_and_landscape_chart_keeps_music_space(self):
+        self.load_reaset()
+        self.page.set_viewport_size({'width':844,'height':390})
+        self.page.evaluate('toggleChordsPanel();renderChordsView()')
+        self.page.wait_for_timeout(100)
+        geometry=self.page.locator('#chords-live .sc-paper').evaluate('''e=>{
+          let r=e.getBoundingClientRect(),line=e.querySelector('.sc-chords').getBoundingClientRect();
+          return {height:r.height,lineBottom:line.bottom,bottom:r.bottom};}''')
+        self.assertGreaterEqual(geometry['height'],64)
+        self.assertLessEqual(geometry['lineBottom'],geometry['bottom'])
+        self.page.evaluate('chartEditorOpen()')
+        self.assertTrue(self.page.evaluate('''() => {
+          let r=document.getElementById('perfBar').getBoundingClientRect();
+          return document.getElementById('chart-editor').contains(document.elementFromPoint(innerWidth/2,r.y+r.height/2));
+        }'''))
+        self.page.get_by_role('button',name='Close',exact=True).click()
+        self.page.evaluate('openMidiModal()')
+        self.assertTrue(self.page.evaluate('''() => {
+          let r=document.getElementById('perfBar').getBoundingClientRect();
+          return document.getElementById('midi-modal-overlay').contains(document.elementFromPoint(innerWidth/2,r.y+r.height/2));
+        }'''))
+
+    def test_phone_title_selects_silently_and_explicit_play_still_works(self):
+        self.setup_transport()
+        self.page.set_viewport_size({'width':390,'height':844})
+        self.page.evaluate("displayList[0].name='Everybody Wants To Rule The World';renderSetlist();sent=[]")
+        title=self.page.locator('.song-title-area').first
+        self.assertGreater(title.bounding_box()['width'],150)
+        title.click()
+        self.page.wait_for_timeout(150)
+        self.assertEqual(self.page.evaluate('sent'),['1016;SET/POS/0'])
+        self.page.evaluate('sent=[]')
+        title.press('Space')
+        self.assertEqual(self.page.evaluate('sent'),['1016;SET/POS/0'])
+        self.page.locator('.song-play-btn').first.click()
+        self.assertEqual(self.page.evaluate('sent.at(-1)'),"SET/POS/0;1007")
+        self.page.evaluate('isPlaying=true;document.getElementById("queueModeToggle").checked=true;sent=[]')
+        self.page.locator('.song-title-area').nth(1).click()
+        self.assertEqual(self.page.evaluate('queuedRegion.id'),'2')
+        self.assertEqual(self.page.evaluate('sent'),[])
+        self.page.locator('.song-dotmenu-btn').first.click()
+        self.assertTrue(self.page.get_by_role('button',name='Toggle skip',exact=True).is_visible())
+
+    def test_recording_footer_records_with_jam_draft_and_never_plays_backing(self):
+        self.recording_state()
+        self.page.evaluate("g_recState.recordMode='freejam';g_recState.jam={bpm:100,beats:4,click:true};recRender();sent=[]")
+        self.page.locator('#rec-jam-bpm').fill('132')
+        self.page.locator('#main-play-btn').click()
+        self.assertNotIn(1007,self.page.evaluate('sent'))
+        command=json.loads(self.page.evaluate("decodeURIComponent(sent.at(-1)).split('/want/')[1]"))
+        self.assertEqual((command['op'],command['jam']['bpm']),('record',132))
+        self.assertTrue(self.page.locator('#main-play-btn').is_disabled())
+        self.page.evaluate("g_recPending=null;g_recState.mode='recording';g_recState.paused=true;recRender()")
+        self.assertIn('RESUME',self.page.locator('#main-play-btn').inner_text())
+        self.page.evaluate("g_recState.mode='idle';g_recHb.at=0;recRender()")
+        self.assertTrue(self.page.locator('#main-play-btn').is_disabled())
+        self.page.evaluate('openLiveView()')
+        self.assertFalse(self.page.locator('#recording-panel').is_visible())
+        self.assertNotIn('RECORD',self.page.locator('#main-play-btn').inner_text())
+
+    def test_connection_status_expires_and_legacy_settings_only_show_where_applicable(self):
+        self.load_reaset()
+        self.page.evaluate('openSidebar()')
+        self.assertFalse(self.page.locator('#font-size-slider').is_visible())
+        self.assertFalse(self.page.locator('#chords-size-slider').is_visible())
+        self.page.evaluate('g_clData.document=null;openSidebar()')
+        self.assertTrue(self.page.locator('#font-size-slider').is_visible())
+        self.page.evaluate("wwr_onreply('TRANSPORT\\t0\\t0\\t0\\n')")
+        self.assertIn('Connected',self.page.locator('#sidebar .connection-status').inner_text())
+        self.page.evaluate('g_roomLastReply-=5000;updateConnectionStatus()')
+        self.assertIn('No response',self.page.locator('#sidebar .connection-status').inner_text())
+        self.page.evaluate('reconnectRoom()')
+        self.assertIn('Reconnecting',self.page.locator('#sidebar .connection-status').inner_text())
+
     def test_muted_click_item_uses_bridge_and_waits_for_confirmation(self):
         self.load_reaset()
         self.page.evaluate('''() => {

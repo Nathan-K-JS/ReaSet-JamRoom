@@ -38,6 +38,12 @@ ancestry first; never force-push or overwrite divergent changes. Pushing only
 `feature/timing-repair` does not deliver an update to standard installations.
 
 Current architecture:
+- v3.10 addresses launch UX review findings 1–10 and replaces transport SYNC with
+  connection status/Reconnect; see `docs/LAUNCH_UX_FIXES.md`. Song titles select
+  silently; explicit Play and queue mode remain. Empty recording cleanup must
+  preserve unknown files and recovery entries. `docs/LISTENING_RECORDINGS.md`
+  is the requested next-feature plan only: native REAPER stereo render and local
+  listening/download/QR sharing, not implemented by this release.
 - v3.9 adds automatic song-volume matching at import and via full/volume-only
   library updates; see `docs/SONG_VOLUME_MATCHING.md`. `jamroom_loudness.py`
   measures final cached slots excluding click, stores a suggestion, and never

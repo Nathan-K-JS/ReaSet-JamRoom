@@ -3416,13 +3416,13 @@
         .rec-input span{min-width:0;overflow-wrap:anywhere}
         .rec-meter{flex-shrink:0}
         .legacy-chart-notice{padding:10px 14px;font-size:13px;color:#c6ccd5;background:#252c35;border-radius:8px;margin-bottom:12px}
-        .more-views{position:relative;align-self:center;color:#b9c5c4;font-size:12px;flex-shrink:0}
-        .more-views summary{cursor:pointer;padding:14px 10px;min-height:44px}
-        .more-views:has(.vtab.active) summary{color:#70dba6}
-        .more-views-menu{position:fixed;top:56px;right:12px;z-index:20000;background:#20262d;border:1px solid #485464;border-radius:10px;padding:8px;box-shadow:0 8px 30px #0008}
-        .more-views-menu .vtab{min-width:140px;min-height:48px;flex-direction:row;gap:10px}
+        .more-views{align-self:center;color:#b9c5c4;font-size:12px;flex-shrink:0;background:transparent;border:0;cursor:pointer;padding:10px;min-height:44px;width:auto;margin:0}
+        .more-views[aria-expanded=true]{color:#70dba6}
+        .more-views-menu{position:fixed;top:56px;right:12px;z-index:1500;background:#20262d;border:1px solid #485464;border-radius:10px;padding:8px;box-shadow:0 8px 30px #0008;max-height:calc(100dvh - 68px);overflow:auto}
+        .more-views-menu .vtab{min-width:140px;min-height:48px;flex-direction:row;gap:10px;width:100%;margin:0;border:0;border-radius:6px;background:transparent;color:#eef2f7;cursor:pointer}
+        .more-views-menu .vtab:hover{background:#303b46}
         button:focus-visible,summary:focus-visible,.vtab:focus-visible{outline:2px solid #70dba6;outline-offset:2px}
-        @media(max-width:620px){.rec-input-grid{grid-template-columns:1fr}.more-views summary{padding:12px 6px}}
+        @media(max-width:620px){.rec-input-grid{grid-template-columns:1fr}}
         @media(max-width:900px){.app-topbar-info{display:none}.vtab{padding:0 9px}}
 
         .jr-song-name {
@@ -3610,6 +3610,57 @@
         .ce-row button{font-size:12px!important}.ce-row small{font-size:12px;color:#a5b1c3}
         #chart-edit-status{min-height:24px;padding-top:12px;color:#8edbcc}
         @media(max-width:600px){#chords-panel.source-chart,#lyrics-panel.source-chart{padding:8px}.structured-chart .sc-nav{gap:4px}.structured-chart button{padding:7px;font-size:12px;min-height:36px}.sc-heading select{font-size:20px!important}#chart-editor{inset:58px 4px 4px;padding:12px}.ce-row{grid-template-columns:1fr}.ce-row button{justify-self:start}}
+        /* Shared overlays live above the performance bar; music keeps its own space. */
+        .song-ctx-panel{max-height:calc(100dvh - 16px);overflow-y:auto}
+        .song-play-btn{flex-shrink:0;width:40px;height:44px;margin:0;padding:0;border:0;border-radius:10px;background:#20392d;color:#8edbcc;cursor:pointer}
+        .grid-card .song-play-btn{position:absolute;bottom:8px;right:8px}
+        .grid-card .grid-card-dur{right:58px}
+        .song-title-area{cursor:pointer}
+        .song-title-area:focus-visible{outline:2px solid #8edbcc;outline-offset:4px}
+        .add-song-btn{width:auto;flex-shrink:0;min-height:40px;padding:8px 12px;margin:0;border:1px solid #39785f;border-radius:10px;background:#17362b;color:#a1eac9;cursor:pointer}
+        .app-setlist-row .n-select{min-width:0}
+        .connection-summary{padding:12px 4px;color:#b9c5c4;font-size:13px}
+        .connection-status[data-online=false]{color:#ffbc83}
+        #connection-menu{border-top:1px solid #485464;margin-top:8px;padding-top:8px}
+        #connection-menu button{width:100%;min-height:44px;border:0;border-radius:6px;background:#303b46;color:#eef2f7;cursor:pointer}
+        .app-transport.recording-context #main-play-btn{background:#b22c46;color:#fff}
+        .app-transport.recording-context #footer-loop-btn{display:none}
+        .app-transport button:disabled{opacity:.45;cursor:default}
+        body.full-display .app-transport{display:none}
+        body.free-jam-screen #perfBar{display:none}
+        #live-view{top:56px;bottom:var(--perf-clearance,44px);overflow:auto;justify-content:flex-start;padding-top:70px}
+        #live-view>*{flex-shrink:0}
+        #canvas-mode{bottom:var(--perf-clearance,44px)}
+        #chart-editor{max-height:calc(100dvh - 64px);overflow:auto}
+        @media(max-width:620px){
+            .app-topbar{padding:0;overflow:visible}.app-menu-btn{width:38px;flex-shrink:0}
+            .app-topbar>.vtab{min-width:0;flex:1;padding:0 3px;font-size:10px}
+            .app-topbar>.vtab span:last-child{max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+            .more-views{padding:4px;width:42px;font-size:10px}.vtab-spacer{display:none}
+            .app-setlist-row{gap:6px;padding:8px}.add-song-btn{font-size:12px;padding:8px}
+            .song-row>.drag-handle,.song-row>.song-index,.song-row>.song-actions{display:none}
+            .song-row{gap:6px;padding-left:8px;padding-right:8px}
+            .song-title-area{min-width:0;flex:1}.song-name{white-space:normal;overflow-wrap:anywhere;line-height:1.3}
+            .song-dotmenu-btn{width:28px;min-width:28px;margin:0}.song-chevron{width:22px;min-width:22px}
+            .song-chevron:not(.has-subs){display:none}.song-duration{font-size:11px;min-width:32px}
+            #live-song-name{font-size:calc(clamp(28px,9vw,52px) * var(--live-font-scale,1))!important}
+        }
+        @media(max-height:500px){
+            #chords-panel.source-chart,#lyrics-panel.source-chart{padding:4px 10px;gap:4px;overflow:auto}
+            .source-chart>.cv-tabs{min-height:26px;height:26px}
+            .source-chart>.cv-tabs button{padding:3px 12px;min-height:26px}
+            #chords-live.structured-chart,#lyrics-live.structured-chart{min-height:172px!important;gap:4px;grid-template-rows:32px 28px minmax(68px,1fr) 20px;overflow:visible}
+            .structured-chart .sc-nav{min-height:32px;flex-wrap:nowrap;overflow-x:auto}
+            .structured-chart button,.sc-heading select{min-height:28px!important;padding:4px 8px!important;font-size:13px!important}
+            .sc-heading{padding:0}.sc-heading select{font-size:18px!important}
+            .sc-preview{display:none}.sc-footer{min-height:20px;font-size:11px;padding:2px;flex-wrap:nowrap}
+            .sc-footer>span:last-child{overflow:hidden;white-space:nowrap;text-overflow:ellipsis}
+            .sc-paper{padding:2px 8px}.sc-timing{height:110px}
+            #chart-editor{inset:4px 8px;padding:10px;max-height:calc(100dvh - 8px)}
+            #chart-editor>p{display:none}#chart-edit-lines{min-height:90px}
+            #live-view{padding:50px 16px 16px;gap:8px}#live-song-name{font-size:calc(32px * var(--live-font-scale,1))!important}
+        }
+        @media(max-width:360px){.app-menu-btn{width:32px}.more-views{width:34px;font-size:9px}.app-topbar>.vtab{font-size:9px;padding:0 1px}}
     </style>
 </head>
 
@@ -3636,11 +3687,7 @@
             </div>
             <div class="vtab" id="tab-btn-recording" onclick="recTogglePanel()"><span class="vtab-icon">●</span><span id="rec-tab-label">RECORD</span></div>
 
-            <details class="more-views"><summary>More views</summary><div class="more-views-menu">            <div class="vtab" id="tab-btn-live" onclick="openLiveView();this.closest('details').open=false">
-                <span class="vtab-icon">▶</span><span>Live dashboard</span>
-            </div>            <div class="vtab" id="tab-btn-canvas" onclick="openCanvasMode();this.closest('details').open=false">
-                <span class="vtab-icon">▣</span><span>Stage display</span>
-            </div></div></details>
+            <button class="more-views" id="more-views-toggle" aria-label="More views and connection" aria-expanded="false" aria-controls="more-views-menu" onclick="toggleMoreViews()">More ▾</button>
             <div class="vtab-spacer"></div>
 
             <div class="app-topbar-info">
@@ -3654,6 +3701,7 @@
         <div class="app-setlist-row">
             <select id="setlistSelect" class="n-select" onchange="changeSetlist()"></select>
             <button class="n-btn-new" onclick="createSetlist()" title="New">+</button>
+            <button class="add-song-btn" onclick="openSongImporter()">Add song</button>
             <div class="dotmenu-wrap" id="dotMenuWrap" style="position:relative">
                 <button class="n-dotmenu-btn" onclick="toggleDotMenu(event)" title="Options">···</button>
                 <div class="dotmenu-dropdown" id="dotMenuDropdown">
@@ -3661,10 +3709,10 @@
                         <span class="dm-icon">⇅</span> <span id="autoSortLabel">Sort: Band A–Z</span>
                     </button>
                     <button class="dotmenu-item" onclick="exportSetlists();closeDotMenu()">
-                        <span class="dm-icon">↓</span> Export
+                        <span class="dm-icon">↓</span> Export setlists
                     </button>
                     <button class="dotmenu-item" onclick="triggerImport();closeDotMenu()">
-                        <span class="dm-icon">↑</span> Import
+                        <span class="dm-icon">↑</span> Import setlists
                     </button>
                     <button class="dotmenu-item item-danger" onclick="deleteSetlist();closeDotMenu()">
                         <span class="dm-icon">✕</span> Delete
@@ -3693,12 +3741,17 @@
             <button class="t-btn t-btn-stop" id="main-stop-btn" onclick="smartStop()" style="user-select:none;-webkit-user-select:none">■
                 STOP</button>
             <button id="footer-loop-btn" class="t-btn t-btn-loop" onclick="toggleCurrentLoop()">↻ Loop</button>
-            <button class="t-btn t-btn-sync" onclick="wwr_start()">SYNC</button>
             <span id="native-loop-indicator" title="ReaSet NativeLoop conectado"
                   style="display:none; color:#34c759; font-size:10px; font-weight:700;
                          letter-spacing:0.5px; align-self:center; padding:0 4px;
                          opacity:0.8;">⬡ NL</span>
         </div>
+    </div>
+
+    <div class="more-views-menu hide" id="more-views-menu">
+        <button class="vtab" id="tab-btn-live" onclick="closeMoreViews();openLiveView()">Live dashboard</button>
+        <button class="vtab" id="tab-btn-canvas" onclick="closeMoreViews();openCanvasMode()">Stage display</button>
+        <div id="connection-menu"><div class="connection-summary connection-status" role="status">Connecting to REAPER…</div><button onclick="reconnectRoom()">Reconnect</button></div>
     </div>
 
     <!-- SIDEBAR OVERLAY -->
@@ -3712,8 +3765,9 @@
         </div>
 
         <div class="sidebar-section">
-            <div class="sidebar-section-title">Song charts</div>
-            <button class="sidebar-action-btn sab-slate" onclick="openSongUpdates();closeSidebar()">Song library &amp; chart updates</button>
+            <div class="sidebar-section-title">Song library</div>
+            <button class="sidebar-action-btn sab-slate" onclick="openSongImporter();closeSidebar()">Add a song</button>
+            <button class="sidebar-action-btn sab-slate" onclick="openSongUpdates();closeSidebar()">Library, charts, click &amp; volume updates</button>
         </div>
         <div class="sidebar-section">
             <div class="sidebar-section-title">Show Options</div>
@@ -3915,8 +3969,9 @@
             <div class="sidebar-section-title">Version</div>
             <div style="color:#8b9199;font-size:.78rem;padding:2px 4px 10px" id="reasetVer"></div>
             <div class="sidebar-section-title">REAPER Connection</div>
-            <button class="sidebar-action-btn sab-slate" onclick="wwr_start();closeSidebar()">
-                <span class="sab-icon">↻</span> Sync
+            <div class="connection-summary connection-status" role="status">Connecting to REAPER…</div>
+            <button class="sidebar-action-btn sab-slate" onclick="reconnectRoom()">
+                <span class="sab-icon">↻</span> Reconnect
             </button>
         </div>
     </div>
@@ -4274,8 +4329,7 @@
                 <div class="cw-content" id="cw-content-transport">
                     <div class="cw-transport-wrapper" style="display: flex; gap: 8px; justify-content: center;">
                         <button class="lt-btn lt-ghost" onclick="canvasNav('prev')">⏮</button>
-                        <button class="lt-btn lt-stop" id="cw-stop-btn" onclick="smartStop()" style="user-select:none;-webkit-user-select:none">■ STOP
-                            (Hold)</button>
+                        <button class="lt-btn lt-stop" id="cw-stop-btn" onclick="smartStop()" style="user-select:none;-webkit-user-select:none">■ STOP</button>
                         <button class="lt-btn lt-play" id="cw-play-btn" onclick="togglePlay()">▶ PLAY</button>
                         <button class="lt-btn lt-ghost" onclick="canvasNav('next')">⏭</button>
                     </div>
@@ -4552,13 +4606,14 @@
             panel.className = 'song-ctx-panel';
             panel.innerHTML =
                 '<div class="song-ctx-header">' + (songName.length > 22 ? songName.slice(0,20) + '\u2026' : songName) + '</div>'
+                + '<div class="rec-actions"><button class="rec-btn" onclick="toggleChain(\''+songId+'\');closeOpenCtxPanel()">Chain '+(displayList.find(function(s){return s.id==songId;}).chain?'off':'on')+'</button><button class="rec-btn" onclick="toggleLoop(\''+songId+'\');closeOpenCtxPanel()">Toggle loop</button><button class="rec-btn" onclick="toggleSkip(\''+songId+'\');closeOpenCtxPanel()">Toggle skip</button></div>'
                 + '<div class="song-ctx-section"><div class="song-ctx-row">'
                 + '<span class="song-ctx-label"><svg width="13" height="13" viewBox="0 0 13 13" style="display:inline;vertical-align:-2px"><rect x="2.5" y="2.5" width="8" height="8" rx="1.5" fill="rgba(255,255,255,0.65)"/></svg> Stop after song</span>'
                 + '<label class="song-ctx-toggle"><input type="checkbox" id="_ctx_stop_' + songId + '"' + (stopAfter ? ' checked' : '') + ' onchange="_ctxSetStop(\'' + songId + '\',this.checked)"><span class="song-ctx-track"><span class="song-ctx-thumb"></span></span></label>'
                 + '</div></div>'
                 + '<div class="song-ctx-section"><div class="song-ctx-row">'
                 + '<span class="song-ctx-label"><svg width="13" height="13" viewBox="0 0 13 13" style="display:inline;vertical-align:-2px"><circle cx="6.5" cy="7.5" r="4.5" stroke="rgba(255,255,255,0.65)" stroke-width="1.3" fill="none"/><line x1="6.5" y1="7.5" x2="8.5" y2="5.5" stroke="rgba(255,255,255,0.65)" stroke-width="1.3" stroke-linecap="round"/><path d="M5 1.5h3" stroke="rgba(255,255,255,0.65)" stroke-width="1.3" stroke-linecap="round"/><path d="M6.5 1.5v1.2" stroke="rgba(255,255,255,0.65)" stroke-width="1.3" stroke-linecap="round"/></svg> Delay after song</span></div>'
-                + '<div class="song-ctx-sublabel">Segundos antes del siguiente</div>'
+                + '<div class="song-ctx-sublabel">Seconds before the next song</div>'
                 + '<div class="song-ctx-row"><input type="number" min="0" max="300" step="1" class="song-ctx-input num-input" id="_ctx_delay_' + songId + '" value="' + delayAfter + '" ' + (stopAfter ? 'disabled' : '') + ' placeholder="0" onchange="_ctxSetDelay(\'' + songId + '\',this.value)">'
                 + '<span class="song-ctx-label" style="font-size:11px;color:rgba(255,255,255,0.38)">s</span></div></div>'
                 + '<div class="song-ctx-section">'
@@ -4577,7 +4632,7 @@
             _ctxPanel = panel;
 
             var br = btn.getBoundingClientRect();
-            var pw = 258, ph = 420;
+            var pw = panel.offsetWidth, ph = panel.offsetHeight;
             var left = br.left;
             var top  = br.bottom + 6;
             if (left + pw > window.innerWidth  - 8) left = window.innerWidth  - pw - 8;
@@ -4868,10 +4923,9 @@
             + '.tk-status{color:#9aa0a6;font-size:.75rem;text-align:center;margin-top:8px}'
             + '.tk-off{color:#9aa0a6;font-size:.85rem;text-align:center;padding:6px}'
             + '.cv-tkbadge{color:#f0b429;font-size:.78rem;margin-top:2px}'
-            // Performance bar: above every panel (which sit at z-index 1000-ish)
-            // and clear of the transport footer.
+            // Above performance panels, below menus/dialogs, clear of transport.
             + '#perfBar{position:fixed;left:0;right:0;bottom:var(--perf-bottom,86px);'
-            + 'z-index:12000;background:#171a20;border-top:1px solid #2c3038;'
+            + 'z-index:350;background:#171a20;border-top:1px solid #2c3038;'
             + 'border-bottom:1px solid #2c3038;box-shadow:0 -4px 16px rgba(0,0,0,.45)}'
             + '#perfChips{display:flex;gap:8px;align-items:center;justify-content:center;'
             + 'padding:7px 10px;cursor:pointer;flex-wrap:wrap}'
@@ -5438,7 +5492,7 @@
         syncLeadSlider();
         tkRenderPanel();             // paints the performance chips on load
         // Shown in the sidebar so a stale cached page is obvious after a deploy.
-        var REASET_VERSION = "v3.9 - song volume matching";
+        var REASET_VERSION = "v3.10 - musician interface fixes";
         var _rv = document.getElementById("reasetVer");
         if (_rv) _rv.textContent = REASET_VERSION;
         (function () { var t = localStorage.getItem("reasetlist_theme") || "dark"; setTheme(t, true); })();
@@ -5481,6 +5535,7 @@
                 if (!tok.length) continue;
                 switch (tok[0]) {
                     case "TRANSPORT":
+                        if(Number.isFinite(Number(tok[2]))) { g_roomLastReply=Date.now();updateConnectionStatus(); }
                         var nowPlaying = (parseInt(tok[1]) & 1) === 1;
                         currentPos = parseFloat(tok[2]);
                         if(nowPlaying && !wasPlayingLast && g_transportTimers.length && !g_transportMidiPulse) {
@@ -6469,7 +6524,7 @@
                     var li = document.createElement("li");
                     li.className = "song-row" + (r.skipped ? " skipped" : "");
                     li.id = "row-" + r.id; li.setAttribute("data-id", r.id);
-                    li.setAttribute("onclick", "playRegion(" + r.start + ",'" + r.id + "')");
+                    li.setAttribute("onclick", "selectSong(" + r.start + ",'" + r.id + "')");
                     // Use REAPER color directly (exact hex, no palette snap)
                     var reapColor = r.color || null;
                     var classAdds = reapColor ? " has-mapped-color" : "";
@@ -6484,7 +6539,8 @@
                     li.innerHTML = '<div class="card-bg-fill" id="bg-' + r.id + '" style="border-radius: var(--radius-card);"></div>'
                         + '<span class="grid-card-index" onclick="event.stopPropagation(); reorderPrompt(\'' + r.id + '\')">' + gridIndex + '</span>'
                         + '<div class="grid-card-name">' + rDisplayName + (r.markerInfo ? '<span class="song-name-info">' + r.markerInfo + '</span>' : '') + '</div>'
-                        + '<span class="grid-card-dur" id="dur-' + r.id + '" data-length="' + formatTime(r.duration) + '">' + formatTime(r.duration) + '</span>';
+                        + '<span class="grid-card-dur" id="dur-' + r.id + '" data-length="' + formatTime(r.duration) + '">' + formatTime(r.duration) + '</span>'
+                        + '<button class="song-play-btn" aria-label="Play '+trEsc(rDisplayName)+'" onclick="event.stopPropagation();playRegion('+r.start+',\''+r.id+'\')">▶</button>';
                     listEl.appendChild(li);
                 }
             } else {
@@ -6551,7 +6607,7 @@
                         + '<button class="song-dotmenu-btn" onclick="event.stopPropagation(); openSongMenu(event,\'' + r.id + '\')"><svg width="4" height="18" viewBox="0 0 4 18" fill="currentColor"><circle cx="2" cy="2" r="2"/><circle cx="2" cy="9" r="2"/><circle cx="2" cy="16" r="2"/></svg></button>'
                         + '<span class="song-index" onclick="event.stopPropagation(); reorderPrompt(\'' + r.id + '\')">' + songIndex + stopHtml + '</span>'
                         + '<button class="' + chevClass + '" id="chev-' + r.id + '" onclick="event.stopPropagation();toggleExpand(\'' + r.id + '\',' + hasSubs + ')">' + chevIcon + '</button>'
-                        + '<div class="song-title-area" onclick="playRegion(' + r.start + ',\'' + r.id + '\')">'
+                        + '<div class="song-title-area" role="button" tabindex="0" title="Select song without playing" onkeydown="if(event.key===\'Enter\'||event.key===\' \'){event.preventDefault();event.stopPropagation();this.click()}" onclick="selectSong(' + r.start + ',\'' + r.id + '\')">'
                         + '  <div class="song-name">' + songNameHtml + '</div>'
                         + '</div>'
                         + '<span id="loop-counter-' + r.id + '" class="loop-counter-badge"></span>'
@@ -6560,6 +6616,7 @@
                         + '  <button class="' + loopClass + '" onclick="event.stopPropagation(); toggleLoop(\'' + r.id + '\')">' + loopIcon + '</button>'
                         + '  <button class="' + skipClass + '" onclick="event.stopPropagation(); toggleSkip(\'' + r.id + '\')">' + skipIcon + '</button>'
                         + '</div>'
+                        + '<button class="song-play-btn" aria-label="Play '+trEsc(rDisplayName)+'" onclick="event.stopPropagation();playRegion('+r.start+',\''+r.id+'\')">▶</button>'
                         + '<span class="song-duration" id="dur-' + r.id + '" data-length="' + formatTime(r.duration) + '">' + formatTime(r.duration) + delayHtml + '</span>';
 
                     li.appendChild(rowDiv);
@@ -6770,8 +6827,7 @@
             else loopBtn.classList.remove("active");
 
             // Play button text
-            var playBtn = document.getElementById("main-play-btn");
-            if (playBtn) playBtn.innerHTML = isPlaying ? "&#9646;&#9646; PAUSE" : "&#9654; PLAY";
+            updateMainTransport();
 
             // Reset old song duration display
             if (lastActiveID && (!activeRegion || activeRegion.id !== lastActiveID)) {
@@ -7251,9 +7307,11 @@
         var initialX, initialY, currentX, currentY;
 
         function openCanvasMode() {
+            closeOtherPanels('canvas');
             canvasOpen = true;
             document.getElementById("canvas-mode").classList.add("open");
             var tabBtn = document.getElementById('tab-btn-canvas'); if (tabBtn) tabBtn.classList.add('active');
+            updateTopTabs();
             updatePlaybackUI();
         }
 
@@ -7262,6 +7320,7 @@
             document.getElementById("canvas-mode").classList.remove("open");
             var tabBtn = document.getElementById('tab-btn-canvas'); if (tabBtn) tabBtn.classList.remove('active');
             toggleCanvasEdit(false);
+            updateTopTabs();
         }
 
         function toggleCanvasEdit(forceState) {
@@ -7384,12 +7443,17 @@
             wwr_req(1007);
             scheduleTransport(function () { g_transportMidiPulse=false;wwr_req(1016); }, 100);
         }
-        function cueRegion(start, id) {
+        function selectSong(start,id) {
+            if(isPlaying && document.getElementById('queueModeToggle').checked)playRegion(start,id);
+            else cueRegion(start,id,true);
+        }
+        function cueRegion(start, id, silent) {
             if (recLocked()) { recExplainLock(); return; }
             cancelTransportActions();
             g_transportDesiredPlaying=false;
             queuedRegion=null;
-            wwr_req("1016;SET/POS/" + start); flashRow(id); triggerMidi();
+            _reaperNativeLoopOff();
+            wwr_req("1016;SET/POS/" + start); flashRow(id); if(!silent)triggerMidi();
         }
         function smartStop() {
             if (recLocked()) { recSend('stop'); return; }
@@ -7413,6 +7477,7 @@
         }
         function togglePlay() {
             if (recLocked()) { recTransport(); return; }
+            if (document.getElementById('recording-panel').classList.contains('open')) { recStart();return; }
             // Resolve rapid clicks against our outstanding command, while the
             // displayed transport state continues to come only from REAPER.
             var playing=g_transportDesiredPlaying===null?isPlaying:g_transportDesiredPlaying;
@@ -7533,7 +7598,35 @@
         }
 
         // --- SIDEBAR ---
+        var g_roomLastReply=0,g_roomReconnectAt=0;
+        function updateConnectionStatus(){
+            var online=!!g_roomLastReply&&Date.now()-g_roomLastReply<4000;
+            var text=online?'Connected to REAPER':g_roomReconnectAt&&Date.now()-g_roomReconnectAt<5000?'Reconnecting…':'No response from REAPER';
+            document.querySelectorAll('.connection-status').forEach(function(el){el.textContent=text;el.dataset.online=String(online);});
+        }
+        function reconnectRoom(){
+            g_roomLastReply=0;g_roomReconnectAt=Date.now();updateConnectionStatus();
+            wwr_start();wwr_req('TRANSPORT');if(g_recState)recCheckStatus();
+        }
+        function closeMoreViews(){document.getElementById('more-views-menu').classList.add('hide');document.getElementById('more-views-toggle').setAttribute('aria-expanded','false');}
+        function toggleMoreViews(){
+            var menu=document.getElementById('more-views-menu'),open=menu.classList.contains('hide');
+            menu.classList.toggle('hide',!open);document.getElementById('more-views-toggle').setAttribute('aria-expanded',String(open));updateConnectionStatus();
+            if(open){var r=document.getElementById('more-views-toggle').getBoundingClientRect();menu.style.right='auto';menu.style.left=Math.max(8,Math.min(innerWidth-menu.offsetWidth-8,r.right-menu.offsetWidth))+'px';}
+        }
+        document.addEventListener('click',function(e){if(!e.target.closest('#more-views-menu,#more-views-toggle'))closeMoreViews();});
+        document.addEventListener('keydown',function(e){if(e.key==='Escape')closeMoreViews();});
+        window.addEventListener('resize',function(){closeMoreViews();closeOpenCtxPanel();});
+        setInterval(updateConnectionStatus,1000);
+        function updateAppearanceControls(){
+            var modern=!!(g_clData&&g_clData.document&&g_clData.document.sections&&g_clData.document.sections.length);
+            document.querySelectorAll('#sidebar .sidebar-section').forEach(function(section){
+                var label=section.querySelector('.sidebar-section-title');
+                if(label&&/^(Lyrics|Chords)\s*[—–]/.test(label.textContent))section.classList.toggle('hide',modern&&!canvasOpen);
+            });
+        }
         function openSidebar() {
+            closeMoreViews();updateAppearanceControls();updateConnectionStatus();
             document.getElementById("sidebar").classList.add("open");
             document.getElementById("sidebar-overlay").classList.add("open");
         }
@@ -7602,7 +7695,8 @@
             if (lyricsVisible) toggleLyricsPanel();
             if (chordsVisible) toggleChordsPanel();
             if (tracksPanelOpen) toggleTracksPanel();
-            // Live View and Canvas are fullscreen modals — they have their own close buttons
+            if(liveViewOpen)closeLiveView();
+            if(canvasOpen)closeCanvasMode();
             updateTopTabs();
         }
 
@@ -7610,6 +7704,8 @@
         // screen. Closing the current one first was busy-work: the top bar is
         // always visible now, and these panels are alternatives, not layers.
         function closeOtherPanels(keep) {
+            if(keep!=='live'&&liveViewOpen)closeLiveView();
+            if(keep!=='canvas'&&canvasOpen)closeCanvasMode();
             if (keep !== 'recording' && document.getElementById('recording-panel').classList.contains('open') && recOnline() && g_recState.mode==='idle')recSend('done');
             if (keep !== 'recording') document.getElementById('recording-panel').classList.remove('open');
             if (keep !== 'lyrics' && lyricsVisible) toggleLyricsPanel();
@@ -7632,6 +7728,8 @@
             if (lbtn) lbtn.classList.toggle('active', lyricsOpen);
             if (cbtn) cbtn.classList.toggle('active', chordsOpen);
             if (tbtn) tbtn.classList.toggle('active', tracksOpen);
+            document.body.classList.toggle('full-display',!!(liveViewOpen||canvasOpen));
+            updateMainTransport();perfLayout();
         }
 
         // F11: Chords font/size/color prefs
@@ -7862,12 +7960,14 @@
 
         // --- 14. LIVE VIEW ---
         function openLiveView() {
+            closeOtherPanels('live');
             liveViewOpen = true;
             document.getElementById("live-view").classList.add("open");
             document.getElementById("live-setlist-name").innerText = currentSetlistName;
             var tl = document.getElementById('tab-btn-live'); if (tl) tl.classList.add('active');
             _lrmLastSongId = null; // force region map rebuild on open
             applyLiveSettings();
+            updateTopTabs();
             updatePlaybackUI();
         }
         function closeLiveView() {
@@ -7878,6 +7978,7 @@
             updateTopTabs();
         }
         function updateLiveView(activeRegion, activeIdx, pct, isLooping) {
+            document.getElementById('live-song-name').style.setProperty('--live-font-scale',liveFontScale);
             document.getElementById("live-song-name").style.fontSize = Math.round(78 * liveFontScale) + "px";
             document.getElementById("live-song-name").innerText = activeRegion ? activeRegion.name : "—";
             // Sub-region in live view
@@ -7987,6 +8088,7 @@
         function adjustLiveSize(delta) {
             liveFontScale = Math.max(0.4, Math.min(2.0, liveFontScale + delta * 0.15));
             var sn = document.getElementById("live-song-name");
+            if(sn)sn.style.setProperty('--live-font-scale',liveFontScale);
             if (sn) sn.style.fontSize = Math.round(78 * liveFontScale) + "px";
         }
 
@@ -8133,6 +8235,7 @@
         document.addEventListener('keydown', function (event) {
             // Don't intercept shortcuts when typing in form fields
             var _tag = document.activeElement ? document.activeElement.tagName : '';
+            if(_tag==='BUTTON'&&(event.code==='Space'||event.code==='Enter'))return;
             if (_tag === 'INPUT' || _tag === 'SELECT') return;
             if (_tag === 'TEXTAREA') {
                 // Allow Escape to blur without saving, Enter to save + blur
@@ -8877,6 +8980,32 @@
             else if (g_recState.mode==='audition' || g_recState.mode==='countin')recSend('stop');
             else if (g_recState.selected && g_recState.take)recSend('listen',{session:g_recState.selected,take:g_recState.take});
         }
+        function recCanStart(){
+            var s=g_recState,inputs=s&&(s.inputs||[]).filter(function(c){return c.selected;});
+            return recOnline()&&s.ready&&s.mode==='idle'&&!g_recPending&&!isPlaying&&inputs.length>0&&inputs.every(function(c){return c.exists&&c.available;})&&(s.recordMode==='freejam'||recSong());
+        }
+        function recStart(){
+            if(!recCanStart())return;
+            var s=recSong(),extra={song:s&&s.key};
+            if(g_recState.recordMode==='freejam'){
+                var bpm=document.getElementById('rec-jam-bpm');if(!bpm||!bpm.reportValidity())return;
+                extra.jam={bpm:Number(bpm.value),beats:Number(document.getElementById('rec-jam-beats').value),click:document.getElementById('rec-jam-click').checked};
+            }
+            recSend('record',extra);
+        }
+        function updateMainTransport(){
+            var btn=document.getElementById('main-play-btn');if(!btn)return;
+            var open=document.getElementById('recording-panel').classList.contains('open'),context=open||recLocked(),state=g_recState||{},mode=state.mode||'idle';
+            document.querySelector('.app-transport').classList.toggle('recording-context',!!context);
+            document.body.classList.toggle('free-jam-screen',open&&state.recordMode==='freejam');
+            btn.disabled=false;
+            if(!context){btn.textContent=isPlaying?'Ⅱ PAUSE':'▶ PLAY';return;}
+            if(mode==='idle'){btn.textContent=isPlaying?'Stop playback first':'● RECORD';btn.disabled=!recCanStart();}
+            else{
+                btn.textContent=mode==='recording'?(state.paused?'▶ RESUME':'Ⅱ PAUSE'):mode==='countin'?'COUNT-IN…':mode==='audition'?'■ STOP LISTENING':'▶ LISTEN';
+                btn.disabled=!recOnline()||!!g_recPending||mode==='countin';
+            }
+        }
         function recSend(op,extra) {
             if (!recOnline()) { g_recError='Recording controller disconnected. Use REAPER to stop if necessary.';recRender();return; }
             if (g_recPending && op!=='stop')return;
@@ -9005,7 +9134,7 @@
                     else{
                         if(free)html+='<div class="rec-jam rec-actions"><label>Tempo <input id="rec-jam-bpm" type="number" min="40" max="240" step="1" value="'+jam.bpm+'" style="width:76px;min-height:44px"> BPM</label><label>Beats per bar <select id="rec-jam-beats" style="min-height:44px">'+[2,3,4,5,6,7].map(function(n){return '<option '+(n===jam.beats?'selected':'')+'>'+n+'</option>';}).join('')+'</select></label><label><input id="rec-jam-click" type="checkbox" '+(jam.click?'checked':'')+'> Click during recording</label></div><p class="rec-sub">No backing song. Record until you press Stop. Click uses the existing click output and level.</p>';
                         html+='<div class="rec-sub">'+selected.length+' inputs selected</div>';
-                        html+='<div class="rec-actions rec-start">'+recButton('Record','record',{song:song&&song.key},(!free&&!song)||!selected.length||selected.some(function(c){return !c.available;}),true)
+                        html+='<div class="rec-actions rec-start">'+recButton('Record','record',{song:song&&song.key},!recCanStart(),true)
                             +recButton('Count-in: '+(state.countin?'2 bars':'off'),'countin',{value:!state.countin})+'</div>';
                         function inputRow(c){return '<label class="rec-input"><input type="checkbox" data-rec-input="'+trEsc(c.id)+'" '+(c.selected?'checked':'')+' '+(g_recPending?'disabled':'')+'><span>'+trEsc(c.name)+(c.stereo?' · stereo':'')+(!c.available?' · unavailable':'')+'</span><div class="rec-meter'+(c.stereo?' stereo':'')+'" data-rec-meter="'+trEsc(c.id)+'"><i></i>'+(c.stereo?'<i></i>':'')+'</div></label>';}
                         html+='<div class="rec-input-grid">';
@@ -9048,17 +9177,16 @@
                 if(focusId && document.getElementById(focusId))document.getElementById(focusId).focus({preventScroll:true});
             }
             (state.inputs||[]).forEach(function(c){var meter=host.querySelector('[data-rec-meter="'+c.id+'"]');if(meter){Array.from(meter.children).forEach(function(bar,i){var level=c.stereo?(i===0?c.left:c.right):c.peak;bar.style.width=Math.min(100,Math.sqrt(Math.max(0,level||0))*100)+'%';});meter.classList.toggle('clip',c.peak>=1);}});
+            updateMainTransport();
         }
         document.getElementById('recording-body').addEventListener('click',function(e){
             var b=e.target.closest('[data-rec]');if(!b)return;
             var c=JSON.parse(b.dataset.rec),op=c.op;delete c.op;
+            if(op==='record'){b.blur();recStart();return;}
             if(op==='delete'){if(!window.confirm('Delete this recording session from the setlist? Its audio stays recoverable.'))return;c.confirm=c.session;}
             if(op==='deleteBatch'){if(!window.confirm('Delete '+c.sessions.length+' selected recording sessions? Their audio stays recoverable.'))return;c.confirm=c.sessions.join('|');}
             if(op==='rename'){var name=window.prompt('Take name (optional):','');if(name===null)return;c.name=name;}
             if(op==='configure'){c.channel=Number(document.getElementById('rec-in-'+c.input).value)-1;c.output=Number(document.getElementById('rec-out-'+c.input).value)-1;}
-            if(op==='record'&&g_recState.recordMode==='freejam'){
-                c.jam={bpm:Number(document.getElementById('rec-jam-bpm').value),beats:Number(document.getElementById('rec-jam-beats').value),click:document.getElementById('rec-jam-click').checked};
-            }
             b.blur();recSend(op,c);
         });
         document.getElementById('recording-body').addEventListener('change',function(e){
@@ -9493,6 +9621,7 @@
             if(groups.some(function(s,i){return !s.label.trim()||!Number.isFinite(s.start)||s.start<0||s.start>=g_chartEdit.duration||(i===0?s.start!==0:s.start<=groups[i-1].start);}))return chartStatus('Give each section a name and increasing start time; the first starts at zero.');
             chartSend('layout',{sections:groups},function(){chartEditorClose();});
         }
+        function openSongImporter(){window.open(location.protocol+'//'+location.hostname+':8765/','jamroom-importer');}
         function openSongUpdates(){
             window.open(location.protocol+'//'+location.hostname+':8765/#updates='+encodeURIComponent(displayList.map(function(s){return s.id;}).join(',')),'jamroom-importer');
         }

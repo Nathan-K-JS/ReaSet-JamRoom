@@ -271,14 +271,31 @@ if not ok then write('error.json',{error=tostring(why)})end
             edge = Path(os.environ.get('PROGRAMFILES(X86)', 'C:/Program Files (x86)')) / 'Microsoft/Edge/Application/msedge.exe'
             browser = pw.chromium.launch(executable_path=str(edge), headless=True)
             page = browser.new_page(viewport={'width':1440,'height':1000})
+            browser_errors=[];page.on('pageerror',lambda error:browser_errors.append(str(error)))
+            # Exercise this checkout's UI while using the real REAPER transport.
+            page.route('**/ReaSet.html',lambda route:route.fulfill(path=str(ROOT/'ReaSet.html')))
             page.goto(WEB + '/ReaSet.html')
             page.wait_for_function('t=>g_stableId&&g_stableId.startsWith("append-")&&initialized&&displayList.some(r=>r.start<=t&&r.end>t)', arg=position)
             # Let the initial region-load cue finish before choosing our target.
             page.wait_for_timeout(500)
-            web('SET/POS/' + str(position))
+            page.evaluate("window.transportLog=[];const send=wwr_req;wwr_req=function(c){if(String(c).includes('SET/POS')||[1007,1008,1016].includes(c))transportLog.push(c);return send(c)}")
+            page.evaluate('setGridView(false)')
+            song=page.evaluate('t=>{const r=displayList.find(r=>r.start<=t&&r.end>t);return {id:r.id,start:r.start}}',position)
+            position=song['start']
+            page.locator('[id="row-'+str(song['id'])+'"] .song-title-area').click()
             page.wait_for_function('t=>Math.abs(currentPos-t)<.1', arg=position)
+            page.wait_for_timeout(250)
+            assert web('TRANSPORT').split('\t')[1]=='0','Selecting a song must not start audio'
+            checks.append({'check':'Song title selects silently before playback','position':position})
             page.locator('#main-play-btn').click()
-            page.wait_for_function('t=>currentPos>t+.5&&currentPos<t+5', arg=position, timeout=8000)
+            try:
+                page.wait_for_function('t=>currentPos>t+.5&&currentPos<t+5', arg=position, timeout=8000)
+            except Exception:
+                diagnostic=page.evaluate('({currentPos,isPlaying,desired:g_transportDesiredPlaying,locked:recLocked(),recording:g_recState&&{mode:g_recState.mode,project:g_recState.project},project:g_stableId,commands:transportLog,button:document.getElementById("main-play-btn").outerHTML})')
+                diagnostic.update(native=web('TRANSPORT'),errors=browser_errors)
+                (folder/'browser-failure.json').write_text(json.dumps(diagnostic,indent=2))
+                page.screenshot(path=str(folder/'browser-failure.png'))
+                print(json.dumps(diagnostic,indent=2));raise
             state = web('TRANSPORT').split('\t')
             assert state[1] == '1' and position + .5 < float(state[2]) < position + 5, state
             checks.append({'check':'ReaSet Play after imports','expected':position,'position':float(state[2]),'state':1})

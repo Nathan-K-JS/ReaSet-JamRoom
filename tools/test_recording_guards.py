@@ -9,6 +9,41 @@ ROOT = Path(__file__).resolve().parent.parent
 
 
 class RecordingGuards(unittest.TestCase):
+    def test_empty_capture_returns_to_setup_but_never_drops_uncertain_media(self):
+        source=(ROOT/'Requirements/ReaSet_RecordingCore.lua').read_text(encoding='utf-8')
+        functions=source[source.index('  function self:drop_empty_take('):source.index('  function self:review(')]
+        for scenario in ('empty','previous_take','unresolved','unknown_file','recovered_audio'):
+            with self.subTest(scenario=scenario):
+                lua=LuaRuntime(unpack_returned_tuples=True)
+                lua.execute('''
+M={tracks=function()return {}end,owned_items=function()end}
+reaper={EnumerateFiles=function()return nil end}
+take={id='take',number=1,items={},inputs={'1'},before={}}
+session={id='session',song={free=true,start=100,finish=100},takes={take},folder='unused'}
+self={mode='countin',db={active={session='session',take='take'},sessions={session}}}
+function self:session()return session end
+function self:restore_options()restored=true end
+function self:park()parked=true end
+function self:arm()armed=true end
+function self:save()saved=true end
+function self:recover_audio()end
+''')
+                if scenario=='previous_take':lua.execute("table.insert(session.takes,1,{id='earlier',status='kept',items={{guid='audio'}}})")
+                elif scenario=='unresolved':lua.execute('take.unresolved=true')
+                elif scenario=='unknown_file':lua.execute("reaper.EnumerateFiles=function()return 'interrupted.aiff' end")
+                elif scenario=='recovered_audio':lua.execute("function self:recover_audio()take.items={{guid='recovered'}} end")
+                lua.execute(functions);lua.execute('self:finish()')
+                if scenario in ('empty','previous_take'):
+                    self.assertEqual(lua.eval('self.mode'),'idle')
+                    self.assertTrue(lua.eval('armed and saved and parked and restored'))
+                    self.assertEqual(lua.eval('#self.db.sessions'),int(scenario=='previous_take'))
+                    if scenario=='previous_take':self.assertEqual(lua.eval('session.takes[1].id'),'earlier')
+                else:
+                    self.assertEqual(lua.eval('self.mode'),'review')
+                    self.assertEqual(lua.eval('#self.db.sessions'),1)
+                    self.assertEqual(lua.eval('#session.takes'),1)
+                    if scenario=='unknown_file':self.assertTrue(lua.eval('take.unresolved'))
+
     def test_free_jam_settings_and_session_allocation(self):
         lua=LuaRuntime(unpack_returned_tuples=True)
         lua.execute("""reaper={GetProjectLength=function()return 500 end}

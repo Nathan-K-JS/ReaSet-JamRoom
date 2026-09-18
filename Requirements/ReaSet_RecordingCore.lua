@@ -325,6 +325,17 @@ function M.new()
     if self.preview then reaper.CF_Preview_Stop(self.preview);self.preview=nil end
     if self.previewSource then reaper.PCM_Source_Destroy(self.previewSource);self.previewSource=nil end
   end
+  function self:drop_empty_take(s,take)
+    if take.status~='empty' or take.unresolved or #take.items>0 then return false end
+    -- Unknown/unfinished media must stay discoverable, even when REAPER did not
+    -- create an item. Only a genuinely empty capture folder can be dismissed.
+    if reaper.EnumerateFiles(s.folder..'/'..take.id,0) then take.unresolved=true;return false end
+    for i=#s.takes,1,-1 do if s.takes[i]==take then table.remove(s.takes,i)end end
+    if #s.takes==0 then
+      for i=#self.db.sessions,1,-1 do if self.db.sessions[i]==s then table.remove(self.db.sessions,i)end end
+    end
+    return true
+  end
   function self:finish(recovered)
     local active=self.db.active;if not active then return end
     local s=self:session(active.session);local take
@@ -347,12 +358,17 @@ function M.new()
         end
       end end
     end
-    if recovered then self:recover_audio(s,take)end
+    if recovered or #take.items==0 then self:recover_audio(s,take)end
     take.status=#take.items==0 and not take.unresolved and 'empty' or (recovered and 'recovered' or 'kept')
     take.duration=0
     M.owned_items(function(it,_,tag)if tag==s.id..'/'..take.id then take.duration=math.max(take.duration,reaper.GetMediaItemInfo_Value(it,'D_POSITION')+reaper.GetMediaItemInfo_Value(it,'D_LENGTH')-s.song.start)end end)
     if s.song.free then s.song.finish=math.max(s.song.finish,s.song.start+take.duration)end
     self:restore_options();self:park()
+    if self:drop_empty_take(s,take) then
+      self.db.active=nil;self.mode='idle';self.selected=nil;self.take=nil
+      self:arm();self:save(true);self.message='No audio captured — ready to record again'
+      return
+    end
     self.db.active=nil;self.mode='review';self.selected=s.id;self.take=take.id
     self.backingOn=true;self.recordingOn=true;self.recMutes={};self.stemMutes={}
     self:save(true);self.message=take.unresolved and ('Recovered audio needs review in REAPER: '..s.folder..'/'..take.id) or (#take.items==0 and 'No audio captured' or (recovered and 'Recovered — check take' or 'Saved in session'))
@@ -620,14 +636,19 @@ function M.new()
     if self.db.active then self:finish(true) else
       local before=J.encode(self.db);local changes=reaper.GetProjectStateChangeCount(0)
       self:restore_options();self:park()
-      for _,s in ipairs(self.db.sessions)do
+      for i=#self.db.sessions,1,-1 do
+        local s=self.db.sessions[i]
         local ok,why=pcall(function()
           if s.deleted or s.exported then self:remove_session(s)
-          else for _,t in ipairs(s.takes)do self:recover_audio(s,t)end end
+          else for j=#s.takes,1,-1 do
+            local t=s.takes[j];self:recover_audio(s,t)
+            if t.status=='empty' and #t.items>0 then t.status='recovered' end
+            self:drop_empty_take(s,t)
+          end end
         end)
         if not ok then self.error=tostring(why)end
       end
-      if #self.db.sessions>0 and (before~=J.encode(self.db) or changes~=reaper.GetProjectStateChangeCount(0)) then self:save(true)end
+      if self.root and (before~=J.encode(self.db) or (#self.db.sessions>0 and changes~=reaper.GetProjectStateChangeCount(0))) then self:save(true)end
     end
   elseif self.db.active then
     self.mode='recording';self.selected=self.db.active.session;self.take=self.db.active.take
