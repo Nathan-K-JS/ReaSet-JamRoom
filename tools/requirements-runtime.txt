@@ -4,3 +4,4 @@ scipy
 torch==2.14.0
 torchaudio==2.11.0
 beat-this==1.1.0
+qrcode==8.2

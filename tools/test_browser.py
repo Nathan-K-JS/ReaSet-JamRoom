@@ -76,6 +76,25 @@ class BrowserTests(unittest.TestCase):
           document.getElementById('recording-panel').classList.add('open');recRender();
         }''')
 
+    def test_listening_copy_confirmation_and_exported_take_access(self):
+        self.recording_state()
+        self.page.set_viewport_size({'width':320,'height':568})
+        self.page.evaluate('''() => {
+          window.open=(url)=>{window.openedCopy=url;};
+          g_recState.sessions=[{id:'session',song:{name:'A long evening song',free:false},created:'Today',takes:[{id:'take',number:1,duration:5,status:'kept',inputs:['1']}]}];
+          g_recState.selected='session';g_recState.take='take';g_recState.mode='review';g_recState.backingOn=false;recRender();
+        }''')
+        self.page.get_by_role('button',name='Make listening copy',exact=True).first.click()
+        self.assertFalse(self.page.locator('#rec-copy-backing').is_checked())
+        self.assertTrue(self.page.evaluate('document.documentElement.scrollWidth<=innerWidth'))
+        self.page.get_by_role('button',name='Make copy',exact=True).click()
+        command=json.loads(self.page.evaluate("decodeURIComponent(sent.at(-1)).split('/want/')[1]"))
+        self.assertEqual((command['op'],command['session'],command['take'],command['backing']),('listening','session','take',False))
+        self.assertIn('job='+command['nonce'],self.page.evaluate('openedCopy'))
+        self.assertNotIn('1007',self.page.evaluate('sent.at(-1)'))
+        self.page.evaluate("g_recPending=null;g_recState.mode='idle';g_recState.sessions[0].exported='Recording.RPP';recRender();document.getElementById('rec-takes').open=true" )
+        self.assertEqual(self.page.get_by_role('button',name='Make listening copy',exact=True).count(),1)
+
     def test_free_jam_records_without_song_and_preserves_setup_during_input_selection(self):
         self.recording_state()
         self.page.evaluate("g_recState.songs=[];g_recState.recordMode='freejam';g_recState.jam={bpm:100,beats:4,click:true};recRender()")

@@ -2,18 +2,8 @@
 -- GPL-3.0. Returns an installer to share the recording core's IO/ownership helpers.
 return function(M)
 local reaper=reaper
-local function copy_verified(src,dst)
-  local input=assert(io.open(src,'rb'),'Missing audio: '..src)
-  local output=assert(io.open(dst..'.new','wb'),'Cannot create export audio')
-  while true do local data=input:read(1024*1024);if not data then break end;assert(output:write(data))end
-  input:close();assert(output:close())
-  input=assert(io.open(src,'rb'));output=assert(io.open(dst..'.new','rb'))
-  local same=true
-  while true do local a,b=input:read(1024*1024),output:read(1024*1024);if a~=b then same=false;break end;if not a then break end end
-  input:close();output:close();assert(same,'Audio verification failed: '..src)
-  assert(not M.read(dst),'Export destination already exists')
-  assert(os.rename(dst..'.new',dst),'Cannot finish media copy')
-end
+local dir=debug.getinfo(1,'S').source:match('@?(.*[\\/])') or ''
+local copy_verified=dofile(dir..'ReaSet_MediaCopy.lua')
 function M.export(self,s)
   assert(not s.deleted,'Restore the deleted session before exporting')
   assert(not s.exported,'This session is already exported: '..tostring(s.exported))

@@ -9016,6 +9016,28 @@
             if (['record','retry','keep','listen'].indexOf(op)>=0) { cancelTransportActions();queuedRegion=null;_reaperNativeLoopOff(); }
             wwr_req('SET/EXTSTATE/ReaSetRec/want/'+encodeURIComponent(JSON.stringify(command)));
             recRender();
+            return nonce;
+        }
+        function recCopies(job) {
+            var url=location.protocol+'//'+location.hostname+':8765/recordings?project='+encodeURIComponent(g_recState.project);
+            if(job)url+='&job='+encodeURIComponent(job);
+            window.open(url,'jamroom-listening');
+        }
+        function recMakeCopy(sid,tid) {
+            var state=g_recState,session=(state.sessions||[]).find(function(s){return s.id===sid;}),take=session&&(session.takes||[]).find(function(t){return t.id===tid;});
+            if(!session||!take||!recOnline()||g_recPending)return;
+            var old=document.getElementById('rec-copy-dialog');if(old)old.remove();
+            var dialog=document.createElement('dialog');dialog.id='rec-copy-dialog';
+            dialog.style.cssText='width:min(480px,calc(100vw - 32px));max-height:calc(100dvh - 32px);overflow:auto;background:#172334;color:#edf4ff;border:1px solid #536079;border-radius:16px;padding:24px;box-sizing:border-box';
+            dialog.innerHTML='<h2 style="margin-top:0">Make listening copy</h2><p style="overflow-wrap:anywhere">'+trEsc(session.song.name)+' · '+trEsc(take.name||'Take '+take.number)+'</p>'
+                +(session.song.free?'':'<label style="display:flex;gap:12px;align-items:center;min-height:48px"><input id="rec-copy-backing" type="checkbox" '+(state.selected!==sid||state.take!==tid||state.backingOn?'checked':'')+'> Include backing</label>')
+                +'<p>One take, using your selected instrument mutes. Click and count-in are excluded. Room and IEM levels stay separate from this stereo mix.</p><p class="rec-sub">Keep JamRoom Importer open to make the copy and share it with phones on the room Wi-Fi. If it is closed, the copy will wait for next time.</p><div class="rec-actions"><button class="rec-btn primary" id="rec-copy-go">Make copy</button><button class="rec-btn" id="rec-copy-cancel">Cancel</button></div>';
+            document.body.appendChild(dialog);dialog.showModal();
+            dialog.querySelector('#rec-copy-cancel').onclick=function(){dialog.close();dialog.remove();};
+            dialog.querySelector('#rec-copy-go').onclick=function(){
+                var backing=dialog.querySelector('#rec-copy-backing'),nonce=recSend('listening',{session:sid,take:tid,backing:!!(backing&&backing.checked)});
+                if(nonce){dialog.close();dialog.remove();recCopies(nonce);}
+            };
         }
         function recHandleExtState(tok) {
             var key=tok[2],v=jrUnescape(tok.slice(3).join('\t'));
@@ -9108,6 +9130,7 @@
             else if(!online)html+='<div class="rec-card"><h2>Recording controller unavailable</h2><p>Run ReaSet_Startup.lua in REAPER, then reconnect. If recording is running, use REAPER to stop it.</p></div>';
             else if(!state.ready)html+='<div class="rec-card">Save the REAPER setlist project before recording.</div>';
             else{
+                html+='<div class="rec-actions"><button class="rec-btn" onclick="recCopies()">Listening copies</button></div>';
                 if(state.notice)html+='<div class="rec-card"><h3>Recordings to tidy up</h3><p>'+state.pending+' recording sessions awaiting export. Saved takes stay silent during rehearsal.</p>'+recButton('Later','later')+'</div>';
                 if(!busy&&!review)html+='<div class="rec-actions">'+recButton((!free?'✓ ':'')+'Song','recordMode',{value:'song'})+recButton((free?'✓ ':'')+'Free jam','recordMode',{value:'freejam'})+'</div>';
                 html+='<div class="rec-card"><h2>'+trEsc(busy||review?session&&session.song.name||'Recording':free?'Free jam':song?song.name:'Cue a song to record')+'</h2>';
@@ -9123,7 +9146,7 @@
                         +recButton(mode==='audition'?'Stop listening':'Listen',mode==='audition'?'stop':'listen',{session:session.id,take:take.id})
                         +recButton('Keep & record another','keep',{session:session.id,take:take.id},mode==='audition',true)
                         +recButton('Discard & re-record','retry',{session:session.id,take:take.id},mode==='audition'||take!==session.takes[session.takes.length-1])
-                        +recButton('Done','done',{},mode==='audition')+'</div>';
+                        +recButton('Make listening copy','copy',{session:session.id,take:take.id},mode==='audition')+recButton('Done','done',{},mode==='audition')+'</div>';
                     html+='<div class="rec-actions">'+(session.song.free?'':recButton('Backing '+(state.backingOn?'on':'off'),'mix',{group:'backing',value:!state.backingOn}))+recButton('Recording '+(state.recordingOn?'on':'off'),'mix',{group:'recording',value:!state.recordingOn})+'</div><details><summary>Instrument playback</summary><div class="rec-actions">';
                     (state.inputs||[]).forEach(function(c){if((take.inputs||[]).indexOf(c.id)>=0)html+=recButton(c.name+((state.recMutes||{})[c.id]?' muted':''),'mix',{group:'input',input:c.id,value:!(state.recMutes||{})[c.id]});});
                     (session.song.free?[]:['DRUMS','PERC_FX','BASS','GTR1','GTR2','KEYS','BVS','LEAD_VOX','CLICK','EXTRA']).forEach(function(id){html+=recButton(recStemName(id)+((state.stemMutes||{})[id]?' muted':' backing'),'mix',{group:'stem',input:id,value:!(state.stemMutes||{})[id]});});
@@ -9149,12 +9172,14 @@
                 html+='<div class="rec-actions">'+recButton('Export selected','exportBatch',{sessions:selectedSessions},busy||mode==='audition'||!selectedSessions.length)+recButton('Delete selected','deleteBatch',{sessions:selectedSessions},busy||mode==='audition'||!selectedSessions.length)+'</div>';
                 sessions.slice().reverse().forEach(function(s){
                     html+='<section><h3>'+(!s.deleted&&!s.exported?'<input type="checkbox" aria-label="Select session" data-rec-session="'+trEsc(s.id)+'" '+(g_recSelected[s.id]?'checked':'')+'> ':'')+trEsc(s.song.name)+' · '+trEsc(s.created)+'</h3>';
+                    if(s.exported){s.takes.filter(function(t){return t.status!=='discarded'&&t.duration>0;}).forEach(function(t){html+='<div class="rec-actions"><span>'+trEsc(t.name||'Take '+t.number)+'</span>'+recButton('Make listening copy','copy',{session:s.id,take:t.id},busy||mode==='audition')+'</div>';});}
                     if(s.exported)html+='<p class="rec-sub">Exported: '+trEsc(s.exported)+'</p>'+recButton('Open in REAPER','open',{session:s.id},busy||mode==='audition');
                     else if(s.deleted)html+='<p>Deleted — recoverable</p>'+recButton('Restore session','restore',{session:s.id},busy);
                     else{
                         s.takes.forEach(function(t){
                             html+='<div class="rec-actions"><span class="rec-sub">'+trEsc(t.name||'Take '+t.number)+' · '+trTime(t.duration)+' · '+trEsc(t.status)+'</span>'
                                 +recButton(t.status==='discarded'?'Restore take':'Listen',t.status==='discarded'?'restoreTake':'listen',{session:s.id,take:t.id},busy||mode==='audition')
+                                +recButton('Make listening copy','copy',{session:s.id,take:t.id},busy||mode==='audition'||t.status==='discarded'||t.status==='Needs recovery'||!t.duration)
                                 +recButton(t.favourite?'★ Favourite':'☆','favourite',{session:s.id,take:t.id},busy)+recButton('Name','rename',{session:s.id,take:t.id},busy)+'</div>';
                         });
                         html+='<div class="rec-actions">'+recButton('Export & clear from setlist','export',{session:s.id},busy||mode==='audition')
@@ -9182,6 +9207,7 @@
         document.getElementById('recording-body').addEventListener('click',function(e){
             var b=e.target.closest('[data-rec]');if(!b)return;
             var c=JSON.parse(b.dataset.rec),op=c.op;delete c.op;
+            if(op==='copy'){b.blur();recMakeCopy(c.session,c.take);return;}
             if(op==='record'){b.blur();recStart();return;}
             if(op==='delete'){if(!window.confirm('Delete this recording session from the setlist? Its audio stays recoverable.'))return;c.confirm=c.session;}
             if(op==='deleteBatch'){if(!window.confirm('Delete '+c.sessions.length+' selected recording sessions? Their audio stays recoverable.'))return;c.confirm=c.sessions.join('|');}

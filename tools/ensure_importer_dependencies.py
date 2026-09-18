@@ -47,6 +47,7 @@ def main():
     try:
         metadata.version('requests')
         metadata.version('numpy')
+        metadata.version('qrcode')
         if (metadata.version('beat-this') == '1.1.0' and metadata.version('torch') == '2.14.0'
                 and metadata.version('torchaudio') == '2.11.0' and metadata.version('scipy')):
             installed = True

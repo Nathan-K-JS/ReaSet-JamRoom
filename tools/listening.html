@@ -1,0 +1,24 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover"><meta name="referrer" content="no-referrer"><title>%%TITLE%% · Jam Room</title>
+<style>
+:root{color-scheme:dark;font:16px/1.5 system-ui,-apple-system,sans-serif;background:#0c1220;color:#eff4ff}*{box-sizing:border-box}body{margin:0;padding:24px max(16px,env(safe-area-inset-right)) 40px max(16px,env(safe-area-inset-left))}main{max-width:600px;margin:4vh auto}header{color:#9fb1cf;font-size:.85rem;letter-spacing:.12em;text-transform:uppercase}h1{font-size:clamp(1.6rem,6vw,2.4rem);line-height:1.2;overflow-wrap:anywhere}p{color:#bcc8dd}audio{display:block;width:100%;margin:24px 0}nav{display:flex;gap:12px;flex-wrap:wrap}.button,button{display:inline-flex;justify-content:center;align-items:center;gap:12px;background:#26344d;color:white;text-decoration:none;border:1px solid #41516c;border-radius:12px;padding:14px 18px;min-height:48px;font:inherit;cursor:pointer}.primary{background:#a9edc8;color:#10261b;border-color:#a9edc8;font-weight:650}small{font-size:.78rem;font-weight:400}.card{margin:24px 0;padding:20px;border:1px solid #2c3a51;background:#131e30;border-radius:16px}summary{min-height:44px;cursor:pointer;font-weight:600}li{margin:12px 0}ul{padding-left:20px}input{width:100%;min-width:0;min-height:48px;padding:10px;border:1px solid #52627a;background:#0c1220;color:white;border-radius:8px;font:inherit}.share{display:flex;flex-wrap:wrap;gap:12px;margin-top:12px}.qr{display:block;width:min(260px,100%);height:auto;background:white;margin:16px auto;border:12px solid white;border-radius:12px}#copy-status{min-height:1.5em}a{color:#a9edc8}:focus-visible{outline:3px solid #a9edc8;outline-offset:3px}@media(max-width:380px){nav .button{width:100%}body{padding-top:16px}.card{padding:16px}}
+</style></head><body><main>
+<header>Jam Room · Listening copy</header><h1>%%TITLE%%</h1><p>%%DATE%%</p>
+<audio controls playsinline preload="metadata" aria-label="Play listening recording" src="/listen/%%TOKEN%%/audio.%%KIND%%"></audio>
+<nav aria-label="Save recording">%%DOWNLOADS%%</nav>
+<p>MP3 is the smaller file for everyday listening. WAV is the larger file for editing.</p>
+<details class="card"><summary>Save it on your phone</summary><ul>
+<li><strong>iPhone / iPad:</strong> tap Download MP3, then confirm Download in Safari. Find it in <strong>Files → Downloads</strong>. If your browser opens the audio instead, use its Share menu → Save to Files.</li>
+<li><strong>Android:</strong> tap Download MP3. Find it in <strong>Chrome → Downloads</strong> or your phone’s Files app.</li>
+</ul><p>After downloading, you can listen away from the room or send the file to friends. This does not add it automatically to Apple Music or Spotify.</p></details>
+<details class="card" id="sharing"><summary>Share in the room</summary><p>Friends need the same room Wi-Fi. Keep the room PC and JamRoom Importer open while they download.</p>
+<img class="qr" src="/listen/%%TOKEN%%/qr.svg" alt="QR code for this listening copy" loading="lazy">
+<label for="link">Listening link</label><input id="link" readonly value="%%LINK%%"><div class="share"><button id="copy">Copy link</button><button id="share" hidden>Share link</button></div><p id="copy-status" role="status"></p>
+<p>If the page will not open, check the phone is on the room Wi-Fi. Guest Wi-Fi may prevent devices from reaching the room PC. Ask the host to reopen the link if the PC’s address changed.</p></details>
+<p>The recording is stored on the room PC. Download it before you leave; this local link will not work over mobile data.</p>
+</main><script>
+const link=document.getElementById('link'),status=document.getElementById('copy-status');
+document.getElementById('copy').onclick=async()=>{link.focus();link.select();link.setSelectionRange(0,link.value.length);try{if(navigator.clipboard&&window.isSecureContext)await navigator.clipboard.writeText(link.value);else if(!document.execCommand('copy'))throw Error();status.textContent='Link copied.';}catch(e){status.textContent='Touch and hold the selected link, then choose Copy.';}};
+const share=document.getElementById('share');if(navigator.share&&window.isSecureContext){share.hidden=false;share.onclick=async()=>{try{await navigator.share({title:document.title,url:link.value});}catch(e){if(e.name!=='AbortError')status.textContent='Use Copy link to share this recording.';}};}
+document.querySelector('audio').addEventListener('error',()=>{status.textContent='Playback could not load. Try Download MP3, or ask the host to check the room PC.';document.getElementById('sharing').open=true;});
+</script></body></html>

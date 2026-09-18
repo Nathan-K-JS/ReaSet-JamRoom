@@ -1,5 +1,9 @@
 # Playback and recording
 
+Listening copies are available from saved takes: stereo MP3/WAV downloads and
+room-Wi-Fi QR sharing for Android and iPhone. See
+[Listening recordings](LISTENING_RECORDINGS.md) for workflow and setup.
+
 ## Delivered fixes
 
 The tempo/key drawer now reserves its measured height in the song list and

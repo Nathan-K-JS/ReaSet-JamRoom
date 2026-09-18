@@ -31,7 +31,22 @@ import requests
 
 import jamroom_import as ji
 
+import jamroom_listening as listening
+
 PORT = 8765
+LISTENING = None
+LISTENING_GUARD = threading.Lock()
+
+def listening_service():
+    global LISTENING
+    with LISTENING_GUARD:
+        if LISTENING is None:
+            def config():
+                return json.loads(CONFIG_PATH.read_text(encoding="utf-8")) if CONFIG_PATH.exists() else {}
+            LISTENING = listening.Listening(config, paused=lambda: DRAIN.is_set())
+            LISTENING.start()
+        return LISTENING
+
 TOOLDIR = Path(__file__).resolve().parent
 CONFIG_PATH = TOOLDIR / "jamroom_import.config.json"
 
@@ -60,6 +75,7 @@ def drain_status():
         with QUEUE.guard:
             queued = bool(QUEUE.running) or any(
                 row['state'] in ('applying', 'editing', 'checking') for row in QUEUE.jobs.values())
+    queued = queued or bool(LISTENING and LISTENING.active)
     return {'draining': DRAIN.is_set(), 'ready': not active and not queued and not BUSY.locked(),
             'message': 'Waiting for work to reach a saved checkpoint' if active or queued or BUSY.locked() else 'All work is checkpointed'}
 
@@ -853,7 +869,7 @@ class Handler(BaseHTTPRequestHandler):
         self.send_header("Content-Length", str(len(data)))
         self.send_header("Cache-Control", "no-store")
         self.end_headers()
-        self.wfile.write(data)
+        if self.command != 'HEAD': self.wfile.write(data)
 
     def _body(self):
         origin = self.headers.get("Origin")
@@ -961,7 +977,14 @@ class Handler(BaseHTTPRequestHandler):
                     return
                 remaining -= len(chunk)
 
+    def do_HEAD(self):
+        if self.path.startswith('/listen/') and listening.handle_get(self, listening_service(), lan_url, head=True):
+            return
+        self.send_response(404); self.send_header('Content-Length', '0'); self.end_headers()
+
     def do_GET(self):
+        if self.path.startswith(('/recordings', '/listen/', '/api/listening')):
+            if listening.handle_get(self, listening_service(), lan_url): return
         if self.path in ("/", "/index.html"):
             self._send(200, (TOOLDIR / "importer.html").read_bytes(),
                        "text/html")
@@ -1030,6 +1053,8 @@ class Handler(BaseHTTPRequestHandler):
                     if QUEUE is not None:
                         QUEUE.control({'pause':True})
                 return self._send(200, drain_status())
+            if self.path == '/api/listening/action':
+                return self._send(200, listening_service().action(body['key'], body['action']))
             if self.path == '/api/jobs':
                 return self._send(200, import_queue().add(body))
             if self.path == '/api/jobs/control':
@@ -1227,6 +1252,7 @@ def main():
     except OSError as exc:
         startup_error(exc)
         return 1
+    listening_service()
     url = f"http://localhost:{PORT}"
     print(f"Jam Room Importer {getattr(ji, 'BUILD', '?')} running at {url}")
     print(f"Process ID: {os.getpid()}; folder: {TOOLDIR.parent}")
@@ -1241,6 +1267,7 @@ def main():
     except KeyboardInterrupt:
         pass
     finally:
+        if LISTENING is not None: LISTENING.stop.set()
         srv.server_close()
     return 0
 

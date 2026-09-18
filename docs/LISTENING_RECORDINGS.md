@@ -1,7 +1,76 @@
 # Leave with a listening recording
 
-Status: proposed implementation plan. Requested after the v3.10 UX review;
-the listening-copy feature is not implemented by that release.
+Status: implemented for v3.11, undergoing final release verification.
+
+## Using it
+
+Keep **JamRoom Importer.bat** open on the room PC. In ReaSet's Record tab,
+stop a take, choose instrument mutes, then **Make listening copy**. Confirm
+whether to include backing. **Listening copies** shows queued work and completed
+copies; open a ready copy to listen, download MP3/WAV, or show its room-Wi-Fi QR.
+Saved and exported takes have the same action. Making a copy does not clear the
+setlist, discard takes, or replace multitrack export.
+
+For phones, use **Download MP3** for a smaller file or **Download WAV** for editing.
+Safari downloads are in the iPhone/iPad Files app's Downloads folder; Chrome on
+Android has a Downloads screen. The page includes saving instructions and a
+copy-link fallback that works on local HTTP without requiring the native Share
+or Clipboard APIs. Audio never autoplays. Files remain playable away from home;
+the local link requires the same Wi-Fi and a running room PC/service.
+[Apple download help](https://support.apple.com/en-nz/102440),
+[Chrome Android download help](https://support.google.com/chrome/answer/95759?co=GENIE.Platform%3DAndroid&hl=en).
+
+## Implementation and limits
+
+- REAPER freezes each request beside the setlist in `.RPP.recordings/Listening/`.
+  Its snapshot captures one take, backing choices, item timing/pitch/gain and
+  recording mutes. Current backing item settings and parent mutes are captured
+  when that song is still in place; otherwise its recording-time snapshot is used.
+- The service discovers roots through REAPER's published recording index. Its
+  registry and private worker configuration live in `imports/.listening/`.
+  Keep that directory along with the recording storage. It contains the stable
+  share-link registry, not just disposable importer cache.
+- One independent REAPER worker uses its own settings directory and **Dummy Audio**,
+  no web control surface, below-normal process priority, and no hardware sends or
+  armed tracks. A Windows job object closes the worker if its parent service dies.
+  It does not open tabs in the performance instance. This isolation was proven
+  on the test workstation's REAPER 7.75; the room remains a separate installation.
+- Shared byte-verifying media copy code secures source files in the listening job.
+  Existing discard/export cleanup retains source files, so it cannot invalidate
+  pending requests. Never change recording cleanup to erase those files without
+  adding coordination with these jobs.
+- A flat dry stereo mix avoids double-summing the room's folder buses. Its saved
+  template, `imports/.listening/mix-template.json`, starts at unity/centre for all
+  14 inputs and is frozen per request. Stereo pairs stay stereo. Room/IEM faders
+  and desk processing are not captured. Custom sends, active automation, FX or
+  layered/section-source items produce an explicit manual-mix message instead of
+  silently losing processing. Audition this starting balance with real room takes;
+  it is not an automatic instrument-balancing system.
+- Native dry-run analysis rejects near-silence. REAPER renders 48 kHz/24-bit stereo
+  WAV, targeting -16 LUFS and a -1 dBTP ceiling, with at most 18 dB of gain increase.
+  The service verifies duration, channels, decodability and peaks, then encodes
+  256 kbps MP3 from that WAV. Musical pauses are kept. No artificial effects tail
+  is added to this dry-file template.
+- Jobs resume after restart. A verified WAV survives an MP3 failure; Retry encodes
+  it without repeating the render. Each new copy has its own link. Replace share
+  link revokes the old token; Remove listening copy removes only that copy's two
+  published audio files, leaving source multitracks and preparation snapshots.
+- Share endpoints serve only indexed outputs, with Safari/Chrome byte-range and
+  HEAD support, audio MIME types, UTF-8 filenames, and attachment downloads.
+  QR codes are generated locally. Opening from localhost uses the detected LAN
+  address; opening from a phone uses that address. Reopen after an address change.
+  The page has no room-control buttons. Access follows the existing trusted-LAN
+  model; this is not a public internet hosting/authentication service.
+
+Automated checks cover HTTP range/HEAD behavior, downloads, Unicode, revocation,
+restart recovery, WAV retention on encoding failure, responsive layouts, and
+playback/seeking/downloading in Chromium with Android emulation and WebKit with
+iPhone emulation. Native checks use synthetic mono/stereo signals to verify
+chosen mutes, backing inclusion, no click, tempo/pitch handling, post-export
+copies and unchanged performance transport. **Physical Android/iPhone camera
+scanning and saving on the actual room Wi-Fi remain an on-site acceptance check.**
+
+The sections below preserve the approved design and acceptance criteria.
 
 ## Musician workflow
 

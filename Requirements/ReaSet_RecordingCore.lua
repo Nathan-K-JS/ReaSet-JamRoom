@@ -3,6 +3,7 @@ local dir=debug.getinfo(1,'S').source:match('@?(.*[\\/])') or ''
 local J=dofile(dir..'ReaSet_JSON.lua')
 local P=dofile(dir..'ReaSet_Playback.lua')
 local M={J=J,P=P}
+dofile(dir..'ReaSet_Listening.lua')(M)
 function M.read(path)
   local f=io.open(path,'rb');if not f then return nil end
   local s=f:read('*a');f:close();return s
@@ -534,6 +535,7 @@ function M.new()
     elseif c.op=='record' then
       if self.db.recordMode=='freejam' and c.jam then self:jam_settings(c.jam)end
       self:begin(self.db.recordMode=='freejam' and 'freejam' or c.song)
+    elseif c.op=='listening' then M.make_listening(self,c)
     elseif c.op=='review' then self:review(c.session,c.take)
     elseif c.op=='listen' then
       local same=self.selected==c.session and self.take==c.take and self.mode=='review'
