@@ -1,8 +1,8 @@
-# Initial recording setup — proposed template
+# Initial recording setup
 
-The recording direction is approved; implementation is still pending. This guide
-defines the setup to ship with the feature; no recording tracks have been created
-by this documentation update.
+The Record tab creates the track template below. Run the updated
+`Requirements/ReaSet_Startup.lua` in REAPER first; it starts the recording/volume
+controller. REAPER 7 with SWS is required. Save the setlist project before setup.
 
 ## Confirmed live input list and default recording tracks
 
@@ -65,9 +65,9 @@ against the actual stagebox wiring before following the mapping below.
    and expose inputs 1–16 (or the larger required range). Retain the playback
    outputs already used by the jam-room project. Confirm the device and project
    sample-rate settings agree.
-5. In ReaSet Recording → Setup, use **Set up recording tracks**. The completed
-   default template will create `REC <instrument/mic>` tracks with named inputs
-   and mono/stereo assignments. Repeating setup must not duplicate tracks.
+5. In ReaSet Recording → Setup, use **Set up recording tracks**. The
+   default template creates `REC <instrument/mic>` tracks with named inputs
+   and mono/stereo assignments. Repeating setup does not duplicate tracks.
 6. Play each instrument separately and check the matching X32 and ReaSet input
    meters. Adjust the source/preamp gain to avoid clipping. For stereo sources,
    check left and right separately. Use X32 monitoring, with REAPER software
@@ -82,6 +82,20 @@ specify that before finalizing the template's direct-out/tap-point routing.
 Manufacturer reference: [X32 Rack user manual, recording setup and Card Output
 routing sections](https://warehousesound.com/r/behringerX32RACKmanual.pdf).
 
-The table above is the default track specification for implementation. ReaSet
-will create the REAPER tracks; it does not currently configure or rename the
-X32 remotely.
+ReaSet creates the REAPER tracks; it does not configure or rename the X32 remotely.
+
+Recording audition defaults to the existing playback-return destinations: drums
+outputs 1/2, bass 4, guitars 5/6 and 7/8, keys 9/10, all four vocals 13, and utility/
+spares 15. These are **REAPER hardware output numbers**, not X32 live input
+channels. Setup lets you change each first input and first output; stereo tracks
+use the next channel as well. Vocal tracks remain independent even though their
+default audition destination is shared.
+
+Record a short test and confirm the intended IEM/room levels. Hardware monitoring
+stays on the X32; ReaSet disables REAPER input monitoring to avoid a delayed
+duplicate live signal. Recorded playback can use any configured room/IEM return.
+
+Takes save automatically under `<setlist.RPP>.recordings/`. Stop is enough to keep
+a take. Export creates a verified independent project; Delete and Discard remain
+recoverable and retain raw audio. See [Playback and recording](PLAYBACK_AND_RECORDING.md)
+for everyday operation, recovery and current limits.

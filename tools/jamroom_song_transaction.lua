@@ -20,6 +20,7 @@ local function run()
   assert(reaper.GetPlayState()==0,"Stop playback before updating song data")
   assert(reaper.ULT_SetMediaItemNote,"SWS extension is required")
   local _, project = reaper.GetProjExtState(0,"ReaSet","projectId")
+  assert(project=='' or reaper.GetExtState('ReaSetRec','lock')~=project,'Choose Done in Recording before updating song data')
   assert(job.project and project==job.project,"Target project changed; refresh the song list")
   local song
   local i=0

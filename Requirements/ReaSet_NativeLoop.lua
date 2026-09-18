@@ -29,6 +29,7 @@ local NEAR_START   = 0.30   -- sec after loop_start that confirms the jump lande
 
 -- ─── Session state (persists across defer ticks) ──────────────────────────────
 local s_active   = false   -- a loop session is currently running
+local s_project  = nil
 local s_start    = 0
 local s_end      = 0
 local s_max      = 0       -- 0 = infinite
@@ -59,12 +60,18 @@ end
 
 -- ─── Stop and clean up the current session ────────────────────────────────────
 local function do_cleanup()
-    reaper.GetSetRepeat(0)
-    reaper.GetSet_LoopTimeRange(true, true, 0, 0, false)
-    delete_region()
+    local active = reaper.EnumProjects(-1,'')
+    if s_project and reaper.ValidatePtr(s_project,'ReaProject*') then
+        reaper.SelectProjectInstance(s_project)
+        reaper.GetSetRepeat(0)
+        reaper.GetSet_LoopTimeRange(true, true, 0, 0, false)
+        delete_region()
+        reaper.SelectProjectInstance(active)
+    end
     reaper.SetExtState(SEC, "nativeLoop", "done", false)
     reaper.UpdateArrange()
     s_active   = false
+    s_project  = nil
     s_crosses  = 0
     s_near_end = false
     s_key      = ""
@@ -83,6 +90,7 @@ local function arm_session(ls, le, lm)
     s_crosses  = 0
     s_near_end = false
     s_active   = true
+    s_project  = reaper.EnumProjects(-1,'')
     s_key      = string.format("%.5f:%.5f:%d", ls, le, lm)
 
     -- Create visual region
@@ -101,6 +109,7 @@ end
 -- ─── Main background loop (runs every frame via defer) ────────────────────────
 local _hb_tick = 0   -- heartbeat counter: refreshes ReaSet presence flag every ~5 s
 local function main_loop()
+    if s_active and s_project ~= reaper.EnumProjects(-1,'') then do_cleanup() end
     local _, record_project = reaper.GetProjExtState(0,'ReaSet','projectId')
     local _, exported = reaper.GetProjExtState(0,'ReaSet','recordingProject')
     if exported == '1' or (record_project ~= '' and reaper.GetExtState('ReaSetRec','lock') == record_project) then

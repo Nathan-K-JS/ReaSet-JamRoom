@@ -61,6 +61,22 @@ reaper={
         self.lua.execute("wire['ReaSetTK/want']='1.2|2||0|60|P2';tick()")
         self.assertEqual(self.lua.eval('projects[1].rate'),1)
 
+    def test_exported_project_keeps_recorded_speed_and_pitch(self):
+        self.lua.execute("active=2;projects[2].ext['ReaSet/recordingProject']='1';projects[2].rate=.8;projects[2].item.takes[1].D_PITCH=3;tick();cleanup()")
+        self.assertEqual(self.lua.eval('projects[2].rate'),.8)
+        self.assertEqual(self.lua.eval('projects[2].item.takes[1].D_PITCH'),3)
+        # Also exercise starting the bridge with the exported project active.
+        path=Path(__file__).resolve().parent.parent/'Requirements/ReaSet_TempoKey.lua'
+        self.lua.execute(path.read_text(encoding='utf-8'))
+        self.lua.execute('tick();cleanup();active=1;tick()')
+        self.assertEqual(self.lua.eval('projects[2].rate'),.8)
+        self.assertEqual(self.lua.eval('projects[2].item.takes[1].D_PITCH'),3)
+
+    def test_recording_lock_defers_tempo_commands(self):
+        self.lua.execute("wire['ReaSetRec/lock']='P1';wire['ReaSetTK/want']='1.2|2||0|60|P1';tick()")
+        self.assertEqual(self.lua.eval('projects[1].rate'),1)
+        self.assertEqual(self.lua.eval('projects[1].item.takes[1].D_PITCH'),0)
+
     def test_cleanup_restores_modified_take_after_active_take_changed(self):
         self.lua.execute("wire['ReaSetTK/want']='1.2|2||0|60|P1';tick();projects[1].item.active=2;cleanup()")
         self.assertEqual(self.lua.eval('projects[1].item.takes[1].D_PITCH'),0)

@@ -167,6 +167,8 @@ end
 
 -- Crash/save recovery: revert any offsets a previous run left behind.
 local function recover_leftovers()
+    local _, exported = reaper.GetProjExtState(0,'ReaSet','recordingProject')
+    if exported == '1' then return end
     local _, blob = reaper.GetProjExtState(0, SEC, "applied")
     if not blob or blob == "" then return end
     local leftover = {}
@@ -332,7 +334,8 @@ local function main_loop()
     if active_project ~= owner then
         if reaper.ValidatePtr(owner, "ReaProject*") then
             reaper.SelectProjectInstance(owner)
-            set_rate(1.0); apply_pitch(nil, 0, "", false)
+            local _, old_exported = reaper.GetProjExtState(0,'ReaSet','recordingProject')
+            if old_exported ~= '1' then set_rate(1.0); apply_pitch(nil, 0, "", false) end
             reaper.SelectProjectInstance(active_project)
         end
         applied = {}; owner = active_project
@@ -412,8 +415,11 @@ local function cleanup()
     local active_project = reaper.EnumProjects(-1, "")
     if not reaper.ValidatePtr(owner, "ReaProject*") then return end
     reaper.SelectProjectInstance(owner)
-    set_rate(1.0)
-    apply_pitch(nil, 0, "", false)
+    local _, exported = reaper.GetProjExtState(0,'ReaSet','recordingProject')
+    if exported ~= '1' then
+        set_rate(1.0)
+        apply_pitch(nil, 0, "", false)
+    end
     reaper.SelectProjectInstance(active_project)
     reaper.SetExtState(SEC, "heartbeat", "", false)
     reaper.SetExtState(SEC, "state", "", false)

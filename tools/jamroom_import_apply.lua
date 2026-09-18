@@ -217,6 +217,10 @@ local song_pos = proj_end == 0 and 0 or (math.ceil(proj_end) + SONG_GAP)
 
 -- ─── Apply (single undo step) ────────────────────────────────────────────────
 
+local _, recording_project = reaper.GetProjExtState(0,'ReaSet','projectId')
+if reaper.GetPlayState()~=0 or (recording_project~='' and reaper.GetExtState('ReaSetRec','lock')==recording_project) then
+    return fail('Finish playback/recording and choose Done before importing songs')
+end
 reaper.Undo_BeginBlock()
 reaper.PreventUIRefresh(1)
 

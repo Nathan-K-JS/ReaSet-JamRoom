@@ -1,8 +1,7 @@
 -- ReaSet_Startup.lua  — LAUNCH EVERYTHING  (GPL v3)
 -- ─────────────────────────────────────────────────────────────────────────────
--- ReaSet needs FOUR background scripts running, but REAPER's startup-action
--- slot holds only ONE action. This script launches all four, so a single
--- startup action covers the lot.
+-- REAPER's startup-action slot holds one action. This script launches the
+-- backing, recording/volume, loop, chart and tempo/key bridges together.
 --
 -- INSTALL (one time):
 --   Actions → Show action list → Load ReaScript… → select this file
@@ -12,6 +11,9 @@
 --       (REAPER auto-runs a script with that exact name at launch)
 --
 -- WHAT IT STARTS
+--   ReaSet_Recording.lua    -- recording, recovery and per-song volume
+--   ReaSet_ChordsLyrics.lua -- structured charts
+--   ReaSet_TempoKey.lua     -- tempo/key control
 --   ReaSet_JamRoom.lua      — Tracks tab / backing-group mute bridge
 --   ReaSet_NativeLoop.lua   — REAPER-native looping for ReaSet
 --   X-Raym Lyrics …lua      — feeds the Lyrics view

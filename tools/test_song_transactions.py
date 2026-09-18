@@ -27,7 +27,7 @@ reaper={
  GetPlayState=function()return playing end,
  GetProjExtState=function(_,sec,key)return 1,ext[sec..'/'..key] or '' end,
  SetProjExtState=function(_,sec,key,value)ext[sec..'/'..key]=value;return 1 end,
- SetExtState=function()end,ShowConsoleMsg=function()end,
+ SetExtState=function()end,GetExtState=function()return recording_lock or ''end,ShowConsoleMsg=function()end,
  EnumProjectMarkers2=function(_,i)if i==0 then return 1,true,0,region_end,'Song',1 end return 0 end,
  CountTracks=function()return #tracks end,GetTrack=function(_,i)return tracks[i+1]end,
  GetTrackName=function(tr)return true,tr.name end,
@@ -115,6 +115,11 @@ dofile=function(path)if path:match('jamroom_pending_rechord.lua$')then return jo
 
     def test_playing_project_is_not_changed(self):
         self.lua.execute('playing=1')
+        reply,_=self.run_job();self.assertEqual(reply['status'],'error')
+        self.assertEqual(self.lua.eval('tracks[1].items[1].note'),'old lyric')
+
+    def test_count_in_and_recording_review_block_song_updates(self):
+        self.lua.execute("recording_lock='P'")
         reply,_=self.run_job();self.assertEqual(reply['status'],'error')
         self.assertEqual(self.lua.eval('tracks[1].items[1].note'),'old lyric')
 

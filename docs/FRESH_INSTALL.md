@@ -57,7 +57,7 @@ day-to-day operating is [JAMROOM_SETUP.md](JAMROOM_SETUP.md).
 
 ## Stage 3 — Load the scripts into REAPER
 
-8. Actions → Show action list → **ReaScript: Load…**, and load these five from
+8. Actions → Show action list → **ReaScript: Load…**, and load these scripts from
    `C:\JamRoom\Requirements\`:
 
    | Script | What it powers |
@@ -68,6 +68,7 @@ day-to-day operating is [JAMROOM_SETUP.md](JAMROOM_SETUP.md).
    | `X-Raym_Convert Chords …lua` | Chords view |
    | `ReaSet_ChordsLyrics.lua` | Chord chart / lookahead views + lead-time slider |
    | `ReaSet_TempoKey.lua` | Per-song tempo (playrate) and key (transpose) controls |
+   | `ReaSet_Recording.lua` | Record tab, saved-take recovery and per-song playback volume |
    | `ReaSet_Startup.lua` | Starts all the background scripts in one go |
    | `ReaSet_JamRoom_BuildBuses.lua` | Builds the project's track layout (stage 4) |
 
@@ -130,9 +131,10 @@ day-to-day operating is [JAMROOM_SETUP.md](JAMROOM_SETUP.md).
 14. **Make it automatic**, or everything stops working after the next REAPER
     restart. Either:
     - Preferences → General → set `ReaSet_Startup.lua` as the startup action, or
-    - copy `Requirements\ReaSet_Startup.lua` to
-      `%APPDATA%\REAPER\Scripts\__startup.lua` — REAPER auto-runs a script with
-      that exact name.
+    - create `%APPDATA%\REAPER\Scripts\__startup.lua` containing
+      `dofile([[C:\JamRoom\Requirements\ReaSet_Startup.lua]])` (adjust the
+      installation path). This wrapper loads the updated repository script on
+      each start; do not copy the launcher away from its sibling modules.
 
     REAPER's startup slot holds only **one** action, which is the whole reason
     `ReaSet_Startup.lua` exists.

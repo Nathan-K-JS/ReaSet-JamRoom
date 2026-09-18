@@ -1,4 +1,4 @@
-# Playback fixes and proposed recording workflow
+# Playback and recording
 
 ## Delivered fixes
 
@@ -23,12 +23,102 @@ Validation: browser geometry at desktop, phone portrait and landscape; browser
 click command/confirmation; Lua enable and stale-command tests; live REAPER
 scratch-project checks with the original library left unchanged.
 
+## Recording and playback volume release
+
+The **Tracks** screen now has a song-specific playback-volume slider, initially
+**65%**. It adjusts all recognized backing stems together while preserving their
+relative levels. The click and newly recorded instruments retain their own levels.
+The setting lives in the REAPER project, works during native playback, and is
+reapplied once to newly imported/replaced backing items. Item gain is before track
+FX; this is a backing trim, not a final output limiter or automatic loudness match.
+
+The **Record** tab provides the approved X32 template, remembered input selection,
+meters, optional two-bar count-in, Record, Pause/Resume and Stop. Stop saves the
+whole pass automatically. Listen reviews one pass at a time; Backing/Recording
+and expandable instrument mutes control audition. Keep & record another retains
+the pass; Discard & re-record parks that pass recoverably. Done returns to the
+normal song screen. Song changes, loop/seek automation and library mutations
+are guarded while recording or reviewing. Native Stop also finalizes the take.
+
+Startup reconciliation runs in REAPER without needing a browser. It restores
+indexed takes missing from an older project save, discovers recoverable audio
+from an interrupted capture, and parks the recordings silent with inputs
+disarmed. Pending sessions produce **Review recordings / Later**. The saved list
+supports favourites, optional names, individual/batch export, recoverable delete,
+and restoring a discarded pass. Ambiguous interrupted media is retained and
+marked for review in REAPER; it is never guessed into a successful export.
+
+**Export & clear from setlist** creates a separate REAPER project containing all
+kept passes plus the original backing stems, including muted stems and the click.
+It preserves the recorded speed/pitch, shifts the song to zero, copies and
+byte-verifies media, then reopens the new project and checks alignment, pitch,
+rate and media references. Only after that succeeds does it remove the session's
+owned recording items from the setlist and save. Failed export keeps the source
+takes. The result path and **Open in REAPER** button remain in Saved recordings.
+
+### Start using it
+
+1. Run **JamRoom Update.bat**, restart REAPER, and refresh ReaSet on each browser.
+   The registered startup action must be the installation's
+   `Requirements/ReaSet_Startup.lua`; it now launches the recording/volume bridge.
+   If Record reports the controller unavailable, run that file from the REAPER
+   action list. A previously copied standalone startup file may need updating.
+2. Follow [Recording setup](RECORDING_SETUP.md) once to verify X32 inputs and
+   REAPER output returns. In Record, choose **Set up recording tracks**, then
+   select instruments. Setup can create missing tracks without duplicating them.
+3. Cue a song, Record, and Stop. The take is already saved; export can wait.
+   Use Done to move on, or Listen / Keep another / Discard & re-record.
+
+### Storage and first-release limits
+
+- Recording storage is automatically beside the saved setlist:
+  `<setlist.RPP>.recordings/`. It contains the session journal and its previous
+  version, backing snapshots, per-pass audio folders, and `Exports/`. Back up this
+  folder along with the setlist and imported audio. The first release uses this
+  fixed location rather than adding another folder-selection workflow.
+- Delete and discard clear/park project items recoverably; they do not erase raw
+  audio from disk. No automatic expiry or disk-purge button is included. Exported
+  folders contain their own media and can be copied as complete folders.
+- This records one selected song, with an automatic stop at its boundary. For
+  free-form jams, punch-ins, comping and detailed mixing, use native REAPER.
+- Count-in uses an SWS audio preview routed to the first PB CLICK hardware send
+  (or output 1 if that bus is absent), at the song's detected tempo and current
+  speed/signature. It does not play the preceding song. The transition into
+  recording is controller-timed, not a sample-accurate native preroll; count-in
+  can be disabled. Generated click audio itself is unchanged.
+- Export handles ordinary file-backed audio. Nested/section sources or missing
+  media stop export with the original recordings retained. Detailed manual edits
+  to managed recording items also stop automatic cleanup rather than losing edits.
+- Closing a tablet does not stop recording. If the controller is disconnected,
+  use native REAPER Stop. On a power loss, recovery depends on audio that REAPER
+  actually flushed to disk; unfinished/corrupt media may need native recovery.
+
+### Verification
+
+Automated browser checks cover command confirmation, duplicate/pending Stop,
+chunk delivery during changing state, offline controls, song-scoped gain, and
+phone/tablet drawer geometry. Lua checks cover tempo isolation, recording locks,
+loop cleanup in the owning project, and refusing song deletion with saved takes.
+
+The opt-in `tools/verify_recording_live.py` runs native recording in a disposable
+REAPER tab: count-in, two inputs, pause/resume, repeated keep/retry, 80% song speed,
+restart/older-project/interrupted-media recovery, review mutes, delete/restore,
+failed export, verified export, duplicate/stale tablet commands and project scope.
+It confirms the original loaded project and cursor remain unchanged. On this
+workstation it uses native track-output capture when hardware inputs are absent;
+this does **not** validate physical X32 recording or the IEM/room mix.
+
+Import/playback regression checks also passed using a disposable copy of the
+populated library. Real X32 input identification, latency and audition levels
+remain an initial jam-room setup check. Forced power-off/disk-full recovery has
+not been tested; failure injection and interrupted-session reconstruction have.
+
 ## Approved recording direction and final usability review
 
 Nathan approved the recording plan, with the direction to keep ReaSet a simple,
 functional web controller for the existing REAPER setup. This final pass refines
 that approved direction; no further general design approval is needed. Recording
-and per-song volume are still implementation work, not delivered features.
+and per-song volume are implemented below; the design notes remain as context.
 
 The recording proposal below incorporates the requested default input/track
 template and explicit post-stop retry/keep actions. Nathan's supplied live input
@@ -83,7 +173,7 @@ recording indicator and Stop remain available if the user visits another tab;
 navigation alone does not end recording. Guard song/seek changes while recording
 with a direct explanation, not an apparently broken button.
 
-Setup holds input/output mapping and the recording folder. The normal screen
+Setup holds input/output mapping; the release uses automatic recording storage beside the setlist. The normal screen
 shows instrument names and useful state, not channel numbers, file paths or
 bridge diagnostics. Show the saved path after export. Surface actionable errors
 in place (for example, "Keys input unavailable" or "Project could not be saved").
@@ -110,8 +200,7 @@ in place (for example, "Keys input unavailable" or "Project could not be saved")
 ### Recording screen and session lifecycle
 
 1. Cue a song and open Recording. Show the song, tempo/key, input availability,
-   remembered selections and any existing unfinished session. Configure the
-   recording destination once in Setup; automatically name sessions and takes.
+   remembered selections and any existing unfinished session. Save the setlist in its intended location; sessions and takes are named automatically.
 2. On first use, offer **Set up recording tracks** using the jam-room input
    template and [initial X32 setup guide](RECORDING_SETUP.md). Create and name
    the dedicated recording tracks automatically, with their mono/stereo inputs
@@ -346,8 +435,8 @@ creating another export or deleting anything whose identity/content has changed.
   do not depend on the optional importer server being available.
 
 The REAPER API provides input enumeration, track/input/arm controls and project
-save/state functions. Exact count-in/pause and media-copy behavior still require
-scratch-project proof before the feature is considered supported:
+save/state functions. Count-in/pause and media-copy behavior have been exercised in
+scratch projects as described in the release verification above:
 [official ReaScript API](https://www.reaper.fm/sdk/reascript/reascripthelp.html).
 
 ### Implementation checkpoints

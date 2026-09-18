@@ -20,6 +20,11 @@ function M.write(path,value)
   assert(ok,why)
 end
 function M.guid()return reaper.genGuid():gsub('[{}%-]','')end
+function M.samechunk(a,b)
+  -- Selecting another take changes SEL without changing recorded content.
+  local function stable(s)return s and s:gsub('\nSEL [01]\n','\nSEL 0\n',1)end
+  return stable(a)==stable(b)
+end
 function M.ext(obj,key,value,track)
   local fn=track and reaper.GetSetMediaTrackInfo_String or reaper.GetSetMediaItemInfo_String
   local _,v=fn(obj,'P_EXT:'..key,value or '',value~=nil);return v
@@ -53,7 +58,7 @@ function M.new()
   local _,projectfile=reaper.EnumProjects(-1,'');self.projectfile=projectfile
   local _,id=reaper.GetProjExtState(0,'ReaSet','projectId')
   if id=='' then id=M.guid();reaper.SetProjExtState(0,'ReaSet','projectId',id) end
-  self.id=id;self.root=projectfile~='' and (projectfile..'.recordings') or nil
+  self.id=id;self.root=projectfile~='' and (projectfile:gsub('\\','/')..'.recordings') or nil
   self.db={version=1,project=id,inputs=M.defaults(),sessions=J.array(),countin=true}
   if self.root then
     reaper.RecursiveCreateDirectory(self.root,0)
@@ -152,6 +157,10 @@ function M.new()
   end
   function self:arm()
     local tracks=M.tracks();local count=0
+    for _,cfg in ipairs(self.db.inputs)do
+      assert(tracks[cfg.id],'Set up recording tracks first')
+      if cfg.selected then assert(cfg.input+(cfg.stereo and 2 or 1)<=reaper.GetNumAudioInputs(),cfg.name..' input unavailable')end
+    end
     for _,cfg in ipairs(self.db.inputs) do
       local tr=tracks[cfg.id]
       assert(tr,'Set up recording tracks first')
@@ -176,8 +185,17 @@ function M.new()
       reaper.SNM_SetIntConfigVar('projrecmode',o.recmode)
       reaper.GetSetRepeat(o.repeatMode)
       if o.overlap then reaper.Main_OnCommand(o.overlap,0)end
+      for action,state in pairs(o.lanes or {})do
+        local command=tonumber(action)
+        if reaper.GetToggleCommandState(command)~=state then reaper.Main_OnCommand(command,0)end
+      end
       self.db.options=nil
     end
+  end
+  function self:start_native()
+    reaper.Main_OnCommand(1013,0)
+    assert((reaper.GetPlayState()&4)==4,'REAPER did not start recording; check the audio device')
+    self.mode='recording'
   end
   function self:begin(key)
     assert(self.root,'Save the REAPER setlist project before recording')
@@ -224,6 +242,8 @@ function M.new()
     local _,secondary=reaper.GetSetProjectInfo_String(0,'RECORD_PATH_SECONDARY','',false)
     self.db.options={path=path,secondary=secondary,prompt=reaper.SNM_GetIntConfigVar('promptendrec',0),metro=reaper.SNM_GetIntConfigVar('projmetroen',0),recmode=reaper.SNM_GetIntConfigVar('projrecmode',0),repeatMode=reaper.GetSetRepeat(-1)}
     for _,action in ipairs({41186,41330,42677})do if reaper.GetToggleCommandState(action)==1 then self.db.options.overlap=action end end
+    self.db.options.lanes={}
+    for _,action in ipairs({41329,42702})do self.db.options.lanes[tostring(action)]=reaper.GetToggleCommandState(action)end
     self.db.active={session=session.id,take=take.id}
     self.selected=session.id;self.take=take.id;self:save(true)
     reaper.GetSetProjectInfo_String(0,'RECORD_PATH',session.folder..'/'..take.id,true)
@@ -231,14 +251,14 @@ function M.new()
     reaper.GetSetProjectInfo_String(0,'RECORD_PATH_SECONDARY','',true)
     reaper.SNM_SetIntConfigVar('promptendrec',0)
     reaper.SNM_SetIntConfigVar('projmetroen',0)
-    reaper.SNM_SetIntConfigVar('projrecmode',0)
+    reaper.Main_OnCommand(40252,0) -- Record mode: normal (0 is selected-item auto-punch).
     assert(reaper.kbd_getTextFromCmd(42677,0)~='','This REAPER version does not support independent recording layers')
     reaper.Main_OnCommand(42677,0)
     reaper.GetSetRepeat(0)
     reaper.SetExtState('ReaSet','nativeLoop','off',false)
     reaper.SetEditCurPos(song.start,false,false)
     self.mode='recording'
-    if self.db.countin then self:count_in(session) else reaper.Main_OnCommand(1013,0) end
+    if self.db.countin then self:count_in(session) else self:start_native() end
   end
   function self:count_in(session)
     assert(reaper.CF_CreatePreview,'Update SWS for the audible count-in, or turn count-in off')
@@ -303,6 +323,7 @@ function M.new()
     M.owned_items(function(it,_,tag)if tag==s.id..'/'..take.id then take.duration=math.max(take.duration,reaper.GetMediaItemInfo_Value(it,'D_POSITION')+reaper.GetMediaItemInfo_Value(it,'D_LENGTH')-s.song.start)end end)
     self:restore_options();self:park()
     self.db.active=nil;self.mode='review';self.selected=s.id;self.take=take.id
+    self.backingOn=true;self.recordingOn=true;self.recMutes={};self.stemMutes={}
     self:save(true);self.message=take.unresolved and ('Recovered audio needs review in REAPER: '..s.folder..'/'..take.id) or (#take.items==0 and 'No audio captured' or (recovered and 'Recovered — check take' or 'Saved in session'))
   end
   function self:review(sid,tid)
@@ -351,7 +372,7 @@ function M.new()
       if tag:sub(1,#s.id+1)==s.id..'/' then
         local _,guid=reaper.GetSetMediaItemInfo_String(it,'GUID','',false)
         local _,chunk=reaper.GetItemStateChunk(it,'',false)
-        assert(known[guid]==chunk,'Recording items changed; cleanup stopped and audio retained')
+        assert(M.samechunk(known[guid],chunk),'Recording items changed; cleanup stopped and audio retained')
       end
     end)
     M.owned_items(function(it,tr,tag)if tag:sub(1,#s.id+1)==s.id..'/' then reaper.DeleteTrackMediaItem(tr,it) end end)
@@ -408,8 +429,8 @@ function M.new()
           local it=reaper.AddMediaItemToTrack(tracks[id]);local tk=reaper.AddTakeToMediaItem(it)
           reaper.SetMediaItemTake_Source(tk,source)
           reaper.SetMediaItemInfo_Value(it,'D_POSITION',s.song.start)
-          reaper.SetMediaItemInfo_Value(it,'D_LENGTH',length/s.rate)
-          reaper.SetMediaItemTakeInfo_Value(tk,'D_PLAYRATE',s.rate)
+          reaper.SetMediaItemInfo_Value(it,'D_LENGTH',length*s.rate)
+          reaper.SetMediaItemTakeInfo_Value(tk,'D_PLAYRATE',1/s.rate)
           reaper.SetMediaItemInfo_Value(it,'B_MUTE',1);M.ext(it,'ReaSetRec',s.id..'/'..take.id)
           local _,guid=reaper.GetSetMediaItemInfo_String(it,'GUID','',false);local _,chunk=reaper.GetItemStateChunk(it,'',false)
           take.items[#take.items+1]={guid=guid,track=id,chunk=chunk}
@@ -451,7 +472,11 @@ function M.new()
     elseif c.op=='record' then self:begin(c.song)
     elseif c.op=='review' then self:review(c.session,c.take)
     elseif c.op=='listen' then
-      self:review(c.session,c.take);reaper.Main_OnCommand(1007,0);self.mode='audition'
+      local same=self.selected==c.session and self.take==c.take and self.mode=='review'
+      local backing,recording,inputs,stems=self.backingOn,self.recordingOn,self.recMutes,self.stemMutes
+      self:review(c.session,c.take)
+      if same then self.backingOn=backing;self.recordingOn=recording;self.recMutes=inputs;self.stemMutes=stems;self:audition_mix()end
+      reaper.Main_OnCommand(1007,0);self.mode='audition'
     elseif c.op=='mix' then
       assert(self.selected,'Select a take');if c.group=='backing' then self.backingOn=c.value==true
       elseif c.group=='recording' then self.recordingOn=c.value==true
@@ -501,7 +526,7 @@ function M.new()
   end
   function self:tick()
     if self.mode=='countin' and reaper.time_precise()>=self.countEnd then
-      self:stop_preview();self.mode='recording';reaper.Main_OnCommand(1013,0)
+      self:stop_preview();self.mode='recording';self:start_native()
     elseif self.mode=='recording' then
       local s=self:session(self.db.active.session);local state=reaper.GetPlayState()
       if (state&1)==1 and reaper.GetPlayPosition()>=s.song.finish then reaper.Main_OnCommand(1016,0);self:finish()
@@ -519,7 +544,9 @@ function M.new()
       for k,v in pairs(cfg)do row[k]=v end
       row.exists=tr~=nil;row.available=cfg.input+(cfg.stereo and 2 or 1)<=reaper.GetNumAudioInputs()
       row.armed=tr and reaper.GetMediaTrackInfo_Value(tr,'I_RECARM')==1 or false
-      row.peak=tr and math.max(reaper.Track_GetPeakInfo(tr,0),reaper.Track_GetPeakInfo(tr,1)) or 0
+      row.left=tr and reaper.Track_GetPeakInfo(tr,0) or 0
+      row.right=tr and reaper.Track_GetPeakInfo(tr,1) or 0
+      row.peak=math.max(row.left,row.right)
       inputs[#inputs+1]=row
     end
     local sessions=J.array();local pending=0
@@ -539,6 +566,7 @@ function M.new()
   if opts~='' then local ok,v=pcall(J.decode,opts);if ok then self.auditionOptions=v end end
   if reaper.GetPlayState()==0 then
     if self.db.active then self:finish(true) else
+      local before=J.encode(self.db);local changes=reaper.GetProjectStateChangeCount(0)
       self:restore_options();self:park()
       for _,s in ipairs(self.db.sessions)do
         local ok,why=pcall(function()
@@ -547,6 +575,7 @@ function M.new()
         end)
         if not ok then self.error=tostring(why)end
       end
+      if #self.db.sessions>0 and (before~=J.encode(self.db) or changes~=reaper.GetProjectStateChangeCount(0)) then self:save(true)end
     end
   elseif self.db.active then
     self.mode='recording';self.selected=self.db.active.session;self.take=self.db.active.take

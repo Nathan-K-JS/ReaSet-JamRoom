@@ -64,6 +64,78 @@ class BrowserTests(unittest.TestCase):
         self.assertIn('Sections saved', self.page.evaluate('g_chartMessage'))
         self.assertIn('|layout|', self.page.evaluate('decodeURIComponent(sent[sent.length-1])'))
 
+    def recording_state(self):
+        self.load_reaset()
+        self.page.evaluate('''() => {
+          g_stableId='test';g_recHb={val:'1',at:Date.now()};currentPos=10;
+          const inputs=['Vox 1','Vox 2','Vox 3','Vox 4','Bass','Guitar 1','Guitar 2','Utility Mic','Drums EAD10','Keys','Spare 1','Spare 2','Spare 3','Spare 4'].map((name,i)=>({id:String(i+1),name,selected:i===0,exists:true,available:true,input:i,output:0,stereo:i===8||i===9,extra:i===7||i>9,peak:.1}));
+          g_recState={project:'test',revision:1,mode:'idle',ready:true,inputs,
+            songs:[{key:'song1',name:'Fly Away',start:0,finish:60,gain:.65}],sessions:[],pending:0,countin:true};
+          document.getElementById('recording-panel').classList.add('open');recRender();
+        }''')
+
+    def test_recording_waits_for_confirmation_and_stop_bypasses_pending(self):
+        self.recording_state()
+        self.page.get_by_role('button', name='Record', exact=True).click()
+        self.assertEqual(self.page.evaluate('g_recState.mode'), 'idle')
+        self.assertTrue(self.page.evaluate('recLocked()'))
+        command=json.loads(self.page.evaluate("decodeURIComponent(sent.at(-1)).split('/want/')[1]"))
+        self.assertEqual((command['op'],command['project'],command['song']),('record','test','song1'))
+        self.page.evaluate("g_recPending.at-=20000;recRender();smartStop()")
+        self.assertEqual(self.page.evaluate('g_recPending.op'),'stop')
+        self.assertEqual(json.loads(self.page.evaluate("decodeURIComponent(sent.at(-1)).split('/want/')[1]"))['op'],'stop')
+
+    def test_recording_chunks_survive_newer_metadata_and_acknowledge(self):
+        self.recording_state()
+        self.page.evaluate('''() => {
+          recSend('record',{song:'song1'});
+          const state=Object.assign({},g_recState,{mode:'recording',ack:g_recPending.nonce});
+          const raw=JSON.stringify(state),split=Math.floor(raw.length/2);
+          recHandleExtState(['EXTSTATE','ReaSetRec','meta','17:2:1']);
+          recHandleExtState(['EXTSTATE','ReaSetRec','d1_1','17:'+raw.slice(split)]);
+          recHandleExtState(['EXTSTATE','ReaSetRec','meta','18:2:2']);
+          recHandleExtState(['EXTSTATE','ReaSetRec','d1_0','17:'+raw.slice(0,split)]);
+        }''')
+        self.assertEqual(self.page.evaluate('g_recState.mode'),'recording')
+        self.assertIsNone(self.page.evaluate('g_recPending'))
+        self.assertTrue(self.page.get_by_role('button', name='Stop', exact=True).is_enabled())
+
+    def test_recording_leaving_ready_disarms_and_offline_does_not_send(self):
+        self.recording_state()
+        self.page.evaluate('showMainView()')
+        self.assertEqual(self.page.evaluate('g_recPending.op'),'done')
+        count=self.page.evaluate('sent.length')
+        self.page.evaluate("g_recHb.at=0;g_recPending=null;recSend('record',{song:'song1'})")
+        self.assertEqual(self.page.evaluate('sent.length'),count)
+        self.assertIn('disconnected',self.page.evaluate('g_recError'))
+
+    def test_playback_volume_is_song_scoped_and_confirmed(self):
+        self.recording_state()
+        self.page.evaluate("document.getElementById('recording-body').innerHTML=recGainHtml()")
+        self.page.locator('#playback-gain').fill('80')
+        self.page.locator('#playback-gain').dispatch_event('change')
+        command=json.loads(self.page.evaluate("decodeURIComponent(sent.at(-1)).split('/want/')[1]"))
+        self.assertEqual((command['op'],command['song'],command['value']),('gain','song1',.8))
+        self.assertEqual(self.page.evaluate('g_recState.songs[0].gain'),.65)
+
+    def test_recording_mobile_layout_and_housekeeping_clear_drawer(self):
+        self.recording_state()
+        for width,height in ((1280,800),(390,844),(844,390)):
+            self.page.set_viewport_size({'width':width,'height':height})
+            self.page.evaluate('''() => {
+              g_recState.notice=true;g_recState.pending=2;recRender();
+              g_perfOpen=true;perfLayout();
+              document.getElementById('recording-panel').scrollTop=100000;
+            }''')
+            self.page.wait_for_timeout(100)
+            geometry=self.page.evaluate('''() => {
+              const panel=document.getElementById('recording-panel'),bar=document.getElementById('perfBar');
+              return {bottom:panel.getBoundingClientRect().bottom,bar:bar.getBoundingClientRect().top,
+                width:panel.clientWidth,scrollWidth:panel.scrollWidth};
+            }''')
+            self.assertLessEqual(geometry['bottom'],geometry['bar']+1)
+            self.assertLessEqual(geometry['scrollWidth'],geometry['width']+1)
+
     def test_performance_drawer_reserves_scroll_space(self):
         self.load_reaset()
         for width, height in ((1280, 800), (390, 844), (844, 390)):

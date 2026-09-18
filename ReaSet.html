@@ -3403,10 +3403,14 @@
         .rec-btn.primary{background:#b22c46;border-color:#e64a64;font-weight:700}.rec-btn:disabled{opacity:.4;cursor:default}
         .rec-input{display:flex;align-items:center;gap:12px;padding:12px 0;border-bottom:1px solid #30363f}.rec-input input{width:22px;height:22px}.rec-input span{flex:1}
         .rec-meter{width:80px;height:6px;overflow:hidden;background:#15191e;border-radius:6px}.rec-meter i{display:block;height:100%;background:#63d5a5;width:0}.rec-meter.clip i{background:#ff6176}
+        .rec-meter.stereo{height:14px;display:flex;flex-direction:column;gap:2px}.rec-meter.stereo i{height:6px}
         .rec-status{min-height:24px;color:#b8c4d4;margin-bottom:12px;overflow-wrap:anywhere}.rec-status.error{color:#ff9aa8}
         .rec-volume label{display:flex;justify-content:space-between;align-items:center;font-weight:650}.rec-volume input[type=range]{width:100%;accent-color:#70dba6;margin:18px 0 10px;min-height:28px}.rec-volume small{color:#aeb8c5}
         .rec-setup-row{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin:12px 0}.rec-setup-row span{min-width:125px}.rec-setup-row input{width:65px;color:#eef2f7;background:#252c35;border:1px solid #485464;padding:8px;border-radius:6px}
         #tab-btn-recording.capturing{color:#ff6176}.rec-card summary{cursor:pointer;padding:6px 0;min-height:32px}
+        .app-topbar{overflow-x:auto;scrollbar-width:thin}.app-menu-btn,.vtab{flex-shrink:0}
+        .rec-start{position:sticky;top:0;background:var(--bg-app);padding:8px 0;z-index:1}
+        @media(max-width:900px){.app-topbar-info{display:none}.vtab{padding:0 9px}}
 
         .jr-song-name {
             font-size: 15px;
@@ -6138,7 +6142,7 @@
                 newItems.sort(function (a, b) { return a.start - b.start; });
                 for (var n = 0; n < newItems.length; n++) { newItems[n].chain = false; newItems[n].skipped = !!newItems[n].defaultSkip; newItems[n].loop = false; displayList.push(newItems[n]); }
                 if (autoSortActive()) applyAutoSort(displayList);
-                if (displayList.length > 0 && !isPlaying) wwr_req("SET/POS/" + displayList[0].start);
+                if (displayList.length > 0 && !isPlaying && recOnline() && !recLocked()) wwr_req("SET/POS/" + displayList[0].start);
                 initialized = true;
             } else {
                 var activeIDs = {};
@@ -6656,6 +6660,7 @@
             saveCurrentState(); lastRenderChecksum = ""; syncRegions();
         }
         function toggleCurrentLoop(e) {
+            if(recLocked()){recExplainLock();return;}
             if (e) e.stopPropagation();
             var activeIdx = -1;
             for (var i = 0; i < displayList.length; i++) {
@@ -7577,6 +7582,7 @@
         try { localStorage.removeItem('reaset_stop_mode'); } catch (e) {}
 
         function showMainView() {
+            if (document.getElementById('recording-panel').classList.contains('open') && recOnline() && g_recState.mode==='idle')recSend('done');
             document.getElementById('recording-panel').classList.remove('open');
             // Close any open panels/overlays and return to main show view
             if (lyricsVisible) toggleLyricsPanel();
@@ -8840,7 +8846,10 @@
             if (!g_recState) return null;
             return (g_recState.songs||[]).find(function(s){return currentPos>=s.start-.001 && currentPos<s.finish;}) || null;
         }
-        function recExplainLock() { g_recError='Finish recording or choose Done before changing songs.';recRender(); }
+        function recExplainLock() {
+            g_recError='Finish recording or choose Done before changing songs.';
+            closeOtherPanels('recording');document.getElementById('recording-panel').classList.add('open');updateTopTabs();recRender();
+        }
         function recTransport() {
             if (!g_recState) return;
             if (g_recState.mode==='recording') recSend('pause');
@@ -8861,23 +8870,27 @@
             var key=tok[2],v=jrUnescape(tok.slice(3).join('\t'));
             if(key==='heartbeat'){if(v!==g_recHb.val){g_recHb={val:v,at:Date.now()};}return;}
             if(key==='meta'){
-                var m=v.match(/^(\d+):(\d+)$/);if(!m || +m[2]>512)return;
-                if(m[1]===g_recGen || g_recFetch && g_recFetch.gen===m[1])return;
-                g_recFetch={gen:m[1],count:+m[2],parts:{}};
-                var requests=[];for(var i=0;i<+m[2];i++)requests.push('GET/EXTSTATE/ReaSetRec/d'+i);
+                var m=v.match(/^(\d+):(\d+):(\d+)$/);if(!m || +m[2]>512)return;
+                if(m[1]===g_recGen || g_recFetch && Date.now()-g_recFetch.at<1200)return;
+                g_recFetch={gen:m[1],count:+m[2],slot:m[3],parts:{},at:Date.now()};
+                var requests=[];for(var i=0;i<+m[2];i++)requests.push('GET/EXTSTATE/ReaSetRec/d'+m[3]+'_'+i);
                 wwr_req(requests.join(';'));return;
             }
-            if(!/^d\d+$/.test(key)||!g_recFetch)return;
-            var sep=v.indexOf(':'),gen=v.slice(0,sep),idx=+key.slice(1);
+            var chunk=key.match(/^d(\d+)_(\d+)$/);
+            if(!chunk||!g_recFetch||chunk[1]!==g_recFetch.slot)return;
+            var sep=v.indexOf(':'),gen=v.slice(0,sep),idx=+chunk[2];
             if(gen!==g_recFetch.gen || idx>=g_recFetch.count)return;
             g_recFetch.parts[idx]=v.slice(sep+1);
             if(Object.keys(g_recFetch.parts).length!==g_recFetch.count)return;
             var raw='';for(var n=0;n<g_recFetch.count;n++)raw+=g_recFetch.parts[n];
             try{
                 var state=JSON.parse(raw);
-                if(g_recState && state.project!==g_recState.project)g_recSelected={};
+                if(g_recState && state.project!==g_recState.project){g_recSelected={};g_recPending=null;}
                 g_recState=state;g_recGen=g_recFetch.gen;g_recFetch=null;
-                if(g_recPending && state.ack===g_recPending.nonce)g_recPending=null;
+                if(g_recPending && state.ack===g_recPending.nonce){
+                    if(g_recPending.op==='done' && !state.error){document.getElementById('recording-panel').classList.remove('open');updateTopTabs();}
+                    g_recPending=null;
+                }
                 recRender();recUpdateGain();
                 if(tracksPanelOpen && !document.getElementById('playback-gain'))renderTracksPanel();
             }catch(e){g_recFetch=null;}
@@ -8919,9 +8932,11 @@
             var label=document.getElementById('rec-tab-label');
             label.textContent=busy?(mode==='countin'?'COUNT IN':state.paused?'PAUSED':'RECORDING'):('RECORD'+(state.pending?' ('+state.pending+')':''));
             document.getElementById('tab-btn-recording').classList.toggle('capturing',busy);
-            if(g_recPending && Date.now()-g_recPending.at>15000){g_recPending=null;g_recError='No confirmation yet. Check REAPER before retrying.';}
+            document.getElementById('main-stop-btn').textContent=busy?'■ STOP · '+(state.paused?'PAUSED':'REC'):'■ STOP';
+            if(g_recPending && Date.now()-g_recPending.at>15000){g_recError='Still waiting for REAPER. Exporting large sessions can take a while. Stop remains available.';}
             var html='<div role="status" class="rec-status'+(g_recError||state.error?' error':'')+'">'+trEsc(g_recError||state.error||(g_recPending?'Waiting for REAPER…':state.message||''))+'</div>';
-            if(!online)html+='<div class="rec-card"><h2>Recording controller unavailable</h2><p>Run ReaSet_Startup.lua in REAPER, then reconnect.</p></div>';
+            if(!online && g_recPending && /^export/.test(g_recPending.op))html+='<div class="rec-card"><h2>Waiting for export confirmation</h2><p>Copying a large session can take a while. Leave REAPER open. Source takes are retained until the new project is verified.</p></div>';
+            else if(!online)html+='<div class="rec-card"><h2>Recording controller unavailable</h2><p>Run ReaSet_Startup.lua in REAPER, then reconnect. If recording is running, use REAPER to stop it.</p></div>';
             else if(!state.ready)html+='<div class="rec-card">Save the REAPER setlist project before recording.</div>';
             else{
                 if(state.notice)html+='<div class="rec-card"><h3>Recordings to tidy up</h3><p>'+state.pending+' song sessions awaiting export. Saved takes stay silent during rehearsal.</p>'+recButton('Later','later')+'</div>';
@@ -8929,6 +8944,9 @@
                 if(busy){
                     html+='<div class="rec-sub">'+(mode==='countin'?'Two-bar count-in':state.paused?'Paused — same take':'Recording · '+trTime(Math.max(0,currentPos-(session?session.song.start:0))))+'</div><div class="rec-actions">'
                         +recButton(state.paused?'Resume':'Pause','pause',{},mode==='countin')+recButton('Stop','stop',{},false,true)+'</div>';
+                    (state.inputs||[]).filter(function(c){return c.selected;}).forEach(function(c){
+                        html+='<div class="rec-input"><span>'+trEsc(c.name)+'</span><div class="rec-meter'+(c.stereo?' stereo':'')+'" data-rec-meter="'+trEsc(c.id)+'"><i></i>'+(c.stereo?'<i></i>':'')+'</div></div>';
+                    });
                 }else if(review && session && take){
                     html+='<h3>Take '+take.number+' · '+trTime(take.duration)+'</h3><div class="rec-actions">'
                         +recButton(mode==='audition'?'Stop listening':'Listen',mode==='audition'?'stop':'listen',{session:session.id,take:take.id})
@@ -8944,12 +8962,12 @@
                     if(!exists)html+=recButton('Set up recording tracks','setup',{},false,true);
                     else{
                         html+='<div class="rec-sub">'+selected.length+' instruments selected</div>';
-                        function inputRow(c){return '<label class="rec-input"><input type="checkbox" data-rec-input="'+trEsc(c.id)+'" '+(c.selected?'checked':'')+' '+(g_recPending?'disabled':'')+'><span>'+trEsc(c.name)+(c.stereo?' · stereo':'')+(!c.available?' · unavailable':'')+'</span><div class="rec-meter" data-rec-meter="'+trEsc(c.id)+'"><i></i></div></label>';}
+                        html+='<div class="rec-actions rec-start">'+recButton('Record','record',{song:song&&song.key},!song||!selected.length||selected.some(function(c){return !c.available;}),true)
+                            +recButton('Count-in: '+(state.countin?'2 bars':'off'),'countin',{value:!state.countin})+'</div>';
+                        function inputRow(c){return '<label class="rec-input"><input type="checkbox" data-rec-input="'+trEsc(c.id)+'" '+(c.selected?'checked':'')+' '+(g_recPending?'disabled':'')+'><span>'+trEsc(c.name)+(c.stereo?' · stereo':'')+(!c.available?' · unavailable':'')+'</span><div class="rec-meter'+(c.stereo?' stereo':'')+'" data-rec-meter="'+trEsc(c.id)+'"><i></i>'+(c.stereo?'<i></i>':'')+'</div></label>';}
                         (state.inputs||[]).filter(function(c){return !c.extra;}).forEach(function(c){html+=inputRow(c);});
                         html+='<details><summary>Additional inputs</summary>';
                         (state.inputs||[]).filter(function(c){return c.extra;}).forEach(function(c){html+=inputRow(c);});html+='</details>';
-                        html+='<div class="rec-actions">'+recButton('Record','record',{song:song&&song.key},!song||!selected.length||selected.some(function(c){return !c.available;}),true)
-                            +recButton('Count-in: '+(state.countin?'2 bars':'off'),'countin',{value:!state.countin})+'</div>';
                     }
                 }
                 html+='</div><details class="rec-card" id="rec-takes"><summary>Saved recordings ('+(state.pending||0)+')</summary>';
@@ -8979,7 +8997,7 @@
                 g_recHtml=html;host.innerHTML=html;
                 host.querySelectorAll('details').forEach(function(e){if(open.indexOf(e.id||e.querySelector('summary').textContent)>=0)e.open=true;});
             }
-            (state.inputs||[]).forEach(function(c){var meter=host.querySelector('[data-rec-meter="'+c.id+'"]');if(meter){meter.firstChild.style.width=Math.min(100,Math.sqrt(Math.max(0,c.peak))*100)+'%';meter.classList.toggle('clip',c.peak>=1);}});
+            (state.inputs||[]).forEach(function(c){var meter=host.querySelector('[data-rec-meter="'+c.id+'"]');if(meter){Array.from(meter.children).forEach(function(bar,i){var level=c.stereo?(i===0?c.left:c.right):c.peak;bar.style.width=Math.min(100,Math.sqrt(Math.max(0,level||0))*100)+'%';});meter.classList.toggle('clip',c.peak>=1);}});
         }
         document.getElementById('recording-body').addEventListener('click',function(e){
             var b=e.target.closest('[data-rec]');if(!b)return;

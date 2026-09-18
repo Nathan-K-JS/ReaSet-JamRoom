@@ -1,0 +1,62 @@
+"""Recording must not let library/loop operations touch another project."""
+import json
+from pathlib import Path
+import tempfile
+import unittest
+from lupa import LuaRuntime
+
+ROOT = Path(__file__).resolve().parent.parent
+
+
+class RecordingGuards(unittest.TestCase):
+    def test_loop_cleanup_targets_original_project_when_export_is_opened(self):
+        lua=LuaRuntime(unpack_returned_tuples=True)
+        lua.execute('''
+active=1;wire={};removed={};repeat_project={}
+reaper={ColorToNative=function()return 1 end,
+ EnumProjects=function()return active end,ValidatePtr=function()return true end,
+ SelectProjectInstance=function(p)active=p end,
+ GetProjExtState=function(_,s,k)if k=='recordingProject' then return 1,active==2 and '1' or '' end return 1,'P'..active end,
+ GetExtState=function(s,k)return wire[s..'/'..k] or ''end,
+ SetExtState=function(s,k,v)wire[s..'/'..k]=v end,
+ AddProjectMarker2=function()return 10 end,
+ DeleteProjectMarker=function(_,id)removed[#removed+1]={active,id}end,
+ EnumProjectMarkers=function()return 0 end,
+ GetSetRepeat=function(v)repeat_project[active]=v end,
+ GetSet_LoopTimeRange=function()end,UpdateArrange=function()end,
+ GetPlayState=function()return 1 end,GetPlayPosition=function()return 5 end,
+ defer=function(fn)tick=fn end}
+''')
+        lua.execute((ROOT/'Requirements/ReaSet_NativeLoop.lua').read_text(encoding='utf-8'))
+        lua.execute("wire['ReaSet/nativeLoop']='on';wire['ReaSet/loopStart']='0';wire['ReaSet/loopEnd']='30';tick();active=2;tick()")
+        self.assertEqual(lua.eval('#removed'),1)
+        self.assertEqual(lua.eval('removed[1][1]'),1)
+        self.assertEqual(lua.eval('active'),2)
+        self.assertIsNone(lua.eval('repeat_project[2]'))
+
+    def test_song_delete_refuses_owned_recording_before_any_mutation(self):
+        with tempfile.TemporaryDirectory() as directory:
+            folder=Path(directory)
+            (folder/'jamroom_pending_delete.txt').write_text('Song\n0\n60\n')
+            script=(ROOT/'tools/jamroom_delete_song.lua').read_text(encoding='utf-8')
+            script=script.replace('local pointer = script_dir .. "jamroom_pending_delete.txt"',
+                                  'local pointer = '+json.dumps((folder/'jamroom_pending_delete.txt').as_posix()))
+            lua=LuaRuntime(unpack_returned_tuples=True)
+            lua.execute('''
+mutations=0;reply=''
+reaper={GetPlayState=function()return 0 end,
+ GetProjExtState=function()return 1,'P' end,GetExtState=function()return ''end,
+ SetExtState=function(_,_,v)reply=v end,ShowConsoleMsg=function()end,
+ EnumProjectMarkers2=function(_,i)if i==0 then return 1,true,0,60,'Song',1 end return 0 end,
+ CountTracks=function()return 1 end,GetTrack=function()return {}end,
+ CountTrackMediaItems=function()return 1 end,GetTrackMediaItem=function()return {}end,
+ GetMediaItemInfo_Value=function()return 0 end,
+ GetSetMediaItemInfo_String=function()return true,'session/take'end,
+ Undo_BeginBlock=function()mutations=mutations+1;error('Must not start mutation')end}
+''')
+            lua.execute(script)
+            self.assertEqual(lua.eval('mutations'),0)
+            self.assertIn('recording session',lua.eval('reply'))
+
+
+if __name__=='__main__':unittest.main()

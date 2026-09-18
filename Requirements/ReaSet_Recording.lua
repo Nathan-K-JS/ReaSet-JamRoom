@@ -11,8 +11,10 @@ local function publish(value)
   if json==last_data then return end
   last_data=json;generation=generation+1
   local count=math.ceil(#json/800)
-  for i=0,count-1 do reaper.SetExtState(SEC,'d'..i,generation..':'..json:sub(i*800+1,(i+1)*800),false)end
-  reaper.SetExtState(SEC,'meta',generation..':'..count,false)
+  -- Keep recent generations readable while a tablet fetches a chunk burst.
+  local slot=generation%16
+  for i=0,count-1 do reaper.SetExtState(SEC,'d'..slot..'_'..i,generation..':'..json:sub(i*800+1,(i+1)*800),false)end
+  reaper.SetExtState(SEC,'meta',generation..':'..count..':'..slot,false)
 end
 local function leave()
   if controller and reaper.ValidatePtr(owner,'ReaProject*') then

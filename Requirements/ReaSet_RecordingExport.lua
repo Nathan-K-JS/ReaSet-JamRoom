@@ -34,6 +34,7 @@ function M.export(self,s)
     reaper.SetProjExtState(0,'ReaSetTK','applied','')
     reaper.SetProjExtState(0,'ReaSetRec','index','')
     reaper.SetProjExtState(0,'ReaSetRec','audition','')
+    reaper.SetProjExtState(0,'ReaSetRec','auditionOptions','')
     local allowed={}
     for _,r in ipairs(M.P.items(s.song,true))do allowed[r.item]=true end
     for i=reaper.CountMediaItems(0)-1,0,-1 do
@@ -77,7 +78,12 @@ function M.export(self,s)
           reaper.SetMediaItemTake_Source(take,replacement)
         end
       end
-      expected[#expected+1]={position=reaper.GetMediaItemInfo_Value(it,'D_POSITION'),length=reaper.GetMediaItemInfo_Value(it,'D_LENGTH'),takes=reaper.CountTakes(it)}
+      local row={position=reaper.GetMediaItemInfo_Value(it,'D_POSITION'),length=reaper.GetMediaItemInfo_Value(it,'D_LENGTH'),takes=reaper.CountTakes(it),audio={}}
+      for n=0,reaper.CountTakes(it)-1 do
+        local tk=reaper.GetTake(it,n);row.audio[n+1]={}
+        for _,key in ipairs({'D_PLAYRATE','D_PITCH','D_STARTOFFS'})do row.audio[n+1][key]=reaper.GetMediaItemTakeInfo_Value(tk,key)end
+      end
+      expected[#expected+1]=row
     end
     local tempo={};local num,den,bpm=reaper.TimeMap_GetTimeSigAtTime(0,s.song.start)
     for i=0,reaper.CountTempoTimeSigMarkers(0)-1 do
@@ -98,12 +104,14 @@ function M.export(self,s)
     reaper.Main_SaveProjectEx(0,exported,8)
     assert(M.read(exported),'Export project was not saved')
     reaper.Main_openProject('noprompt:'..exported)
+    assert(math.abs(reaper.Master_GetPlayRate(0)-s.rate)<.00001,'Export playback rate verification failed')
     assert(reaper.CountMediaItems(0)==#expected,'Export item count verification failed')
     for i=0,reaper.CountMediaItems(0)-1 do
       local it=reaper.GetMediaItem(0,i);local e=expected[i+1]
       assert(math.abs(reaper.GetMediaItemInfo_Value(it,'D_POSITION')-e.position)<.00001 and math.abs(reaper.GetMediaItemInfo_Value(it,'D_LENGTH')-e.length)<.00001 and reaper.CountTakes(it)==e.takes,'Export alignment verification failed')
       for n=0,reaper.CountTakes(it)-1 do
         local tk=reaper.GetTake(it,n)
+        for key,value in pairs(e.audio[n+1])do assert(math.abs(reaper.GetMediaItemTakeInfo_Value(tk,key)-value)<.00001,'Export take timing/pitch verification failed')end
         if not reaper.TakeIsMIDI(tk)then
           local file=reaper.GetMediaSourceFileName(reaper.GetMediaItemTake_Source(tk),'')
           assert(file:gsub('\\','/'):sub(1,#folder+7)==folder..'/Media/','Export still references external media')
@@ -128,7 +136,7 @@ function M.export(self,s)
     if tag:sub(1,#s.id+1)==s.id..'/' then
       local _,g=reaper.GetSetMediaItemInfo_String(it,'GUID','',false)
       local yes,chunk=reaper.GetItemStateChunk(it,'',false)
-      assert(yes and known[g]==chunk,'Recording changed since it was saved; export created, setlist retained')
+      assert(yes and M.samechunk(known[g],chunk),'Recording changed since it was saved; export created, setlist retained')
     end
   end)
   s.exported=exported;self:save(false);self:remove_session(s)

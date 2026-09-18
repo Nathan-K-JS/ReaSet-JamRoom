@@ -63,6 +63,22 @@ if not rgn_idx then
                 .. 'project may have changed since the list was loaded')
 end
 
+local _, project = reaper.GetProjExtState(0,'ReaSet','projectId')
+if reaper.GetPlayState()~=0 or (project~='' and reaper.GetExtState('ReaSetRec','lock')==project) then
+    return fail('Finish playback/recording and choose Done before deleting songs')
+end
+for ti=0,reaper.CountTracks(0)-1 do
+    local tr=reaper.GetTrack(0,ti)
+    for ii=0,reaper.CountTrackMediaItems(tr)-1 do
+        local it=reaper.GetTrackMediaItem(tr,ii)
+        local p=reaper.GetMediaItemInfo_Value(it,'D_POSITION')
+        local _,owned=reaper.GetSetMediaItemInfo_String(it,'P_EXT:ReaSetRec','',false)
+        if owned~='' and p>=rgn_s-.001 and p<rgn_e then
+            return fail('Export or delete this song\'s recording session before deleting the song')
+        end
+    end
+end
+
 reaper.Undo_BeginBlock()
 reaper.PreventUIRefresh(1)
 
