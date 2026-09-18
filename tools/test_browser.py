@@ -168,6 +168,18 @@ class BrowserTests(unittest.TestCase):
         self.assertEqual(self.page.evaluate('sent.length'),count)
         self.assertIn('disconnected',self.page.evaluate('g_recError'))
 
+    def test_matched_volume_shows_manual_override_and_sends_confirmed_action(self):
+        self.recording_state()
+        self.page.evaluate("g_recState.songs[0].level={status:'measured',gain:.35,manual:true};document.body.insertAdjacentHTML('beforeend','<div id=volume-test>'+recGainHtml()+'</div>')")
+        self.assertIn('matched suggestion 35%',self.page.locator('#volume-test').inner_text())
+        self.page.get_by_role('button',name='Use matched level',exact=True).click()
+        command=json.loads(self.page.evaluate("decodeURIComponent(sent.at(-1)).split('/want/')[1]"))
+        self.assertEqual(command['op'],'matchGain')
+        self.assertEqual(command['song'],'song1')
+        self.assertEqual(self.page.evaluate('g_recState.songs[0].gain'),.65)
+        self.page.evaluate("g_recPending=null;document.getElementById('playback-gain').focus();g_recState.songs[0].level.manual=false;recUpdateGain()")
+        self.assertIn('Matched automatically',self.page.locator('#playback-level-note').inner_text())
+
     def test_playback_volume_is_song_scoped_and_confirmed(self):
         self.recording_state()
         self.page.evaluate("document.body.insertAdjacentHTML('beforeend','<div id=\"gain-test\">'+recGainHtml()+'</div>')")
@@ -364,7 +376,7 @@ class BrowserTests(unittest.TestCase):
         self.assertFalse(self.page.get_by_role('button',name='Later 0.5s',exact=True).is_disabled())
 
     def test_whole_library_uses_all_project_songs_and_keeps_protected_versions(self):
-        songs=[{'id':i,'name':'Song '+str(i),'eligible':i!=2,'protected':i==2,'update_status':'Update available'} for i in (1,2,3)]
+        songs=[{'id':i,'name':'Song '+str(i),'eligible':i!=2,'level_eligible':True,'protected':i==2,'update_status':'Update available'} for i in (1,2,3)]
         posts=[]
         def route(req):
             if req.request.url.endswith('/importer-queue.js'):
@@ -386,6 +398,15 @@ class BrowserTests(unittest.TestCase):
         self.assertFalse(posts[0]['replace_edits'])
         self.assertEqual(self.page.locator('#updateScope').input_value(),'all')
         self.assertEqual(self.page.get_by_role('button',name='Shift timing',exact=True).count(),0)
+
+        self.page.locator('#updateMode').select_option('levels')
+        self.page.locator('#replaceLevels').check()
+        self.page.get_by_role('button',name='Update whole library',exact=True).click()
+        self.page.wait_for_timeout(300)
+        self.assertEqual(posts[-1]['ids'],[1,2,3])
+        self.assertTrue(posts[-1]['levels_only'])
+        self.assertTrue(posts[-1]['replace_levels'])
+        self.assertFalse(posts[-1]['clicks_only'])
 
     def setup_transport(self):
         self.load_reaset()

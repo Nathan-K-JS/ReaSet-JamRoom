@@ -55,6 +55,35 @@ class UpdateTests(unittest.TestCase):
 
     def batch(self):return self.up.listing()['batch']
 
+    def test_volume_only_updates_protected_song_without_chart_or_click_generation(self):
+        folder=Path(self.songs[0]['folder']);job=ji.load_job(folder)
+        self.fake_click(job,folder)
+        job['slots']=[{'slot':'BASS','file':'test-click.wav'}]
+        ji.save_job(folder,job);self.up.protect(1,'Song1',True)
+        with patch.object(ji.level_model,'scan',return_value=(-12,-1)), patch.object(ji,'prepare_chart_document') as chart, patch.object(ji.click_model,'ensure_click') as click:
+            self.up.start([1],levels_only=True)
+        self.assertEqual(self.batch()['songs'][0]['status'],'done')
+        chart.assert_not_called();click.assert_not_called()
+        args=self.push.call_args.kwargs
+        self.assertIsNone(args['document']);self.assertIsNone(args['click'])
+        self.assertAlmostEqual(args['level']['gain'],10**(-11/20))
+        self.assertFalse(args['level']['replace'])
+        self.up.song_state.return_value={'song:1:level':args['level']['revision']}
+        self.assertFalse(self.up.listing()['songs'][0]['level_eligible'])
+        self.up.start([1],levels_only=True,replace_levels=True)
+        self.assertTrue(self.push.call_args.kwargs['level']['replace'])
+
+    def test_full_library_update_includes_volume_matching_from_cached_slots(self):
+        folder=Path(self.songs[0]['folder']);job=ji.load_job(folder)
+        self.fake_click(job,folder);job['slots']=[{'slot':'BASS','file':'test-click.wav'}]
+        ji.save_job(folder,job)
+        with patch.object(ji.level_model,'scan',return_value=(-15,-2)):
+            self.up.start([1])
+        args=self.push.call_args.kwargs
+        self.assertIsNotNone(args['document']);self.assertIsNotNone(args['click'])
+        self.assertEqual(args['level']['status'],'measured')
+        self.assertEqual(ji.load_job(folder)['level']['revision'],args['level']['revision'])
+
     def test_installed_fallback_remains_eligible_for_whole_library_retry(self):
         folder=Path(self.songs[0]['folder']);job=ji.load_job(folder)
         click=ji.click_model.ensure_click(job,folder)
@@ -82,8 +111,9 @@ class UpdateTests(unittest.TestCase):
         self.assertTrue(self.up.listing()['songs'][0]['current'])
         self.up.song_state.return_value={'song:1:revision':'manual'}
         self.up.start([1])
-        self.assertEqual(self.batch()['songs'][0]['status'],'failed')
-        self.push.assert_not_called()
+        self.assertEqual(self.batch()['songs'][0]['status'],'done')
+        self.assertIsNone(self.push.call_args.kwargs['document'])
+        self.assertIsNone(self.push.call_args.kwargs['chords'])
 
     def test_failure_continues_and_resume_only_retries_failed_song(self):
         def failing(*args,**kwargs):
@@ -118,7 +148,7 @@ class UpdateTests(unittest.TestCase):
 
     def test_timing_fixes_require_explicit_replacement(self):
         self.songs[0]['review_status']='Timing adjusted · drift corrected'
-        self.up.start([1]);self.push.assert_not_called()
+        self.up.start([1]);self.assertIsNone(self.push.call_args.kwargs['document'])
         self.up.start([1],replace_edits=True)
         self.assertEqual(self.batch()['songs'][0]['status'],'done')
 

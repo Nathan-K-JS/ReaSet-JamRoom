@@ -5438,7 +5438,7 @@
         syncLeadSlider();
         tkRenderPanel();             // paints the performance chips on load
         // Shown in the sidebar so a stale cached page is obvious after a deploy.
-        var REASET_VERSION = "v3.8 - free-jam recording";
+        var REASET_VERSION = "v3.9 - song volume matching";
         var _rv = document.getElementById("reasetVer");
         if (_rv) _rv.textContent = REASET_VERSION;
         (function () { var t = localStorage.getItem("reasetlist_theme") || "dark"; setTheme(t, true); })();
@@ -8923,7 +8923,7 @@
                     g_recPending=null;g_recProbe=null;
                 }
                 recRender();recUpdateGain();
-                if(tracksPanelOpen && !document.getElementById('playback-gain'))renderTracksPanel();
+                if(tracksPanelOpen){var gainNode=document.getElementById('playback-gain'),gainSong=recSong();if(!gainNode||(gainSong&&gainNode.parentElement.dataset.level!==JSON.stringify([gainSong.key,gainSong.level||null])&&document.activeElement!==gainNode))renderTracksPanel();}
             }catch(e){g_recFetch=null;}
         }
         function recButton(label,op,extra,disabled,primary) {
@@ -8939,20 +8939,24 @@
             var song=jrActiveSong(),control=song&&(song.controls||[]).find(function(c){return c.slot===id;});
             return control&&control.label||({DRUMS:'Drums',PERC_FX:'Percussion / effects',BASS:'Bass',GTR1:'Guitar 1',GTR2:'Guitar 2',KEYS:'Keys',BVS:'Backing vocals',LEAD_VOX:'Lead vocals',CLICK:'Click',EXTRA:'Extras'})[id]||id;
         }
+        function recLevelNote(s){return 'Saved per song / click stays separate'+(s.level?'<br>'+trEsc(s.level.status==='measured'?(s.level.manual?'Your level / matched suggestion '+Math.round(s.level.gain*100)+'%':'Matched automatically'+(s.level.limited?' / limited for headroom':'')):(s.level.reason||'Matching unavailable')):'');}
         function recGainHtml() {
             var s=recOnline() && recSong();
             if(!s)return '<div class="rec-sub">Playback volume: waiting for the recording/volume controller.</div>';
-            return '<div class="rec-volume"><label for="playback-gain">Playback volume <output id="playback-gain-value">'+Math.round(s.gain*100)+'%</output></label>'
+            return '<div class="rec-volume" data-level="'+trEsc(JSON.stringify([s.key,s.level||null]))+'"><label for="playback-gain">Playback volume <output id="playback-gain-value">'+Math.round(s.gain*100)+'%</output></label>'
                 +'<input id="playback-gain" aria-label="Playback volume" type="range" min="0" max="100" step="1" value="'+Math.round(s.gain*100)+'" '+(recLocked()?'disabled':'')+' oninput="document.getElementById(\'playback-gain-value\').textContent=this.value+\'% (adjusting)\'" onchange="recSetGain(this.value)">'
-                +'<small>Saved per song · click stays separate</small> <button class="rec-btn" onclick="recSetGain(65)" '+(recLocked()?'disabled':'')+'>Reset 65%</button></div>';
+                +'<small id="playback-level-note">'+recLevelNote(s)+'</small> '
+                +(s.level&&s.level.status==='measured'?'<button class="rec-btn" onclick="recUseMatched()" '+(recLocked()?'disabled':'')+'>Use matched level</button>':'<button class="rec-btn" onclick="recSetGain(65)" '+(recLocked()?'disabled':'')+'>Reset 65%</button>')+'</div>';
         }
         function recOpenSaved(){
             if(!document.getElementById('recording-panel').classList.contains('open'))recTogglePanel();
             var list=document.getElementById('rec-takes');if(list){list.open=true;list.scrollIntoView({block:'start'});}
         }
+        function recUseMatched(){var s=recSong();if(s)recSend('matchGain',{song:s.key});}
         function recSetGain(value){var s=recSong();if(s)recSend('gain',{song:s.key,value:Number(value)/100});}
         function recUpdateGain(){
             var el=document.getElementById('playback-gain'),s=recOnline()&&recSong();
+            var note=document.getElementById('playback-level-note');if(note&&s)note.innerHTML=recLevelNote(s);
             if(el && s && document.activeElement!==el){el.value=Math.round(s.gain*100);el.disabled=!!g_recPending||recLocked();document.getElementById('playback-gain-value').textContent=el.value+'%';}
         }
         function recRender() {

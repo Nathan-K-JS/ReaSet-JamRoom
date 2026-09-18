@@ -511,7 +511,10 @@ class ImportQueue:
             if not (folder / 'applied.txt').is_file():
                 raise RuntimeError('REAPER did not confirm Apply. Open the intended project, stop playback/recording, then retry. The same operation ID prevents a duplicate append.')
             with self.guard:
-                row.update(state='done', apply_phase='confirmed', summary='Added to REAPER. Save the project to keep it.')
+                level = job.get('level') or {}
+                note = (f' Matched playback level: {level["gain"]:.0%}.' if level.get('status')=='measured' else
+                        ' Volume matching: ' + level.get('reason','not measured') + '.')
+                row.update(state='done', apply_phase='confirmed', summary='Added to REAPER.' + note + ' Save the project to keep it.')
                 self._save()
         except Exception as error:
             with self.guard:

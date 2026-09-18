@@ -44,7 +44,7 @@ class Updates:
         return cfg, project, root
 
     def song_state(self, cfg, songs):
-        keys = [f"song:{s['id']}:{field}" for s in songs for field in ("revision","click")]
+        keys = [f"song:{s['id']}:{field}" for s in songs for field in ("revision","click","level")]
         if not keys: return {}
         result = requests.get(ji_url(cfg) + "/_/" + ";".join("GET/PROJEXTSTATE/ReaSetSong/" + k for k in keys), timeout=10)
         result.raise_for_status()
@@ -70,6 +70,15 @@ class Updates:
                              not click.get('analysis_unavailable') and
                              folder is not None and (folder/click.get('file','missing')).is_file() and
                              states.get(f"song:{song['id']}:click") == click.get('generator','')+':'+click.get('file',''))
+            level = job.get('level') or {}
+            try:
+                level_stamp = ji.level_model.fingerprint(job, folder) if job else None
+            except (OSError, ValueError):
+                level_stamp = None
+            level_current = bool(level_stamp and level.get('revision') == level_stamp and
+                                 states.get(f"song:{song['id']}:level") == level_stamp)
+            has_backing = any(s.get('slot') not in ('CLICK','SKIP') for s in job.get('slots', []))
+            level_eligible = has_backing and not level_current
             manual_edits = bool(revision and revision != generation.get("revision"))
             status = "Keep this version" if protected else "Current" if current else "Update available" if job else "Source files missing"
             out.append(dict(song, project=project, protected=protected, current=current,
@@ -77,8 +86,10 @@ class Updates:
                                           click.get('review','Click not generated')),
                             click_report=bool(click.get('report')),
                             click_current=click_current,click_eligible=bool(job) and not click_current,
+                            level_current=level_current, level_eligible=level_eligible,
+                            level_status=('Volume checked' if level_current else 'Volume matching available' if has_backing else 'Backing sources unavailable'),
                             manual_edits=manual_edits, update_status=status,
-                            eligible=bool(job) and not protected and (not current or not click_current)))
+                            eligible=bool(job) and not protected and (not current or not click_current or level_eligible)))
         latest = read(root / "latest.json", {})
         batch = read(root / (latest.get("id", "none") + ".json"), None)
         if batch and batch["status"] == "running" and self.active != batch["id"]:
@@ -96,12 +107,13 @@ class Updates:
             else: values.pop(str(song_id), None)
             write(root / "settings.json", values)
 
-    def start(self, ids=None, resume=False, restore=False, replace_edits=False, target_project=None, clicks_only=False, approve_click=None):
+    def start(self, ids=None, resume=False, restore=False, replace_edits=False, target_project=None, clicks_only=False, approve_click=None, levels_only=False, replace_levels=False):
         if not self.busy.acquire(blocking=False):
             raise ValueError("Another import or change is running")
         try:
             if self.state["state"] in ("preparing", "review", "applying"):
                 raise ValueError("Finish the current import first")
+            if clicks_only and levels_only: raise ValueError('Choose one update mode')
             listing = self.listing()
             cfg, project, root = self.context()
             if listing["project"] != project or (target_project and target_project != project):
@@ -118,10 +130,10 @@ class Updates:
                 if approve_click and (len(ids)!=1 or not clicks_only or restore):
                     raise ValueError('Review one click at a time')
                 chosen = [s for s in listing["songs"] if s["id"] in ids and
-                          (restore or approve_click or clicks_only and s['click_eligible'] or not s["protected"] and (s['eligible'] or replace_edits))]
+                          (restore or approve_click or levels_only and (s['level_eligible'] or replace_levels and s.get('folder')) or clicks_only and s['click_eligible'] or not levels_only and not clicks_only and not s["protected"] and (s['eligible'] or replace_edits or replace_levels))]
                 batch = {"id": uuid.uuid4().hex, "project": project, "status": "running",
                          "restore": bool(restore), "replace_edits": bool(replace_edits),
-                         "clicks_only":bool(clicks_only),
+                         "clicks_only":bool(clicks_only), "levels_only":bool(levels_only), "replace_levels":bool(replace_levels),
                          "approve_click":approve_click,
                          "songs": [dict(s, status="pending", message="") for s in chosen]}
                 if not batch["songs"]: raise ValueError("Selected songs are protected, already current, or unavailable")
@@ -150,14 +162,14 @@ class Updates:
                 if int(transport.text.split("\t")[1]) != 0:
                     batch["status"] = "paused"; break
                 settings = read(root / "settings.json", {})
-                if not batch["restore"] and not batch.get('clicks_only') and settings.get(str(item["id"])) == item["name"]:
+                if not batch["restore"] and not batch.get('clicks_only') and not batch.get('levels_only') and settings.get(str(item["id"])) == item["name"]:
                     item.update(status="skipped", message="Keep this version"); write(path,batch); continue
                 item["status"] = "working"; write(path,batch)
                 try:
-                    self.update_one(cfg, root, batch, item)
-                    item.update(status="done", message="Restored" if batch["restore"] else "Updated")
+                    message = self.update_one(cfg, root, batch, item)
+                    item.update(status="done", message=message or ("Restored" if batch["restore"] else "Updated"))
                     installed = ji.load_job(Path(item['folder'])).get('click') or {}
-                    if installed.get('review'):
+                    if installed.get('review') and not batch.get('levels_only'):
                         item['message'] += ' — '+installed['review']+(' (click muted)' if installed.get('muted') else '')
                 except Exception as e:
                     item.update(status="failed", message=str(e))
@@ -200,27 +212,27 @@ class Updates:
             if previous_installation: previous_installation["after"] = str(op / "after.json")
             write(installed_path, previous_installation)
             return
+        levels_only = batch.get('levels_only') or (not batch.get('clicks_only') and item.get('current') and item.get('click_current') and not batch.get('replace_edits'))
+        preserve_chart = levels_only or batch.get('clicks_only') or ((item.get('manual_edits') or 'Timing adjusted' in item.get('review_status','')) and not batch['replace_edits'])
         candidate_path = op / "candidate.json"
         if candidate_path.exists():
             candidate = read(candidate_path)
-            if (candidate.get('click') or {}).get('generator')!=ji.click_model.GENERATOR:
+            if not levels_only and (candidate.get('click') or {}).get('generator')!=ji.click_model.GENERATOR:
                 if batch.get('approve_click'):raise ValueError('Click changed; reopen its listening report')
                 ji.click_model.ensure_click(candidate,folder,ji.log)
                 write(candidate_path,candidate)
         else:
             original = ji.load_job(folder)
             if not (folder / "job.json").is_file(): raise ValueError("No saved source job")
-            if not batch.get('clicks_only') and not ((original.get("lyrics") or {}).get("lines") or
+            if not preserve_chart and not ((original.get("lyrics") or {}).get("lines") or
                     (original.get("lyrics") or {}).get("plain") or
                     (original.get("chart") or {}).get("url") or ji.detected_chords(original,folder)):
                 raise ValueError("Cached lyrics and chord sources are missing; previous song retained")
-            if not batch.get('clicks_only') and (item.get("manual_edits") or "Timing adjusted" in item.get("review_status", "")) and not batch["replace_edits"]:
-                raise ValueError("Saved timing fixes: select 'Replace old timing fixes' to rebuild, or keep this version")
             write(op / "job-before.json", original)
             write(op / "installation-before.json", installed)
             candidate = copy.deepcopy(original)
             candidate["duration"] = item["end"] - item["start"]
-            if not batch.get('clicks_only'):
+            if not preserve_chart:
                 ji.stage_lyrics_align(candidate, folder, False, persist=False)
                 ji.prepare_chart_document(candidate, folder)
             if batch.get('approve_click'):
@@ -232,23 +244,32 @@ class Updates:
                 click['muted']=False
                 click['listening_approved']=True
                 click['review']='Listening review accepted; automatic findings retained in report'
-            else:
+            elif not levels_only:
                 ji.click_model.ensure_click(candidate,folder,ji.log)
             write(candidate_path,candidate)
-        expected = None if batch["replace_edits"] or batch.get('clicks_only') else installed.get("after")
-        click=candidate['click']
-        candidate['slots']=[s for s in candidate.get('slots',[]) if s.get('slot')!='CLICK']
-        candidate['slots'].append({'slot':'CLICK','label':'Click','file':click['file']})
-        self.push(cfg, item["name"], item, chords=None if batch.get('clicks_only') else candidate["chords"],
-                  lyric_lines=None if batch.get('clicks_only') else ji.chart_model.lyric_items(candidate),
-                  document=None if batch.get('clicks_only') else candidate["chart_document"],
-                  click={'file':str(folder/click['file']),'revision':click['generator']+':'+click['file'],'muted':bool(click.get('muted'))},
+        level = None
+        if not batch.get('clicks_only'):
+            ji.level_model.analyse(candidate, folder, ji.log)
+            level = ji.level_model.request(candidate, folder, batch.get('replace_levels'))
+            write(candidate_path,candidate)
+        expected = None if batch["replace_edits"] or preserve_chart else installed.get("after")
+        click_request = None
+        if not levels_only:
+            click=candidate['click']
+            candidate['slots']=[s for s in candidate.get('slots',[]) if s.get('slot')!='CLICK']
+            candidate['slots'].append({'slot':'CLICK','label':'Click','file':click['file']})
+            click_request={'file':str(folder/click['file']),'revision':click['generator']+':'+click['file'],'muted':bool(click.get('muted'))}
+        result = self.push(cfg, item["name"], item, chords=None if preserve_chart else candidate["chords"],
+                  lyric_lines=None if preserve_chart else ji.chart_model.lyric_items(candidate),
+                  document=None if preserve_chart else candidate["chart_document"],
+                  click=click_request, level=level,
                   operation_dir=op, expected=expected)
         ji.save_job(folder,candidate)
         write(installed_path, {"before": str(op / "before.json"), "after": str(op / "after.json"),
                               "job_before": str(op / "job-before.json"),
                               "installation_before": str(op / "installation-before.json"),
                               "revision": candidate.get("chart_document",{}).get("revision","")})
+        return result
 
 
 def ji_url(cfg):

@@ -1,5 +1,7 @@
 -- Persistent per-song stem trim. GPL-3.0.
 local M = {}
+local dir=debug.getinfo(1,'S').source:match('@?(.*[\\/])') or ''
+local J=dofile(dir..'ReaSet_JSON.lua')
 local slots = {DRUMS=true,PERC_FX=true,BASS=true,GTR1=true,GTR2=true,KEYS=true,BVS=true,LEAD_VOX=true,EXTRA=true,CLICK=true}
 function M.songs()
   local all, songs = {}, {}
@@ -70,8 +72,35 @@ function M.apply(song,gain)
 end
 function M.set(song,gain)
   M.apply(song,gain)
+  reaper.SetProjExtState(0,'ReaSetGainMode',song.key,'manual')
   reaper.SetProjExtState(0,'ReaSetGain',song.key,tostring(gain))
   reaper.UpdateArrange()
+end
+function M.level(song)
+  local _,raw=reaper.GetProjExtState(0,'ReaSetLevel',song.key)
+  local ok,data=pcall(J.decode,raw)
+  if not ok or type(data)~='table' then return nil end
+  local _,mode=reaper.GetProjExtState(0,'ReaSetGainMode',song.key)
+  data.manual=mode=='manual'
+  return data
+end
+function M.match(song,data,replace)
+  assert(type(data)=='table' and type(data.revision)=='string','Invalid level report')
+  if data.status=='measured' then assert(type(data.gain)=='number' and data.gain==data.gain and data.gain>0 and data.gain<=1,'Invalid matched gain')end
+  local _,mode=reaper.GetProjExtState(0,'ReaSetGainMode',song.key)
+  local _,saved=reaper.GetProjExtState(0,'ReaSetGain',song.key)
+  local manual=mode=='manual' or (mode=='' and saved~='' and math.abs((tonumber(saved) or .65)-.65)>.000001)
+  if manual then reaper.SetProjExtState(0,'ReaSetGainMode',song.key,'manual')end
+  local stored={};for k,v in pairs(data)do if k~='files' and k~='replace' and k~='manual' then stored[k]=v end end
+  reaper.SetProjExtState(0,'ReaSetLevel',song.key,J.encode(stored))
+  reaper.SetProjExtState(0,'ReaSetSong','song:'..song.id..':level',data.revision)
+  if data.status=='measured' and (replace or not manual) then
+    M.apply(song,data.gain)
+    reaper.SetProjExtState(0,'ReaSetGain',song.key,tostring(data.gain))
+    reaper.SetProjExtState(0,'ReaSetGainMode',song.key,'auto')
+    return 'Matched playback level applied'
+  end
+  return manual and 'Manual playback level kept; suggestion saved' or 'No reliable level measurement; existing level kept'
 end
 function M.reconcile()
   local _,exported=reaper.GetProjExtState(0,'ReaSet','recordingProject')

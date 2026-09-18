@@ -477,6 +477,12 @@ function M.new()
     assert(c.revision==self.revision,'Recording state changed; retry your action')
     if c.op=='pause' then assert(self.mode=='recording','Not recording');reaper.Main_OnCommand(1008,0);return end
     if c.op=='save' then self:save(true);self.message='Saved in session';return end
+    if c.op=='matchGain' then
+      assert(not self.db.active,'Finish recording before changing playback volume')
+      local song=self:song(c.song);local level=P.level(song)
+      assert(level and level.status=='measured','No matched level available; run library volume matching first')
+      self.message=P.match(song,level,true);if self.root then self:save(true)end;return
+    end
     if c.op=='gain' then
       assert(not self.db.active,'Finish recording before changing playback volume')
       P.set(self:song(c.song),c.value);if self.root then self:save(true)end;return
@@ -602,7 +608,7 @@ function M.new()
       if not s.deleted and not s.exported then pending=pending+1 end
       sessions[#sessions+1]=row
     end
-    local songs=P.songs();for _,s in ipairs(songs)do s.gain=P.gain(s)end
+    local songs=P.songs();for _,s in ipairs(songs)do s.gain=P.gain(s);s.level=P.level(s)end
     return {project=self.id,revision=self.revision,mode=self.mode,paused=(reaper.GetPlayState()&2)==2,inputs=inputs,sessions=sessions,songs=J.array(songs),pending=pending,notice=pending>0 and not self.later,recordMode=self.db.recordMode or 'song',jam=self.db.jam,countin=self.db.countin,selected=self.selected,take=self.take,message=self.message,error=self.error,ack=self.ack,ready=self.root~=nil,backingOn=self.backingOn~=false,recordingOn=self.recordingOn~=false,recMutes=self.recMutes or {},stemMutes=self.stemMutes or {}}
   end
   -- Restore preview overrides before ordinary rehearsal playback is available.

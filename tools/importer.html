@@ -181,12 +181,14 @@
     <div id="updatesBox" class="hide" style="margin:18px 0;padding:16px;border:1px solid #8885;border-radius:12px">
       <label>Update existing songs</label>
       <p class="note">Choose click tracks only to keep section edits. Clicks follow the recording; flagged candidates are installed muted. Use Review click to see the flagged passages and hear music with the click, then enable it after checking. Previous versions are saved for restore.</p>
-      <label>Update <select id="updateMode" onchange="updateSelection={};loadUpdates()"><option value="both">Charts and click tracks</option><option value="clicks">Click tracks only (keep charts)</option></select></label>
+      <label>Update <select id="updateMode" onchange="updateSelection={};loadUpdates()"><option value="both">Charts, click tracks and volume matching</option><option value="levels">Volume matching only (keep charts and clicks)</option><option value="clicks">Click tracks only (keep charts)</option></select></label>
       <select id="updateScope" onchange="updateSelection={};loadUpdates()"><option value="list">Current setlist</option><option value="all">All songs in this project</option></select>
       <button class="small" onclick="chooseUpdates(true)">Select eligible</button>
       <button class="small" onclick="chooseUpdates(false)">Deselect all</button>
       <div id="updateSongs"></div>
       <label class="note"><input type="checkbox" id="replaceTiming"> Replace old timing fixes and local chart edits on selected songs</label>
+      <label class="note"><input type="checkbox" id="replaceLevels" onchange="updateSelection={};loadUpdates()"> Replace my manual playback levels with matched suggestions</label>
+      <p class="note">Volume matching uses cached backing stems, excluding click. Manual playback levels are kept unless you choose to replace them.</p>
       <button id="updateStart" class="primary" onclick="startUpdates(false,false)">Update selected</button>
       <button id="updateWholeLibrary" onclick="updateWholeLibrary()">Update whole library</button>
       <button onclick="startUpdates(true,false)">Resume / retry batch</button>
@@ -290,7 +292,7 @@
   <div class="card hide" id="reviewCard">
     <h2>Listen &amp; assign the stems</h2>
     <div class="note">Play each stem and choose which Jam Room group it
-      belongs in. Multiple stems on one group get mixed together.</div>
+      belongs in. Multiple stems on one group get mixed together. On Apply, the final backing stems are measured and a matched playback level is saved; click stays separate.</div>
     <div id="stemList"></div>
     <h2 style="margin-top:16px">Lyric timing</h2>
     <div id="lyricInfo"></div>
@@ -344,7 +346,7 @@
 <script>
 // Version of THIS page (served fresh from disk). Compared against the version
 // of the running server. Either side may be older.
-var UI_BUILD = "v3.7";
+var UI_BUILD = "v3.9";
 
 function importerVersionWarning(serverBuild) {
   if (serverBuild === UI_BUILD) return '';
@@ -625,7 +627,8 @@ function openUpdates(){
   loadUpdates();
 }
 function clickUpdatesOnly(){return $('updateMode').value==='clicks';}
-function updateEligible(s){return clickUpdatesOnly()?s.click_eligible:s.eligible;}
+function levelUpdatesOnly(){return $('updateMode').value==='levels';}
+function updateEligible(s){return levelUpdatesOnly()?(s.level_eligible||$('replaceLevels').checked&&s.folder):clickUpdatesOnly()?s.click_eligible:(s.eligible||$('replaceLevels').checked&&s.folder);}
 function loadUpdates(){
   clearTimeout(updateTimer);
   updateApi('').then(function(d){
@@ -635,11 +638,11 @@ function loadUpdates(){
     $('updateSongs').innerHTML='';
     shown.forEach(function(s){
       if(updateSelection[s.id]===undefined)updateSelection[s.id]=updateEligible(s);
-      if(s.protected&&!clickUpdatesOnly())updateSelection[s.id]=false;
+      if(s.protected&&!clickUpdatesOnly()&&!levelUpdatesOnly())updateSelection[s.id]=false;
       var row=document.createElement('div');row.className='songrow';
-      var box=document.createElement('input');box.type='checkbox';box.checked=!!updateSelection[s.id];box.disabled=s.protected&&!clickUpdatesOnly();
+      var box=document.createElement('input');box.type='checkbox';box.checked=!!updateSelection[s.id];box.disabled=s.protected&&!clickUpdatesOnly()&&!levelUpdatesOnly();
       box.setAttribute('aria-label','Select '+s.name);box.onchange=function(){updateSelection[s.id]=box.checked;};row.appendChild(box);
-      var text=document.createElement('div');text.className='sname';text.textContent=s.name+' · '+s.update_status+' · '+(s.click_status||'');row.appendChild(text);
+      var text=document.createElement('div');text.className='sname';text.textContent=s.name+' · '+s.update_status+' · '+(levelUpdatesOnly()?s.level_status||'':(s.click_status||'')+' / '+(s.level_status||''));row.appendChild(text);
       if(s.click_report){var review=document.createElement('a');review.textContent='Review click';review.href='/api/click-review?id='+encodeURIComponent(s.id);review.target='_blank';review.rel='noopener';row.appendChild(review);}
       var keep=document.createElement('label');keep.className='note';var protect=document.createElement('input');protect.type='checkbox';protect.checked=s.protected;
       protect.onchange=function(){updateApi('/protect',{id:s.id,name:s.name,keep:protect.checked,project:updateProject}).then(loadUpdates).catch(updateError);};
@@ -659,7 +662,7 @@ function startUpdates(resume,restore,ids){
   ids=ids||updateSongs.filter(function(s){return updateSelection[s.id]&&($('updateScope').value==='all'||!updateScopeIds||updateScopeIds.indexOf(s.id)>=0);}).map(function(s){return s.id;});
   if(!resume&&!ids.length)return updateError('Select at least one song.');
   $('updateStart').disabled=true;$('updateProgress').textContent=restore?'Restoring saved versions…':'Preparing song updates…';
-  updateApi('/start',{ids:ids,resume:resume,restore:restore,project:updateProject,clicks_only:clickUpdatesOnly(),replace_edits:$('replaceTiming').checked}).then(loadUpdates).catch(updateError);
+  updateApi('/start',{ids:ids,resume:resume,restore:restore,project:updateProject,clicks_only:clickUpdatesOnly(),levels_only:levelUpdatesOnly(),replace_levels:$('replaceLevels').checked,replace_edits:$('replaceTiming').checked}).then(loadUpdates).catch(updateError);
 }
 function pauseUpdates(){updateApi('/pause',{}).then(loadUpdates).catch(updateError);}
 function updateWholeLibrary(){
@@ -667,7 +670,7 @@ function updateWholeLibrary(){
   updateApi('').then(function(d){
     updateProject=d.project;updateSongs=d.songs||[];updateSelection={};
     $('updateScope').value='all';
-    var ids=updateSongs.filter(function(s){return updateEligible(s)&&(!s.protected||clickUpdatesOnly());}).map(function(s){updateSelection[s.id]=true;return s.id;});
+    var ids=updateSongs.filter(function(s){return updateEligible(s)&&(!s.protected||clickUpdatesOnly()||levelUpdatesOnly());}).map(function(s){updateSelection[s.id]=true;return s.id;});
     if(!ids.length){updateError('All available songs are current or kept.');return;}
     startUpdates(false,false,ids);
   }).catch(updateError).finally(function(){$('updateWholeLibrary').disabled=false;});

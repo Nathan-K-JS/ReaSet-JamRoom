@@ -65,6 +65,7 @@ def main():
         (folder / sub).mkdir()
     shutil.copy2(args.apply_script, folder / 'tools/jamroom_import_apply.lua')
     shutil.copy2(ROOT / 'Requirements/ReaSet_JSON.lua', folder / 'Requirements')
+    shutil.copy2(ROOT / 'Requirements/ReaSet_Playback.lua', folder / 'Requirements')
     lua = r'''
 local root,folder=ROOT,FOLDER
 local J=dofile(root..'/Requirements/ReaSet_JSON.lua')
@@ -88,6 +89,16 @@ local function snapshot(project)
   return table.concat(parts,'\n')
 end
 local before=snapshot(original)
+local function ext_snapshot(project)
+  local result={}
+  for _,section in ipairs({'ReaSet','ReaSetRec','ReaSetTK','ReaSetGain','ReaSetGainMode','ReaSetLevel','ReaSetSong','ReaSetCLRepair'})do
+    local values={};local i=0
+    while true do local ok,k,v=reaper.EnumProjExtState(project,section,i);if not ok then break end;values[k]=v;i=i+1 end
+    result[section]=values
+  end
+  return result
+end
+local ext_before=ext_snapshot(original)
 local function write(name,data)
   local f=assert(io.open(folder..'/'..name,'w'));f:write(J.encode(data));f:close()
 end
@@ -101,6 +112,7 @@ reaper.atexit(function()
   if cmd then reaper.AddRemoveReaScript(false,0,folder..'/tools/jamroom_import_apply.lua',true)end
   reaper.SelectProjectInstance(original)
   reaper.SetExtState('ReaSetJR','importer',importer_state,false)
+  write('state-diagnostic.json',{before=ext_before,after=ext_snapshot(original),count_before=count,count_after=reaper.GetProjectStateChangeCount(original)})
   write('cleanup.json',{original_unchanged=before==snapshot(original) and cursor==reaper.GetCursorPosition(),
     state_counter_unchanged=count==reaper.GetProjectStateChangeCount(original)})
 end)
@@ -203,7 +215,12 @@ if not ok then write('error.json',{error=tostring(why)})end
             # First pass adds named buses; second pass reuses those buses.
             for slot in job.get('slots', []):
                 slot['label'] += ' playback check'
-            importer.write_reaper_job(job, folder)
+            # Generated requests live in scratch, but measurement reads the real
+            # cached media that the request below already references.
+            from unittest.mock import patch
+            analyse = importer.level_model.analyse
+            with patch.object(importer.level_model, 'analyse', side_effect=lambda j, unused, log: analyse(j, source, log)):
+                importer.write_reaper_job(job, folder)
             generated = folder / 'job_for_reaper.lua'
             content = generated.read_text(encoding='utf-8')
             for slot in job.get('slots', []):

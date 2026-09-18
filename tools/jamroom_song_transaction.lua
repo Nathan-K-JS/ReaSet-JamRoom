@@ -3,6 +3,7 @@
 local dir = debug.getinfo(1,"S").source:match("@?(.*[\\/])") or ""
 local J = dofile(dir .. "../Requirements/ReaSet_JSON.lua")
 local C = dofile(dir .. "../Requirements/ReaSet_Click.lua")
+local P = dofile(dir .. "../Requirements/ReaSet_Playback.lua")
 local ok, job = pcall(dofile, dir .. "jamroom_pending_rechord.lua")
 if not ok or type(job) ~= "table" then return end
 local function write(path, value)
@@ -35,6 +36,32 @@ local function run()
   local prefix="song:" .. song.id .. ":"
   local restored=job.restore and J.decode(read(job.restore)) or nil
   local with_click=job.click or (restored and restored.items.click)
+  local with_level=job.level or (restored and restored.level)
+  local level_song
+  if with_level then
+    for _,s in ipairs(P.songs())do if s.id==song.id then level_song=s end end
+    assert(level_song,'Cannot resolve playback level song')
+  end
+  if job.level and job.level.status=='measured' then
+    local actual={}
+    for _,r in ipairs(P.items(level_song,false))do
+      assert(reaper.CountTakes(r.item)==1,'Backing takes changed; volume matching needs the original imported stems')
+      local tk=reaper.GetActiveTake(r.item)
+      local source=reaper.GetMediaItemTake_Source(tk)
+      assert(math.abs(reaper.GetMediaItemInfo_Value(r.item,'D_POSITION')-level_song.start)<.001 and
+        math.abs(reaper.GetMediaItemTakeInfo_Value(tk,'D_STARTOFFS'))<.001 and
+        math.abs(reaper.GetMediaItemTakeInfo_Value(tk,'D_PLAYRATE')-1)<.00001 and
+        math.abs(reaper.GetMediaItemInfo_Value(r.item,'D_LENGTH')-reaper.GetMediaSourceLength(source))<.02,
+        'Backing audio was trimmed or stretched; keep its level or restore the imported stems before matching')
+      local file=reaper.GetMediaSourceFileName(reaper.GetMediaItemTake_Source(tk),''):gsub('\\','/'):lower()
+      actual[file]=(actual[file] or 0)+1
+    end
+    for _,file in ipairs(job.level.files or {})do
+      file=file:gsub('\\','/'):lower();assert(actual[file] and actual[file]>0,'Backing files changed; refresh source stems before matching volume')
+      actual[file]=actual[file]-1
+    end
+    for _,n in pairs(actual)do assert(n==0,'Backing selection differs from cached stems; volume was not changed')end
+  end
   local _, previous_op = reaper.GetProjExtState(0,"ReaSetSong",prefix .. "operation")
   if previous_op == job.operation then reply("ok","Already applied"); return end
   local tracks={}
@@ -83,6 +110,18 @@ local function run()
         end
       end
     end
+    if with_level then
+      data.level={ext={},items={}}
+      for _,sec in ipairs({'ReaSetGain','ReaSetGainMode','ReaSetLevel'})do
+        local _,v=reaper.GetProjExtState(0,sec,level_song.key);data.level.ext[sec]=v
+      end
+      local _,v=reaper.GetProjExtState(0,'ReaSetSong',prefix..'level');data.level.revision=v
+      for _,r in ipairs(P.items(level_song,false))do
+        local _,g=reaper.GetSetMediaItemInfo_String(r.item,'GUID','',false)
+        local _,tag=reaper.GetSetMediaItemInfo_String(r.item,'P_EXT:ReaSetGain','',false)
+        data.level.items[g]={gain=reaper.GetMediaItemInfo_Value(r.item,'D_VOL'),tag=tag}
+      end
+    end
     return data
   end
   local before=snapshot()
@@ -91,6 +130,7 @@ local function run()
     local comparison=J.decode(J.encode(before))
     if not expected.items.click then comparison.items.click=nil end
     if expected.ext.click==nil then comparison.ext.click=nil end
+    if not restored then comparison.level=nil;expected.level=nil end
     assert(J.encode(comparison)==J.encode(expected),"Song was edited since this revision; keep it or explicitly rebuild")
   end
   local click_source
@@ -122,6 +162,16 @@ local function run()
     end
   end
   local function install_snapshot(data)
+    if data.level then
+      for sec,v in pairs(data.level.ext)do reaper.SetProjExtState(0,sec,level_song.key,v)end
+      reaper.SetProjExtState(0,'ReaSetSong',prefix..'level',data.level.revision)
+      for _,r in ipairs(P.items(level_song,false))do
+        local _,g=reaper.GetSetMediaItemInfo_String(r.item,'GUID','',false)
+        local old=data.level.items[g];assert(old,'Backing items changed; cannot restore playback level')
+        reaper.SetMediaItemInfo_Value(r.item,'D_VOL',old.gain)
+        reaper.GetSetMediaItemInfo_String(r.item,'P_EXT:ReaSetGain',old.tag,true)
+      end
+    end
     for _,name in ipairs({"lyrics","chords"}) do
       clear(name)
       for _,chunk in ipairs(data.items[name]) do
@@ -146,6 +196,7 @@ local function run()
     end
   end
   reaper.Undo_BeginBlock(); reaper.PreventUIRefresh(1)
+  local level_message
   local success,err=pcall(function()
     if restored then install_snapshot(restored)
     else
@@ -163,6 +214,7 @@ local function run()
           end
         end
       end
+      if job.level then level_message=P.match(level_song,job.level,job.level.replace)end
       if job.document then
         reaper.SetProjExtState(0,"ReaSetSong",prefix .. "document",job.document)
         reaper.SetProjExtState(0,"ReaSetSong",prefix .. "revision",job.revision or "")
@@ -188,6 +240,7 @@ local function run()
   if click_source then reaper.PCM_Source_Destroy(click_source)end
   reaper.Undo_EndBlock((restored and "Restore" or "Update") .. (job.click and " chart/click: " or " lyrics & chords: ") .. job.region,-1)
   assert(success,err)
+  if level_message then reply("ok",level_message);return end
   reply("ok",restored and "Previous song version restored" or job.click and (job.document and "Chart and click updated" or "Click updated; chart preserved") or "Lyrics and chords updated")
 end
 local success,err=pcall(run)

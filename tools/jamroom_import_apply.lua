@@ -305,6 +305,11 @@ end
 
 local song_id = reaper.AddProjectMarker2(0, true, song_pos, song_pos + song_len,
                          job.region_name, -1, 0)
+if job.level then
+    local P=dofile(script_dir..'../Requirements/ReaSet_Playback.lua')
+    local J=dofile(script_dir..'../Requirements/ReaSet_JSON.lua')
+    for _,song in ipairs(P.songs())do if song.id==song_id then log(P.match(song,J.decode(job.level),false))end end
+end
 if placed_click and job.click_revision and job.click_revision~=':' then
     reaper.SetProjExtState(0,'ReaSetSong','song:'..song_id..':click',job.click_revision)
 end

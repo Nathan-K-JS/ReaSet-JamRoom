@@ -168,6 +168,47 @@ local ok,why=pcall(function()
   local owner,meta=real_get('ReaSetSmokeCL','instance'),real_get('ReaSetSmokeCL','meta')
   old_tick();old_exit()
   check(owner==real_get('ReaSetSmokeCL','instance') and meta==real_get('ReaSetSmokeCL','meta') and tick~=old_tick,'Duplicate publisher yields without clearing the new instance')
+
+  -- Native item-level matching, with durable transaction/rollback semantics.
+  local P=real_dofile(root..'/Requirements/ReaSet_Playback.lua')
+  local backing={}
+  for _,slot in ipairs({'BASS','KEYS'})do
+    reaper.InsertTrackAtIndex(reaper.CountTracks(0),false)
+    local tr=reaper.GetTrack(0,reaper.CountTracks(0)-1)
+    reaper.GetSetMediaTrackInfo_String(tr,'P_NAME','[JR:'..slot..'] '..slot,true)
+    local it=reaper.AddMediaItemToTrack(tr);local tk=reaper.AddTakeToMediaItem(it)
+    reaper.SetMediaItemTake_Source(tk,reaper.PCM_Source_CreateFromFile(folder..'/click.wav'))
+    reaper.SetMediaItemInfo_Value(it,'D_POSITION',0);reaper.SetMediaItemInfo_Value(it,'D_LENGTH',60)
+    backing[#backing+1]=it
+  end
+  reaper.SetMediaItemInfo_Value(backing[2],'D_VOL',.5)
+  local song=P.songs()[1]
+  local _,chart_before=reaper.GetProjExtState(0,'ReaSetSong','song:'..id..':document')
+  local click_gain=reaper.GetMediaItemInfo_Value(click_item,'D_VOL')
+  local report={status='measured',revision='volume-one',gain=.4,files={folder..'/click.wav',folder..'/click.wav'}}
+  local function levels(op,extra)
+    local body={document=false,lyrics=false,chords=false,level=report}
+    for k,v in pairs(extra or {})do body[k]=v end
+    return apply(op,body)
+  end
+  check(levels('levels-one').status=='ok','Volume transaction applies to actual backing items')
+  check(math.abs(reaper.GetMediaItemInfo_Value(backing[1],'D_VOL')-.4)<.00001 and math.abs(reaper.GetMediaItemInfo_Value(backing[2],'D_VOL')-.2)<.00001,'Matching preserves relative stem balance')
+  check(levels('levels-one').status=='ok' and math.abs(P.gain(song)-.4)<.00001,'Lost level receipt retry does not compound gain')
+  local _,chart_after=reaper.GetProjExtState(0,'ReaSetSong','song:'..id..':document')
+  check(chart_before==chart_after and reaper.GetMediaItemInfo_Value(click_item,'D_VOL')==click_gain,'Level-only update preserves chart and click')
+  P.set(song,.7);report.gain=.3;report.revision='volume-two'
+  check(levels('levels-two').status=='ok' and math.abs(P.gain(song)-.7)<.00001,'Manual playback adjustment survives re-analysis')
+  check(P.level(song).manual and math.abs(P.level(song).gain-.3)<.00001,'New suggestion is saved beside manual level')
+  report.replace=true
+  check(levels('levels-force').status=='ok' and math.abs(P.gain(song)-.3)<.00001,'Explicit replacement applies matched suggestion')
+  check(levels('levels-restore',{level=false,restore=folder..'/levels-force/before.json',expected=folder..'/levels-force/after.json'}).status=='ok' and math.abs(P.gain(song)-.7)<.00001,'Restore recovers previous manual volume and mode')
+  P.set(song,.6)
+  check(levels('levels-stale-restore',{level=false,restore=folder..'/levels-two/before.json',expected=folder..'/levels-two/after.json'}).status=='error','Restore cannot overwrite a later manual level')
+  report.gain=2
+  check(levels('levels-invalid').status=='error' and math.abs(P.gain(song)-.6)<.00001,'Invalid level rolls back without changing manual volume')
+  report.gain=.3
+  report.files={folder..'/missing.wav'}
+  check(levels('levels-source-mismatch').status=='error' and math.abs(P.gain(song)-.6)<.00001,'Changed backing files prevent applying stale matching')
 end)
 -- Always restore the original tab, including on a failed assertion.
 local cleaned,cleanup_error=pcall(function()
