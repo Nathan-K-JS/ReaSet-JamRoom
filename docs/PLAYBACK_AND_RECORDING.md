@@ -232,6 +232,79 @@ whole-band take selection and recoverable discard are our design choices.
 The following is implementation responsibility, not another set of controls or
 steps the musician must manage.
 
+### Walking away: saved sessions and startup housekeeping
+
+**No export button is required to preserve a take.** Stopping a recording saves
+it automatically. Done only changes the screen; closing the browser or leaving
+the room does not discard anything. Export creates the separate working project
+and permits cleanup of the rehearsal project. It is not the initial save.
+
+Save recordings in a dedicated folder per session under the configured recording
+root, separately from imported stem media. Before capture, persist the session's
+identity, song, armed-input map and intended media location. After each completed
+take, persist its item/take metadata, audio references and project state. Keep a
+small session record on disk as well as project metadata so recovery does not
+depend entirely on the last manual save of the setlist RPP. Write session records
+atomically and retain the previous valid record.
+
+On REAPER bridge startup or opening a rehearsal project, reconcile that project's
+session records with its owned recording items and media. This must work without
+a browser connected. Include incomplete capture, failed exports and completed
+exports whose setlist cleanup was interrupted. A browser connecting later displays
+the existing result; refreshing a tablet does not start another cleanup operation.
+Do not depend on a browser close event or a shutdown dialog being answered.
+
+When unfinished sessions exist, show one dismissible startup notice:
+
+```text
+Recordings to tidy up
+3 song sessions · 8 takes awaiting export
+
+[ Review recordings ]                         [ Later ]
+```
+
+Review opens a short list grouped by song and recording date, with take counts,
+saved/recovery status and these actions:
+
+| Action | Result |
+| --- | --- |
+| Listen | Open the existing take-review controls for that session. |
+| Export & clear from setlist | Save and verify a self-contained recording project, then remove only that session's owned recording items from the rehearsal project and save it. |
+| Delete session | Confirm the named session/take count, then remove its owned recording items and put its session data/media in recoverable Deleted recordings. Never touch imported stems. |
+| Later | Keep the session safely stored and silent; continue rehearsal immediately. |
+
+Allow selecting several sessions for Export or Delete in this same list. Export
+creates one project per session and reports results individually: a failed session
+stays pending even if others succeeded. Do not begin project-changing export or
+cleanup during playback/recording. A small **Saved recordings (N)** entry remains
+on the Recording screen after Later. Acknowledge the notice for the current
+project-open session across tablets; do not nag on each refresh or song change.
+Remind again on the next project startup while unresolved sessions remain.
+
+**A clean rehearsal project means recordings cannot affect normal song playback.**
+Completed takes are parked silent and managed recording tracks disarmed on leaving
+recording mode. On startup, reconcile and silence owned pending recordings before
+normal ReaSet playback is enabled. Keep this state in the saved project too; the
+browser must not be responsible for preventing old takes from playing. Retain the
+reusable empty recording-track template after cleanup. Never delete by track name,
+song range or file age; ownership identifies exactly what can be removed.
+
+Later intentionally leaves recoverable pending items in the project. Do not
+silently relocate or delete them merely to achieve an empty setlist. Successful
+export or explicit Delete clears them. Deleted recordings remain accessible from
+a secondary recovery action; permanent deletion is a separate explicit operation,
+with no automatic age-based purge. This keeps the common path to two decisions:
+export the recordings worth keeping, or delete those no longer wanted.
+
+For an interrupted recording, inspect the session's known media and recover what
+REAPER can read, labelling the result **Recovered — check take**. Do not claim
+that an unfinished or damaged file is complete. Missing media or ambiguous
+ownership must be shown for review, never "fixed" by deleting the session. A
+verified export receipt lets startup finish interrupted setlist cleanup without
+creating another export or deleting anything whose identity/content has changed.
+
+### Implementation safeguards
+
 - Save session identity, owned track/item GUIDs, pass boundaries, source files and
   export progress in persistent project state. Recover an unfinished session after
   restart; do not infer ownership merely from an item's position or track name.
@@ -302,6 +375,13 @@ scratch-project proof before the feature is considered supported:
   it never stacks older passes or leaks its mute choices into rehearsal.
 - A tablet reload, native REAPER Stop or second tablet cannot invent recording
   state, lose the latest take, or operate on the wrong song/session.
+- Record → Stop → close without Done/export → reopen finds the saved session,
+  prompts once and leaves its takes silent during normal rehearsal playback.
+- Force-close during capture, export or cleanup is tested separately: recoverable
+  files remain discoverable, incomplete takes are labelled honestly, and cleanup
+  cannot delete unverified or unrelated material.
+- Later allows rehearsal; Delete is recoverable; successful export removes only
+  the exported session's items. Repeated startups do not duplicate exports/items.
 - The exported project opens with all kept passes aligned to the original stems,
   sensible named tracks and exactly one selected pass audible. Native REAPER can
   then handle editing and mixing without requiring the ReaSet browser.
