@@ -83,6 +83,9 @@ local report = {}
 local function note(ok, msg) report[#report + 1] = (ok and "  [ok] " or "  [--] ") .. msg end
 
 note(launch("ReaSet_JamRoom.lua", "Jam Room bridge", bridge_alive))
+note(launch("ReaSet_Recording.lua", "Recording and playback volume", function()
+    return reaper.GetExtState('ReaSetRec','heartbeat') ~= ''
+end))
 note(launch("ReaSet_NativeLoop.lua", "Native loop", nativeloop_alive))
 -- Publishes the current song's whole chord/lyric timeline. Safe on any
 -- project: with no chords/lyrics tracks it simply publishes nothing.

@@ -23,6 +23,7 @@ reaper={
  EnumProjectMarkers2=function(_,i)if i==0 then return 1,true,0,60,'Song',1 end return 0 end,
  CountTracks=function()return 1 end,GetTrack=function()return project()end,
  GetTrackName=function()return true,'[JR:GTR1] Guitar'end,GetMediaTrackInfo_Value=function()return 0 end,
+ GetSetMediaTrackInfo_String=function()return true,''end,
  CountTrackMediaItems=function()return 1 end,GetTrackMediaItem=function(tr)return tr.item end,
  GetMediaItemInfo_Value=function(_,key)return key=='D_POSITION' and 0 or 60 end,
  CountTakes=function(it)return #it.takes end,GetTake=function(it,n)return it.takes[n+1]end,

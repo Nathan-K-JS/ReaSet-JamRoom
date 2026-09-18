@@ -245,6 +245,8 @@ local function apply_pitch(song, semis, excl_csv, stretching)
     local touched = 0
     local new_applied = {}
     all_audio_items(function(it, tk, tidx, active)
+        local _, recording = reaper.GetSetMediaTrackInfo_String(reaper.GetTrack(0,tidx),'P_EXT:ReaSetRec','',false)
+        if recording ~= '' then return end
         local g = take_guid(tk)
         local rec = applied[g]
         local in_song = false
@@ -325,6 +327,8 @@ local function main_loop()
         return   -- atexit runs cleanup
     end
     local active_project = reaper.EnumProjects(-1, "")
+    local _, exported = reaper.GetProjExtState(0,'ReaSet','recordingProject')
+    if exported == '1' then reaper.defer(main_loop); return end
     if active_project ~= owner then
         if reaper.ValidatePtr(owner, "ReaProject*") then
             reaper.SelectProjectInstance(owner)
@@ -343,6 +347,11 @@ local function main_loop()
         s_hb_next = now + HB_PERIOD
     end
 
+    local _, record_project = reaper.GetProjExtState(0,'ReaSet','projectId')
+    if reaper.GetExtState('ReaSetRec','lock') == record_project and record_project ~= '' then
+        reaper.SetExtState(SEC,'want','',false)
+        reaper.defer(main_loop); return
+    end
     local pos = reaper.GetPlayState() > 0 and reaper.GetPlayPosition()
                                           or reaper.GetCursorPosition()
     local song = song_at(pos)

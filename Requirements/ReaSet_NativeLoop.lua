@@ -101,6 +101,13 @@ end
 -- ─── Main background loop (runs every frame via defer) ────────────────────────
 local _hb_tick = 0   -- heartbeat counter: refreshes ReaSet presence flag every ~5 s
 local function main_loop()
+    local _, record_project = reaper.GetProjExtState(0,'ReaSet','projectId')
+    local _, exported = reaper.GetProjExtState(0,'ReaSet','recordingProject')
+    if exported == '1' or (record_project ~= '' and reaper.GetExtState('ReaSetRec','lock') == record_project) then
+        if s_active then do_cleanup() end
+        reaper.SetExtState(SEC,'nativeLoop','off',false)
+        reaper.defer(main_loop); return
+    end
 
     -- Periodic heartbeat so ReaSet.html can auto-detect this script is alive
     _hb_tick = _hb_tick + 1
