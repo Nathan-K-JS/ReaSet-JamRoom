@@ -55,7 +55,11 @@ ACTIVE_STATES = ("preparing", "review", "applying")
 
 def _ui_log(msg):
     print(f"[importer] {msg}", flush=True)
-    STATE["log"].append(str(msg))
+    sink = ji.JOB_LOG.get()
+    if sink:
+        sink(str(msg))
+    else:
+        STATE["log"].append(str(msg))
 
 
 def _ui_die(msg, code=1):
@@ -974,6 +978,18 @@ def run_apply(slots, labels, lyrics_offset):
 from jamroom_updates import Updates
 UPDATES = Updates(project_identity, project_songs, _push_song_items, BUSY, STATE)
 
+from jamroom_import_queue import ImportQueue, Conflict
+QUEUE = None
+QUEUE_INIT = threading.Lock()
+
+
+def import_queue():
+    global QUEUE
+    with QUEUE_INIT:
+        if QUEUE is None:
+            QUEUE = ImportQueue(sys.modules[__name__])
+    return QUEUE
+
 
 class Handler(BaseHTTPRequestHandler):
     def log_message(self, *a):
@@ -1012,7 +1028,13 @@ class Handler(BaseHTTPRequestHandler):
     def _serve_audio(self):
         from urllib.parse import parse_qs, urlparse
         job_dir = CURRENT["job_dir"]
-        name = parse_qs(urlparse(self.path).query).get("f", [""])[0]
+        query = parse_qs(urlparse(self.path).query)
+        name = query.get("f", [""])[0]
+        if query.get('job'):
+            try:
+                job_dir = import_queue().folder(query['job'][0])
+            except (KeyError, ValueError):
+                return self._send(404, {'error': 'Unknown job'})
         if not job_dir:
             return self._send(404, {"error": "no active job"})
         f = (job_dir / "stems" / name).resolve()
@@ -1093,6 +1115,15 @@ class Handler(BaseHTTPRequestHandler):
         if self.path in ("/", "/index.html"):
             self._send(200, (TOOLDIR / "importer.html").read_bytes(),
                        "text/html")
+        elif self.path == '/importer-queue.js':
+            self._send(200, (TOOLDIR / 'importer-queue.js').read_bytes(), 'text/javascript')
+        elif self.path == '/api/jobs' or self.path.startswith('/api/jobs/'):
+            try:
+                queue = import_queue()
+                data = queue.listing() if self.path == '/api/jobs' else queue.detail(self.path.split('/')[3])
+                self._send(200, data)
+            except (Exception, SystemExit) as error:
+                self._send(500, {'error': str(error)})
         elif self.path == "/api/checks":
             self._send(200, checks())
         elif self.path == "/api/runtime":
@@ -1130,6 +1161,28 @@ class Handler(BaseHTTPRequestHandler):
     def do_POST(self):
         try:
             body = self._body()
+            if self.path == '/api/jobs':
+                return self._send(200, import_queue().add(body))
+            if self.path == '/api/jobs/control':
+                return self._send(200, import_queue().control(body))
+            if self.path.startswith('/api/jobs/'):
+                parts = self.path.split('/')
+                if len(parts) != 5:
+                    raise ValueError('Invalid job request')
+                queue = import_queue()
+                ident, action = parts[3:]
+                if action == 'draft':
+                    return self._send(200, queue.draft(ident, body))
+                if action in ('lyrics', 'chart'):
+                    return self._send(200, queue.choose(ident, action, body))
+                return self._send(200, queue.action(ident, action, body))
+            if QUEUE is not None and self.path in ('/api/import', '/api/import_library', '/api/readd', '/api/apply', '/api/lyrics_pick', '/api/ug_use'):
+                return self._send(409, {'error': 'Reload this page to use the saved import queue.'})
+            if QUEUE is not None and self.path in ('/api/delete_song', '/api/rechord', '/api/relyric'):
+                QUEUE.protect([body.get('name')])
+            if QUEUE is not None and self.path == '/api/updates/start':
+                chosen = {str(i) for i in body.get('ids', [])}
+                QUEUE.protect([song['name'] for song in project_songs() if str(song['id']) in chosen])
             if self.path == "/api/updates/start":
                 self._send(200, {"id": UPDATES.start(body.get("ids"),
                     resume=bool(body.get("resume")), restore=bool(body.get("restore")),
@@ -1408,6 +1461,8 @@ class Handler(BaseHTTPRequestHandler):
                 self._send(200, {"ok": True})
             else:
                 self._send(404, {"error": "not found"})
+        except Conflict as e:
+            self._send(409, {'error': str(e)})
         except Exception as e:  # noqa: BLE001
             self._send(500, {"error": str(e)})
 

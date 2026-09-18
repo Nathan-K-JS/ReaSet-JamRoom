@@ -218,10 +218,41 @@ local song_pos = proj_end == 0 and 0 or (math.ceil(proj_end) + SONG_GAP)
 -- ─── Apply (single undo step) ────────────────────────────────────────────────
 
 local _, recording_project = reaper.GetProjExtState(0,'ReaSet','projectId')
+local operation = job.import_operation or ''
+if operation ~= '' then
+    if recording_project == '' or recording_project ~= job.target_project then
+        return fail('The intended import project is not open')
+    end
+    local _, receipt = reaper.GetProjExtState(0,'ReaSetImport',operation)
+    if receipt ~= '' then
+        local rid = tonumber(receipt)
+        local found = false
+        local i = 0
+        while rid do
+            local ok, isrgn, _, _, name, id = reaper.EnumProjectMarkers2(0,i)
+            if ok == 0 then break end
+            if isrgn and id == rid and name == job.region_name then found = true break end
+            i = i + 1
+        end
+        if not found then return fail('Previous Apply is unresolved or its region was changed; inspect the project before continuing') end
+        local af = io.open(job_dir .. '/applied.txt','w')
+        if af then af:write('Already applied: ' .. job.region_name) af:close() end
+        os.remove(pointer)
+        return
+    end
+    local i = 0
+    while true do
+        local ok, isrgn, _, _, name = reaper.EnumProjectMarkers2(0,i)
+        if ok == 0 then break end
+        if isrgn and name == job.region_name then return fail('A song with this name is already in this project') end
+        i = i + 1
+    end
+end
 if reaper.GetPlayState()~=0 or (recording_project~='' and reaper.GetExtState('ReaSetRec','lock')==recording_project) then
     return fail('Finish playback/recording and choose Done before importing songs')
 end
 reaper.Undo_BeginBlock()
+if operation ~= '' then reaper.SetProjExtState(0,'ReaSetImport',operation,'pending') end
 reaper.PreventUIRefresh(1)
 
 local placed, skipped, placed_click = 0, {}, false
@@ -334,6 +365,7 @@ reaper.PreventUIRefresh(-1)
 -- append import into an existing library (reproduced in REAPER 7.75).
 reaper.TrackList_AdjustWindows(false)
 reaper.UpdateArrange()
+if operation ~= '' then reaper.SetProjExtState(0,'ReaSetImport',operation,tostring(song_id)) end
 reaper.Undo_EndBlock("JR import: " .. job.region_name, -1)
 
 -- ─── Report (console + applied.txt + extstate; never modal) ──────────────────

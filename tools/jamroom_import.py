@@ -16,6 +16,7 @@ Part of ReaSet Jam Room. GPL v3, same as the repo.
 """
 
 import argparse
+import contextvars
 import difflib
 import json
 import math
@@ -38,12 +39,26 @@ import jamroom_click as click_model
 # what is on disk — the importer server holds its modules in memory, so this is
 # how you tell "did the update take effect?" from "is the old process still up?"
 # BUMP THIS whenever the importer changes, and quote it when handing over.
-BUILD = "v3.5"
-BUILD_DATE = "2026-09-12"
+BUILD = "v3.6"
+BUILD_DATE = "2026-09-18"
 
 # Fadr's S3 throttles each connection independently, so several transfers at
 # once finish far sooner than one at a time. Overridable via config.
 DOWNLOAD_WORKERS = 4
+JOB_LOG = contextvars.ContextVar('import_log', default=None)
+JOB_PAUSE = contextvars.ContextVar('import_pause', default=None)
+DOWNLOAD_BUDGET = threading.BoundedSemaphore(4)
+FADR_BUDGET = threading.BoundedSemaphore(1)
+
+
+class ImportPaused(RuntimeError):
+    pass
+
+
+def check_import_pause():
+    check = JOB_PAUSE.get()
+    if check and check():
+        raise ImportPaused('Queue paused; accepted Fadr tasks may continue remotely.')
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 DEFAULT_CONFIG = Path(__file__).resolve().parent / "jamroom_import.config.json"
@@ -133,8 +148,10 @@ def sanitize_region_name(name):
 def load_job(job_dir):
     f = job_dir / "job.json"
     if f.exists():
-        with open(f, encoding="utf-8") as fh:
-            return json.load(fh)
+        try:
+            return json.loads(f.read_text(encoding='utf-8'))
+        except (ValueError, OSError):
+            return json.loads((job_dir / 'job.json.previous').read_text(encoding='utf-8'))
     return {"schema": 1, "stages": {}}
 
 
@@ -143,6 +160,16 @@ def save_job(job_dir, job):
     tmp = job_dir / "job.json.tmp"
     with open(tmp, "w", encoding="utf-8") as fh:
         json.dump(job, fh, indent=2)
+        fh.flush()
+        import os
+        os.fsync(fh.fileno())
+    old = job_dir / 'job.json'
+    if old.exists():
+        try:
+            json.loads(old.read_text(encoding='utf-8'))
+            shutil.copyfile(old, job_dir / 'job.json.previous')
+        except ValueError:
+            pass
     # Windows can briefly deny replacement while a library poll or scanner
     # reads the old job. Keep the complete temporary file and retry atomically.
     for attempt in range(6):
@@ -324,6 +351,19 @@ class Fadr:
             die(f"Fadr {what} failed (HTTP {r.status_code}): {r.text[:800]}")
         return r.json()
 
+    def _read(self, method, url, **kwargs):
+        """Retry only safe reads, including the documented task-query POST."""
+        for attempt in range(5):
+            response = getattr(self.s, method)(url, timeout=60, **kwargs)
+            if response.status_code not in (429, 502, 503, 504) or attempt == 4:
+                return response
+            try:
+                delay = min(60, max(1, float(response.headers.get('Retry-After', 2 ** attempt))))
+            except ValueError:
+                delay = 2 ** attempt
+            log(f'Fadr busy (HTTP {response.status_code}); checking again in {delay:g}s.')
+            time.sleep(delay)
+
     def upload(self, path, display_name=None):
         # Name the upload after the song, not "source.wav" — this is what shows
         # in the Fadr library, and it is how an already-paid-for split is found
@@ -366,8 +406,8 @@ class Fadr:
         log(f"Waiting for Fadr task: {label} (polling every 5s)...")
         t0 = time.time()
         while True:
-            j = self._check(self.s.post(f"{FADR_API}/tasks/query",
-                                        json={"_ids": [task_id]}, timeout=60),
+            j = self._check(self._read('post', f"{FADR_API}/tasks/query",
+                                        json={"_ids": [task_id]}),
                             "poll task")
             tasks = j.get("tasks") or []
             task = tasks[0] if tasks else None
@@ -378,7 +418,9 @@ class Fadr:
                 else:
                     prog, msg = None, str(status)
                 asset = task.get("asset") or {}
-                if asset.get("stems"):
+                if isinstance(status, dict) and (status.get('failed') or status.get('error')):
+                    die(f'Fadr task failed: {msg or status}. Its task ID has been kept for checking.')
+                if (isinstance(asset, dict) and asset.get("stems")) or (isinstance(status, dict) and status.get('complete')):
                     log(f"Task done: {label} ({time.time() - t0:.0f}s)")
                     return task
                 if time.time() - t0 > 60 and int(time.time() - t0) % 30 < 5:
@@ -403,7 +445,7 @@ class Fadr:
         return None
 
     def asset(self, asset_id):
-        return self._check(self.s.get(f"{FADR_API}/assets/{asset_id}", timeout=60),
+        return self._check(self._read('get', f"{FADR_API}/assets/{asset_id}"),
                            "get asset")["asset"]
 
     def download(self, asset_id, dest, label=""):
@@ -416,7 +458,18 @@ class Fadr:
         label = label or Path(dest).name
         dest = Path(dest)
         part = dest.with_name(dest.name + ".part")
-        part.unlink(missing_ok=True)          # always start a fresh transfer
+        receipt = dest.with_name(dest.name + '.download.json')
+        transfer = part.with_name(part.name + '.asset')
+        try:
+            saved = json.loads(receipt.read_text(encoding='utf-8'))
+            if saved['asset'] == asset_id and dest.is_file() and dest.stat().st_size == saved['size'] and saved['size'] > 0:
+                log(f'Reusing downloaded {label}.')
+                return dest
+        except (OSError, ValueError, KeyError):
+            pass
+        if not transfer.exists() or transfer.read_text(encoding='utf-8') != str(asset_id):
+            part.unlink(missing_ok=True)
+            transfer.write_text(str(asset_id), encoding='utf-8')
         attempts, total = 8, 0
         # Fadr's S3 bucket throttles unpredictably: the same file measured
         # 1900, then 89, then 2000 KB/s minutes apart. A degraded connection
@@ -429,18 +482,23 @@ class Fadr:
                 # Presigned URLs are short-lived, so mint a fresh one each try.
                 with self._lock:
                     j = self._check(
-                        self.s.get(f"{FADR_API}/assets/download/{asset_id}/hq",
-                                   timeout=30), "presign download")
+                        self._read('get', f"{FADR_API}/assets/download/{asset_id}/hq"), "presign download")
                 have = part.stat().st_size if part.exists() else 0
                 headers = {"Range": f"bytes={have}-"} if have else {}
                 # (connect, read) — a stall raises after 45s instead of hanging
                 with requests.get(j["url"], stream=True, timeout=(15, 45),
                                   headers=headers) as r:
-                    if r.status_code == 416:          # already have all of it
-                        break
+                    if r.status_code == 416:
+                        expected = re.fullmatch(r'bytes \*/(\d+)', r.headers.get('Content-Range', ''))
+                        if expected and have > 0 and have == int(expected[1]):
+                            break
+                        part.unlink(missing_ok=True)
+                        raise requests.RequestException('Invalid partial file length; restarting this file')
                     if r.status_code >= 400:
                         raise requests.RequestException(f"HTTP {r.status_code}")
                     resuming = (r.status_code == 206 and have > 0)
+                    if resuming and not r.headers.get('Content-Range', '').startswith(f'bytes {have}-'):
+                        raise requests.RequestException('Server returned an incorrect resume range')
                     if not resuming:
                         have = 0
                         part.unlink(missing_ok=True)
@@ -483,6 +541,7 @@ class Fadr:
                 time.sleep(2)
         dest.unlink(missing_ok=True)
         part.replace(dest)
+        receipt.write_text(json.dumps({'asset':asset_id, 'size':dest.stat().st_size}), encoding='utf-8')
         return dest
 
 
@@ -568,6 +627,35 @@ def stem_display_name(asset):
     return norm_stem_type(name.rsplit("-", 1)[-1]) if "-" in name else name.lower()
 
 
+def resume_fadr_task(fadr, job, job_dir, asset_id, split_type=None):
+    """Journal before billable submission; an unknown response is never retried."""
+    key = str(asset_id) + ':' + (split_type or 'main')
+    journal = job.setdefault('fadr_tasks', {})
+    with FADR_BUDGET:
+        check_import_pause()
+        asset = fadr.asset(asset_id)
+        if asset.get('stems'):
+            return asset
+        record = journal.get(key)
+        if record and not record.get('id'):
+            raise RuntimeError('Fadr submission needs checking: the previous request '
+                               'may have been accepted. No replacement task was submitted. '
+                               'Wait for its stems, then Resume, or check the Fadr library.')
+        if not record:
+            journal[key] = {'state': 'submitting', 'asset': asset_id, 'time': time.time()}
+            save_job(job_dir, job)
+            task = fadr.stem_task(asset_id, split_type) if split_type else fadr.stem_task(asset_id)
+            journal[key].update(id=task['_id'], state='waiting')
+            save_job(job_dir, job)
+        fadr.wait_task(journal[key]['id'], split_type or 'main stem split')
+        asset = fadr.asset(asset_id)
+        if not asset.get('stems'):
+            raise RuntimeError('Fadr task has not produced stems; Resume will check the same task.')
+        journal[key]['state'] = 'complete'
+        save_job(job_dir, job)
+        return asset
+
+
 def stage_fadr(job, job_dir, cfg, force):
     if job["stages"].get("fadr") and not force:
         log("Fadr stage already done — skipping.")
@@ -594,11 +682,20 @@ def stage_fadr(job, job_dir, cfg, force):
         except SystemExit:
             raise
     if main_asset is None:
-        src_asset = fadr.upload(job_dir / (job.get("source", {}).get("audio_file") or "source.wav"),
-                                display_name=job.get("region_name"))
-        task = fadr.wait_task(fadr.stem_task(src_asset["_id"])["_id"],
-                              "main stem split")
-        main_asset = fadr.asset(task["asset"]["_id"])
+        if not prev_id:
+            if job.get('upload_pending'):
+                raise RuntimeError('Fadr upload acknowledgement was lost. Check the Fadr library '
+                                   'and import that asset; the upload will not be repeated automatically.')
+            job['upload_pending'] = True
+            save_job(job_dir, job)
+            with DOWNLOAD_BUDGET:
+                src_asset = fadr.upload(job_dir / (job.get("source", {}).get("audio_file") or "source.wav"),
+                                       display_name=job.get("region_name"))
+            prev_id = src_asset['_id']
+            job.setdefault('fadr', {})['asset_id'] = prev_id
+            job.pop('upload_pending', None)
+            save_job(job_dir, job)
+        main_asset = resume_fadr_task(fadr, job, job_dir, prev_id)
     # Record the asset id straight away: if anything later fails, a re-run then
     # reuses this asset instead of paying to upload and split all over again.
     job.setdefault("fadr", {})["asset_id"] = main_asset.get("_id")
@@ -631,9 +728,7 @@ def stage_fadr(job, job_dir, cfg, force):
                 log(f"Reusing the existing {name} sub-split (no new charge).")
                 parent = a
             else:
-                t = fadr.wait_task(fadr.stem_task(a["_id"], split_type)["_id"],
-                                   f"{name} sub-split")
-                parent = fadr.asset(t["asset"]["_id"])
+                parent = resume_fadr_task(fadr, job, job_dir, a['_id'], split_type)
             raw_dump[f"{name}_split_asset"] = parent
             children = [fadr.asset(sid) for sid in parent.get("stems", [])]
             raw_dump[f"{name}_split_children"] = children
@@ -663,15 +758,20 @@ def stage_fadr(job, job_dir, cfg, force):
     def fetch(i):
         a, name, base = wanted[i]
         fname = sanitize_filename(f"{base}.wav")
-        fadr.download(a["_id"], stems_dir / fname, label=base)
-        wav = ensure_riff_wav(stems_dir / fname)
+        with DOWNLOAD_BUDGET:
+            fadr.download(a["_id"], stems_dir / fname, label=base)
+            wav = ensure_riff_wav(stems_dir / fname)
+            (stems_dir / (fname + '.download.json')).write_text(
+                json.dumps({'asset':a['_id'], 'size':wav.stat().st_size}), encoding='utf-8')
         results[i] = {"fadr_name": name, "file": f"stems/{wav.name}",
                       "slot": slot_map.get(name)}
         done["n"] += 1
         log(f"  [{done['n']} of {len(wanted)}] {base} done")
 
     with ThreadPoolExecutor(max_workers=workers) as ex:
-        list(ex.map(fetch, range(len(wanted))))   # re-raises worker failures
+        futures = [ex.submit(contextvars.copy_context().run, fetch, i) for i in range(len(wanted))]
+        for future in futures:
+            future.result()
 
     job["stems"] = [r for r in results if r]
     unmapped = [r["fadr_name"] for r in job["stems"] if not r["slot"]]
@@ -720,7 +820,8 @@ def stage_fadr(job, job_dir, cfg, force):
             else:
                 suffix = (a.get("name") or mid_id).rsplit("-", 1)[-1]
                 fname = sanitize_filename(f"{suffix}.mid")
-            fadr.download(mid_id, midi_dir / fname, label=fname)
+            with DOWNLOAD_BUDGET:
+                fadr.download(mid_id, midi_dir / fname, label=fname)
             log(f"Downloaded Fadr analysis: {fname}")
         # Best-effort: losing a chord file must not throw away a good import.
         # (die() raises SystemExit on the CLI and RuntimeError under the web UI,
@@ -2181,6 +2282,8 @@ def write_reaper_job(job, job_dir):
          f"  duration = {job.get('duration') or 0},",
          f"  tempo = {((job.get('fadr') or {}).get('tempo')) or 'nil'},",
          f"  job_dir = {lua_quote(jd)},",
+         f"  import_operation = {lua_quote(job.get('import_operation', ''))},",
+         f"  target_project = {lua_quote(job.get('target_project', ''))},",
          f"  document = {lua_quote(json.dumps(job.get("chart_document"), ensure_ascii=True))},",
          f"  click_revision = {lua_quote((job.get('click') or {}).get('generator','') + ':' + (job.get('click') or {}).get('file',''))},",
          f"  click_muted = {'true' if (job.get('click') or {}).get('muted') else 'false'},",

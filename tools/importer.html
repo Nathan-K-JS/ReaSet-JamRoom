@@ -335,7 +335,7 @@
 <script>
 // Version of THIS page (served fresh from disk). Compared against the version
 // of the running server. Either side may be older.
-var UI_BUILD = "v3.5";
+var UI_BUILD = "v3.6";
 
 function importerVersionWarning(serverBuild) {
   if (serverBuild === UI_BUILD) return '';
@@ -382,6 +382,7 @@ function stopPolling(){
 }
 
 function setPipelineActive(on){
+  if(window.ImportJobs && ImportJobs.enabled) on = false;
   pipelineActive = !!on;
   ['srcYt','srcLib','srcMan'].forEach(function(id){ $(id).disabled = pipelineActive; });
   document.querySelectorAll('#searchCard button,#libCard button,#manCard button,#confirmCard button')
@@ -594,7 +595,8 @@ function pick(row, btn){
 // ── Fadr library (already split, no charge) ───────────────────────────────
 var g_library = null, g_libPicked = null, g_source = 'yt';
 
-function setSource(s){
+function setSource(s, queueReady){
+  if(window.ImportJobs && ImportJobs.enabled && !queueReady) return ImportJobs.source(s);
   if(pipelineActive){
     alert('Finish or cancel the current import before starting another task.');
     return;
@@ -808,6 +810,7 @@ function loadOrphans(){
 }
 
 function doReadd(name, btn){
+  if(window.ImportJobs && ImportJobs.enabled) return ImportJobs.cached(name);
   dismissReceipt();
   reviewShown = false;
   setPipelineActive(true);
@@ -999,6 +1002,7 @@ function pickLibrary(s, btn){
 }
 
 function doImport(rebuild){
+  if(window.ImportJobs && ImportJobs.enabled) return ImportJobs.add();
   if(g_source === 'lib'){ return doImportLibrary(); }
   if(!picked) return;
   if(!$('band').value.trim() || !$('title').value.trim()){
@@ -1036,6 +1040,7 @@ function doImport(rebuild){
 }
 
 function doImportLibrary(){
+  if(window.ImportJobs && ImportJobs.enabled) return ImportJobs.add();
   if(!g_libPicked) return;
   if(!$('band').value.trim() || !$('title').value.trim()){
     alert('Please give this song a Band and a Song title — that becomes the region name in REAPER.');
@@ -1241,6 +1246,7 @@ function doLyricSearch(){
 }
 
 function useLyricRecord(id, btn){
+  if(window.ImportJobs && ImportJobs.enabled) return ImportJobs.choose('lyrics', {id:id}, btn);
   btn.disabled = true; btn.style.opacity = '.6';
   fetch('/api/lyrics_pick', {method:'POST', headers:{'Content-Type':'application/json'},
     body: JSON.stringify({id: id})})
@@ -1328,6 +1334,7 @@ function doUgSearch(free){
 }
 
 function useChart(url, btn){
+  if(window.ImportJobs && ImportJobs.enabled) return ImportJobs.choose('chart', {url:url}, btn);
   btn.disabled = true; btn.style.opacity = '.6';
   $('ugResults').innerHTML = '<div class="note">Reading the chart and placing '
     + 'its chords against the words…</div>';
@@ -1351,6 +1358,7 @@ function useChart(url, btn){
 }
 
 function doApply(){
+  if(window.ImportJobs && ImportJobs.enabled) return ImportJobs.apply();
   var slots = {}, labels = {};
   document.querySelectorAll('#stemList select').forEach(function(s){
     slots[s.getAttribute('data-file')] = s.value;
@@ -1375,6 +1383,7 @@ function doApply(){
 }
 
 function doCancel(){
+  if(window.ImportJobs && ImportJobs.enabled) return ImportJobs.close();
   fetch('/api/cancel', {method:'POST'}).then(r=>r.json()).then(function(d){
     if(d.error){ alert(d.error); return; }
     showReceipt('Import cancelled', 'Nothing was added to REAPER.', [], false, false);
@@ -1481,5 +1490,6 @@ fetch('/api/status').then(function(r){
     s.summary || 'The task did not finish.', s.log || [], true, true);
 }).catch(function(){ /* refreshChecks() already reports a dead server */ });
 </script>
+<script src="/importer-queue.js"></script>
 </body>
 </html>

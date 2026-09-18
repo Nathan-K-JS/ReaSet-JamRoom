@@ -35,6 +35,8 @@ class BrowserTests(unittest.TestCase):
 
     def load_reaset(self):
         def route(req):
+            if req.request.url.endswith('/importer-queue.js'):
+                return req.fulfill(body='', content_type='text/javascript')
             name = req.request.url.rsplit('/', 1)[-1]
             if name == 'main.js':
                 req.fulfill(body='var sent=[];function wwr_req(x){sent.push(x)};function wwr_req_recur(){};function wwr_start(){}', content_type='text/javascript')
@@ -308,6 +310,8 @@ class BrowserTests(unittest.TestCase):
         songs=[{'id':i,'name':'Song '+str(i),'eligible':i!=2,'protected':i==2,'update_status':'Update available'} for i in (1,2,3)]
         posts=[]
         def route(req):
+            if req.request.url.endswith('/importer-queue.js'):
+                return req.fulfill(body='', content_type='text/javascript')
             url=req.request.url
             if '/api/updates/start' in url:
                 posts.append(req.request.post_data_json);req.fulfill(json={'id':'batch'})
@@ -420,6 +424,8 @@ class BrowserTests(unittest.TestCase):
     def test_importer_version_warning_matches_running_server(self):
         running = {'build': importer.BUILD, 'key': True, 'reaper': True}
         def route(req):
+            if req.request.url.endswith('/importer-queue.js'):
+                return req.fulfill(body='', content_type='text/javascript')
             if '/api/checks' in req.request.url:
                 req.fulfill(json=running)
             elif '/api/' in req.request.url:
@@ -448,6 +454,8 @@ class BrowserTests(unittest.TestCase):
 
     def test_importer_review_does_not_treat_a_perfect_match_as_quality_approval(self):
         def route(req):
+            if req.request.url.endswith('/importer-queue.js'):
+                return req.fulfill(body='', content_type='text/javascript')
             if '/api/' in req.request.url:req.fulfill(json={'songs':[],'state':'idle'})
             else:req.fulfill(path=str(ROOT/'tools/importer.html'))
         self.page.route('**/*',route)
@@ -466,6 +474,8 @@ class BrowserTests(unittest.TestCase):
               'key':'G#:maj','tempo':173,'created':'2026-08-23'}
         posts=[]
         def route(req):
+            if req.request.url.endswith('/importer-queue.js'):
+                return req.fulfill(body='', content_type='text/javascript')
             url=req.request.url
             if '/api/import_library' in url:
                 posts.append(req.request.post_data_json);req.fulfill(json={'ok':True})
@@ -489,6 +499,8 @@ class BrowserTests(unittest.TestCase):
         songs=[{'id':i,'name':'Song '+str(i),'eligible':i==1,'protected':i==2,'update_status':'Update available'} for i in (1,2,3)]
         posts=[]
         def route(req):
+            if req.request.url.endswith('/importer-queue.js'):
+                return req.fulfill(body='', content_type='text/javascript')
             url=req.request.url
             if '/api/updates/start' in url:
                 posts.append(req.request.post_data_json);req.fulfill(json={'id':'batch'})
