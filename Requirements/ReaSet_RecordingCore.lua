@@ -72,6 +72,7 @@ function M.new()
     end
     assert(not found or loaded,'Recording index needs recovery; original files retained')
   end
+  dofile(dir..'ReaSet_FreeJam.lua')(self,M)
   function self:save(project)
     assert(self.root,'Save the REAPER setlist project before recording')
     M.write(self.root..'/index.json',J.encode(self.db))
@@ -89,10 +90,12 @@ function M.new()
     error('Recording session no longer exists')
   end
   function self:song(key)
+    local jam=self:jam_song(key);if jam then return jam end
     for _,s in ipairs(P.songs()) do if s.key==key then return s end end
     error('Song changed; cue it again')
   end
   function self:park()
+    self:jam_clear_click()
     M.owned_items(function(it)reaper.SetMediaItemInfo_Value(it,'B_MUTE',1)end)
     for _,tr in pairs(M.tracks()) do reaper.SetMediaTrackInfo_Value(tr,'I_RECARM',0);reaper.SetMediaTrackInfo_Value(tr,'I_RECMON',0)end
     for guid,value in pairs(self.audition) do
@@ -205,6 +208,7 @@ function M.new()
         local command=tonumber(action)
         if reaper.GetToggleCommandState(command)~=state then reaper.Main_OnCommand(command,0)end
       end
+      if o.rate then reaper.CSurf_OnPlayRateChange(o.rate)end
       self.db.options=nil
     end
   end
@@ -218,7 +222,7 @@ function M.new()
     assert(self.mode=='idle' or self.mode=='review','Stop the current take first')
     assert(reaper.GetPlayState()==0,'Stop playback before recording')
     assert(reaper.SNM_GetIntConfigVar and reaper.SNM_SetIntConfigVar,'SWS is required for recording')
-    local song=self:song(key)
+    local song=self:song(key);key=song.key
     for i=0,reaper.CountTracks(0)-1 do
       local tr=reaper.GetTrack(0,i)
       assert(reaper.GetMediaTrackInfo_Value(tr,'I_RECARM')==0 or M.ext(tr,'ReaSetRec',nil,true)~='','Disarm other REAPER tracks before recording')
@@ -227,6 +231,7 @@ function M.new()
     local rate=reaper.Master_GetPlayRate(0)
     local _,tk=reaper.GetExtState('ReaSetTK','state'):match('^([^|]+)|([^|]+)')
     local semis=tonumber(tk) or 0
+    if song.free then rate=1;semis=0 end
     local session
     for _,s in ipairs(self.db.sessions)do
       if s.song.key==key and not s.deleted and not s.exported and math.abs(s.rate-rate)<.00001 and s.semis==semis then session=s end
@@ -260,6 +265,7 @@ function M.new()
     for _,action in ipairs({41186,41330,42677})do if reaper.GetToggleCommandState(action)==1 then self.db.options.overlap=action end end
     self.db.options.lanes={}
     for _,action in ipairs({41329,42702})do self.db.options.lanes[tostring(action)]=reaper.GetToggleCommandState(action)end
+    if song.free then self.db.options.rate=reaper.Master_GetPlayRate(0)end
     self.db.active={session=session.id,take=take.id}
     self.selected=session.id;self.take=take.id;self:save(true)
     reaper.GetSetProjectInfo_String(0,'RECORD_PATH',session.folder..'/'..take.id,true)
@@ -272,15 +278,31 @@ function M.new()
     reaper.Main_OnCommand(42677,0)
     reaper.GetSetRepeat(0)
     reaper.SetExtState('ReaSet','nativeLoop','off',false)
+    if song.free then
+      self:jam_silence();reaper.CSurf_OnPlayRateChange(1);self:jam_click(session)
+    end
     reaper.SetEditCurPos(song.start,false,false)
     self.mode='recording'
     if self.db.countin then self:count_in(session) else self:start_native() end
+  end
+  function self:click_output()
+    local output,volume=0,1
+    for i=0,reaper.CountTracks(0)-1 do
+      local tr=reaper.GetTrack(0,i);local _,name=reaper.GetTrackName(tr)
+      if name=='PB CLICK' then
+        volume=reaper.GetMediaTrackInfo_Value(tr,'D_VOL')
+        if reaper.GetTrackNumSends(tr,1)>0 then output=reaper.GetTrackSendInfo_Value(tr,1,0,'I_DSTCHAN')end
+      end
+    end
+    assert((output&1023)<reaper.GetNumAudioOutputs(),'Click output unavailable; check PB CLICK routing')
+    return output,volume
   end
   function self:count_in(session)
     assert(reaper.CF_CreatePreview,'Update SWS for the audible count-in, or turn count-in off')
     local num,den,bpm=reaper.TimeMap_GetTimeSigAtTime(0,session.song.start)
     local _,detected=reaper.GetProjExtState(0,'ReaSetTK','bpm:'..session.song.name)
     bpm=tonumber(detected) or bpm
+    if session.song.free then num=session.song.beats;den=4;bpm=session.song.bpm end
     local beat=60/(bpm*session.rate)*4/den
     local duration=2*num*beat;assert(duration>0 and duration<60,'Unsupported count-in duration')
     local samples=math.ceil(duration*24000);local data={}
@@ -293,16 +315,7 @@ function M.new()
     M.write(file,'RIFF'..string.pack('<I4',36+#pcm)..'WAVEfmt '..string.pack('<I4I2I2I4I4I2I2',16,1,1,24000,48000,2,16)..'data'..string.pack('<I4',#pcm)..pcm)
     self.previewSource=assert(reaper.PCM_Source_CreateFromFile(file))
     self.preview=assert(reaper.CF_CreatePreview(self.previewSource))
-    local output,volume=0,1
-    for i=0,reaper.CountTracks(0)-1 do
-      local tr=reaper.GetTrack(0,i);local _,name=reaper.GetTrackName(tr)
-      if name=='PB CLICK' then
-        volume=reaper.GetMediaTrackInfo_Value(tr,'D_VOL')
-        if reaper.GetTrackNumSends(tr,1)>0 then output=reaper.GetTrackSendInfo_Value(tr,1,0,'I_DSTCHAN')
-        else output=0 end
-      end
-    end
-    assert((output&1023)<reaper.GetNumAudioOutputs(),'Count-in output unavailable; check PB CLICK routing')
+    local output,volume=self:click_output()
     reaper.CF_Preview_SetValue(self.preview,'I_OUTCHAN',output)
     reaper.CF_Preview_SetValue(self.preview,'D_VOLUME',volume)
     assert(reaper.CF_Preview_Play(self.preview),'Could not start count-in')
@@ -327,6 +340,7 @@ function M.new()
         local owned_path=file:gsub('\\','/'):sub(1,#s.folder+#take.id+2)==s.folder..'/'..take.id..'/'
         if not take.before[guid] and (known[guid] or owned_path) then
           M.ext(it,'ReaSetRec',s.id..'/'..take.id)
+          if s.song.free then reaper.SetMediaItemInfo_Value(it,'C_BEATATTACHMODE',0)end
           reaper.SetMediaItemInfo_Value(it,'B_MUTE',1)
           local ok,chunk=reaper.GetItemStateChunk(it,'',false);assert(ok,'Cannot capture recording metadata')
           if known[guid] then known[guid].chunk=chunk else take.items[#take.items+1]={guid=guid,track=id,chunk=chunk}end
@@ -337,6 +351,7 @@ function M.new()
     take.status=#take.items==0 and not take.unresolved and 'empty' or (recovered and 'recovered' or 'kept')
     take.duration=0
     M.owned_items(function(it,_,tag)if tag==s.id..'/'..take.id then take.duration=math.max(take.duration,reaper.GetMediaItemInfo_Value(it,'D_POSITION')+reaper.GetMediaItemInfo_Value(it,'D_LENGTH')-s.song.start)end end)
+    if s.song.free then s.song.finish=math.max(s.song.finish,s.song.start+take.duration)end
     self:restore_options();self:park()
     self.db.active=nil;self.mode='review';self.selected=s.id;self.take=take.id
     self.backingOn=true;self.recordingOn=true;self.recMutes={};self.stemMutes={}
@@ -364,6 +379,7 @@ function M.new()
     end
     reaper.SetProjExtState(0,'ReaSetRec','auditionOptions',J.encode(self.auditionOptions))
     reaper.CSurf_OnPlayRateChange(s.rate)
+    if s.song.free then self:jam_silence()end
     reaper.SetEditCurPos(s.song.start,false,false)
     self:audition_mix()
   end
@@ -444,6 +460,7 @@ function M.new()
         if length>0 then
           local it=reaper.AddMediaItemToTrack(tracks[id]);local tk=reaper.AddTakeToMediaItem(it)
           reaper.SetMediaItemTake_Source(tk,source)
+          if s.song.free then reaper.SetMediaItemInfo_Value(it,'C_BEATATTACHMODE',0)end
           reaper.SetMediaItemInfo_Value(it,'D_POSITION',s.song.start)
           reaper.SetMediaItemInfo_Value(it,'D_LENGTH',length*s.rate)
           reaper.SetMediaItemTakeInfo_Value(tk,'D_PLAYRATE',1/s.rate)
@@ -484,8 +501,17 @@ function M.new()
         end
       end end
       self:arm();self:save(true)
+    elseif c.op=='recordMode' then
+      assert(self.mode=='idle' and reaper.GetPlayState()==0,'Finish the current take first')
+      assert(c.value=='song' or c.value=='freejam','Choose Song or Free jam')
+      self.db.recordMode=c.value;self:save(false)
+    elseif c.op=='jamSettings' then
+      assert(self.mode=='idle' and reaper.GetPlayState()==0,'Finish the current take first')
+      self:jam_settings(c);self:save(false)
     elseif c.op=='countin' then self.db.countin=c.value==true;self:save(false)
-    elseif c.op=='record' then self:begin(c.song)
+    elseif c.op=='record' then
+      if self.db.recordMode=='freejam' and c.jam then self:jam_settings(c.jam)end
+      self:begin(self.db.recordMode=='freejam' and 'freejam' or c.song)
     elseif c.op=='review' then self:review(c.session,c.take)
     elseif c.op=='listen' then
       local same=self.selected==c.session and self.take==c.take and self.mode=='review'
@@ -545,12 +571,16 @@ function M.new()
       self:stop_preview();self.mode='recording';self:start_native()
     elseif self.mode=='recording' then
       local s=self:session(self.db.active.session);local state=reaper.GetPlayState()
-      if (state&1)==1 and reaper.GetPlayPosition()>=s.song.finish then reaper.Main_OnCommand(1016,0);self:finish()
+      if s.song.free then self:jam_extend(s)end
+      if not s.song.free and (state&1)==1 and reaper.GetPlayPosition()>=s.song.finish then reaper.Main_OnCommand(1016,0);self:finish()
       elseif state==0 then self:finish()end
     elseif self.mode=='audition' then
-      local s=self:session(self.selected)
+      local s=self:session(self.selected);local finish=s.song.finish
+      if s.song.free then
+        for _,t in ipairs(s.takes)do if t.id==self.take then finish=s.song.start+t.duration end end
+      end
       if reaper.GetPlayState()==0 then self.mode='review'
-      elseif reaper.GetPlayPosition()>=s.song.finish then reaper.Main_OnCommand(1016,0);self.mode='review'end
+      elseif reaper.GetPlayPosition()>=finish then reaper.Main_OnCommand(1016,0);self.mode='review'end
     end
   end
   function self:state()
@@ -573,7 +603,7 @@ function M.new()
       sessions[#sessions+1]=row
     end
     local songs=P.songs();for _,s in ipairs(songs)do s.gain=P.gain(s)end
-    return {project=self.id,revision=self.revision,mode=self.mode,paused=(reaper.GetPlayState()&2)==2,inputs=inputs,sessions=sessions,songs=J.array(songs),pending=pending,notice=pending>0 and not self.later,countin=self.db.countin,selected=self.selected,take=self.take,message=self.message,error=self.error,ack=self.ack,ready=self.root~=nil,backingOn=self.backingOn~=false,recordingOn=self.recordingOn~=false,recMutes=self.recMutes or {},stemMutes=self.stemMutes or {}}
+    return {project=self.id,revision=self.revision,mode=self.mode,paused=(reaper.GetPlayState()&2)==2,inputs=inputs,sessions=sessions,songs=J.array(songs),pending=pending,notice=pending>0 and not self.later,recordMode=self.db.recordMode or 'song',jam=self.db.jam,countin=self.db.countin,selected=self.selected,take=self.take,message=self.message,error=self.error,ack=self.ack,ready=self.root~=nil,backingOn=self.backingOn~=false,recordingOn=self.recordingOn~=false,recMutes=self.recMutes or {},stemMutes=self.stemMutes or {}}
   end
   -- Restore preview overrides before ordinary rehearsal playback is available.
   local _,raw=reaper.GetProjExtState(0,'ReaSetRec','audition')
@@ -595,6 +625,10 @@ function M.new()
     end
   elseif self.db.active then
     self.mode='recording';self.selected=self.db.active.session;self.take=self.db.active.take
+    for i=0,reaper.CountMediaItems(0)-1 do
+      local it=reaper.GetMediaItem(0,i)
+      if M.ext(it,'ReaSetJamClick')==self.selected then self.jamClick=it end
+    end
   end
   return self
 end

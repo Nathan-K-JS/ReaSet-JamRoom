@@ -21,6 +21,7 @@ function M.songs()
   return songs
 end
 function M.items(song, include_click)
+  if song.free then return {} end
   local out,stack,depth={}, {},0
   for i=0,reaper.CountTracks(0)-1 do
     local tr=reaper.GetTrack(0,i);local _,name=reaper.GetTrackName(tr)

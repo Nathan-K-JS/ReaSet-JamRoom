@@ -76,6 +76,29 @@ class BrowserTests(unittest.TestCase):
           document.getElementById('recording-panel').classList.add('open');recRender();
         }''')
 
+    def test_free_jam_records_without_song_and_preserves_setup_during_input_selection(self):
+        self.recording_state()
+        self.page.evaluate("g_recState.songs=[];g_recState.recordMode='freejam';g_recState.jam={bpm:100,beats:4,click:true};recRender()")
+        self.page.locator('#rec-jam-bpm').fill('137')
+        self.page.locator('#rec-jam-beats').select_option('3')
+        self.page.locator('#rec-jam-click').uncheck()
+        self.page.evaluate("g_recState.inputs[1].selected=true;recRender()")
+        self.assertEqual(self.page.locator('#rec-jam-bpm').input_value(), '137')
+        self.assertFalse(self.page.locator('#rec-jam-click').is_checked())
+        self.page.get_by_role('button', name='Record', exact=True).click()
+        command = json.loads(self.page.evaluate("decodeURIComponent(sent.at(-1)).split('/want/')[1]"))
+        self.assertEqual(command['jam'], {'bpm':137,'beats':3,'click':False})
+        self.assertEqual(command['op'], 'record')
+
+    def test_free_jam_review_has_only_recorded_instrument_controls(self):
+        self.recording_state()
+        self.page.evaluate("""g_recState.mode='review';g_recState.selected='jam';g_recState.take='t';
+          g_recState.sessions=[{id:'jam',song:{free:true,name:'Free jam',bpm:100,beats:4,click:true},takes:[{id:'t',number:1,inputs:['1','2'],status:'kept',duration:4}]}];recRender()""")
+        self.assertEqual(self.page.get_by_role('button', name='Backing on', exact=True).count(), 0)
+        self.assertEqual(self.page.get_by_role('button', name='Drums backing', exact=True).count(), 0)
+        self.page.get_by_text('Instrument playback', exact=True).click()
+        self.assertTrue(self.page.get_by_role('button', name='Vox 1', exact=True).is_visible())
+
     def test_recording_waits_for_confirmation_and_stop_bypasses_pending(self):
         self.recording_state()
         self.page.get_by_role('button', name='Record', exact=True).click()

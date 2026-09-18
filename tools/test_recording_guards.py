@@ -9,6 +9,30 @@ ROOT = Path(__file__).resolve().parent.parent
 
 
 class RecordingGuards(unittest.TestCase):
+    def test_free_jam_settings_and_session_allocation(self):
+        lua=LuaRuntime(unpack_returned_tuples=True)
+        lua.execute("""reaper={GetProjectLength=function()return 500 end}
+          self={db={sessions={{song={finish=600}}}}};M={guid=function()return 'new-jam' end}
+        """)
+        install=lua.execute((ROOT/'Requirements/ReaSet_FreeJam.lua').read_text(encoding='utf-8'))
+        install(lua.globals().self, lua.globals().M)
+        lua.execute("self:jam_settings({bpm=137,beats=3,click=false});song=self:jam_song('freejam')")
+        self.assertEqual(lua.eval('song.start'),610)
+        self.assertEqual(lua.eval('song.bpm'),137)
+        self.assertFalse(lua.eval('song.click'))
+        self.assertFalse(lua.eval("pcall(function()self:jam_settings({bpm=0,beats=4,click=true})end)")[0])
+        self.assertFalse(lua.eval("pcall(function()self:jam_settings({bpm=100,beats=8,click=true})end)")[0])
+        lua.execute("self.db.sessions[2]={song=song};same=self:jam_song(song.key)")
+        self.assertTrue(lua.eval('same==song'))
+        lua.execute("self.db.sessions[2].exported='done'")
+        self.assertIsNone(lua.eval('self:jam_song(song.key)'))
+        lua.execute("""length=300;self.jamClick={};reaper.ValidatePtr=function()return true end
+          reaper.GetMediaItemInfo_Value=function()return length end
+          reaper.GetPlayPosition=function()return 890 end
+          reaper.SetMediaItemInfo_Value=function(_,_,v)length=v end
+          self:jam_extend({song={start=610}})""")
+        self.assertEqual(lua.eval('length'),580)
+
     def test_loop_cleanup_targets_original_project_when_export_is_opened(self):
         lua=LuaRuntime(unpack_returned_tuples=True)
         lua.execute('''

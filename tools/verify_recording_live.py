@@ -140,13 +140,13 @@ local function run()
     core.db.countin=false
     core:command({project=core.id,revision=core.revision,op='keep',session=s.id,take=t.id})
     stage=4;started=reaper.time_precise()
-  elseif stage==4 and reaper.time_precise()-started>.4 then
+  elseif stage==4 and reaper.time_precise()-started>1 then
     reaper.Main_OnCommand(1016,0);core:finish()
     local s=core.db.sessions[1]
     check(#s.takes==2 and #s.takes[2].items>=2,'Keep records an independent second multitrack pass')
     core:command({project=core.id,revision=core.revision,op='retry',session=s.id,take=s.takes[2].id})
     stage=5;started=reaper.time_precise()
-  elseif stage==5 and reaper.time_precise()-started>.4 then
+  elseif stage==5 and reaper.time_precise()-started>1 then
     reaper.Main_OnCommand(1016,0);core:finish()
     local s=core.db.sessions[1];local t=s.takes[1]
     check(#s.takes==3 and s.takes[2].status=='discarded' and #s.takes[3].items>=2,'Discard and retry preserves older takes and creates a third pass')
@@ -220,6 +220,81 @@ local function run()
     if exit_bridge then exit_bridge()end
     reaper.defer,reaper.atexit,reaper.time_precise=native_defer,native_exit,native_time
     assert(worked,why)
+
+    -- Free-jam coverage uses native output capture to exercise four independent
+    -- channels even on a development audio device without the physical X32.
+    core=M.new();reaper.GetNumAudioInputs=function()return 32 end
+    local arm=core.arm
+    core.arm=function(self)local n=arm(self);for _,tr in pairs(M.tracks())do reaper.SetMediaTrackInfo_Value(tr,'I_RECMODE',1)end;return n end
+    for i,c in ipairs(core.db.inputs)do c.selected=i<=4 end
+    core.db.countin=true;core.db.recordMode='freejam'
+    core:jam_settings({bpm=137,beats=3,click=true})
+    reaper.CSurf_OnPlayRateChange(.8)
+    core:command({project=core.id,revision=core.revision,op='record'})
+    local s=core:session(core.selected)
+    check(s.song.free and s.rate==1 and s.semis==0 and #s.takes[1].inputs==4,'Free jam records four selected mics at normal speed')
+    check(core.mode=='countin' and reaper.GetPlayState()==0,'Free jam supports independent two-bar count-in')
+    check(core.jamClick and reaper.GetMediaItemInfo_Value(core.jamClick,'B_LOOPSRC')==1,'Free jam creates a transport-synchronised looping click')
+    check(reaper.GetMediaItemInfo_Value(reaper.GetTrackMediaItem(reaper.GetTrack(0,0),0),'B_MUTE')==1,'Free jam silences library media')
+    stage=20;started=reaper.time_precise()
+  elseif stage==20 then
+    core:tick()
+    if core.mode=='recording' then stage=21;started=reaper.time_precise()end
+  elseif stage==21 and reaper.time_precise()-started>.5 then
+    core:tick();check(core.mode=='recording','Free jam has no song-end stop')
+    core:command({project=core.id,revision=core.revision,op='pause'})
+    check((reaper.GetPlayState()&2)==2,'Free jam and its click pause with native transport')
+    stage=22;started=reaper.time_precise()
+  elseif stage==22 and reaper.time_precise()-started>.2 then
+    core:command({project=core.id,revision=core.revision,op='pause'})
+    stage=23;started=reaper.time_precise()
+  elseif stage==23 and reaper.time_precise()-started>.5 then
+    core:command({project=core.id,op='stop'})
+    local s=core:session(core.selected);local t=s.takes[1]
+    check(#t.items==4 and t.duration>0 and s.song.finish>s.song.start,'Only four selected mic tracks are captured; jam duration is saved')
+    check(not core.jamClick and math.abs(reaper.Master_GetPlayRate(0)-.8)<.0001,'Stop removes temporary click and restores playback speed')
+    check(reaper.GetMediaItemInfo_Value(reaper.GetTrackMediaItem(reaper.GetTrack(0,0),0),'B_MUTE')==0,'Stop restores library mute state')
+    core.db.countin=false
+    core:command({project=core.id,revision=core.revision,op='keep',session=s.id,take=t.id})
+    check(core.mode=='recording' and core.jamClick~=nil,'Keep another take retains click with count-in off')
+    stage=24;started=reaper.time_precise()
+  elseif stage==24 and reaper.time_precise()-started>1 then
+    -- Simulate restart after native Stop but before controller acknowledgement.
+    reaper.Main_OnCommand(1016,0);core=M.new()
+    local s=core:session(core.selected)
+    check(s.takes[2].status=='recovered' and #s.takes[2].items==4,'Free jam recovers an interrupted take on restart')
+    check(not core.jamClick and core.db.jam.bpm==137,'Restart removes temporary click and remembers jam settings')
+    core:review(s.id,s.takes[1].id)
+    check(reaper.GetMediaItemInfo_Value(reaper.GetTrackMediaItem(reaper.GetTrack(0,0),0),'B_MUTE')==1,'Free-jam review excludes backing songs')
+    core:park();M.export(core,s)
+    check(s.exported~=nil,'Free jam uses verified export and cleanup')
+    reaper.Main_OnCommand(40859,0);local exported=reaper.EnumProjects(-1,'')
+    reaper.Main_openProject('noprompt:'..s.exported)
+    local num,den,bpm=reaper.TimeMap_GetTimeSigAtTime(0,0)
+    check(num==3 and den==4 and math.abs(bpm-137)<.001,'Free-jam export preserves chosen tempo and meter')
+    check(reaper.CountMediaItems(0)==8,'Free-jam export contains both four-mic takes without backing or click')
+    reaper.Main_OnCommand(40860,0);reaper.SelectProjectInstance(scratch)
+    -- A band can choose different inputs and no click, with count-in alone.
+    core.mode='idle';core.db.countin=true;core:jam_settings({bpm=240,beats=2,click=false})
+    for i,c in ipairs(core.db.inputs)do c.selected=i==5 or i==6 or i==9 or i==10 end
+    local arm=core.arm
+    core.arm=function(self)local n=arm(self);for _,tr in pairs(M.tracks())do reaper.SetMediaTrackInfo_Value(tr,'I_RECMODE',1)end;return n end
+    core:begin('freejam')
+    check(core.mode=='countin' and not core.jamClick,'Band jam can use count-in without continuous click')
+    stage=25;started=reaper.time_precise()
+  elseif stage==25 then
+    core:tick()
+    if core.mode=='recording' then stage=26;started=reaper.time_precise()end
+  elseif stage==26 and reaper.time_precise()-started>1 then
+    core:command({project=core.id,op='stop'})
+    local s=core:session(core.selected);local t=s.takes[1]
+    check(#t.items==4 and t.inputs[1]=='5' and t.inputs[4]=='10','Band jam captures only selected instruments including stereo pairs')
+    core.db.countin=false
+    core:command({project=core.id,revision=core.revision,op='retry',session=s.id,take=t.id})
+    check(core.mode=='recording' and not core.jamClick and t.status=='discarded','Discard and retry supports no click and no count-in')
+    stage=27;started=reaper.time_precise()
+  elseif stage==27 and reaper.time_precise()-started>1 then
+    core:command({project=core.id,op='stop'})
     cleanup(true);return
   end
   reaper.defer(function()local ok,err=xpcall(run,debug.traceback);if not ok then cleanup(false,err)end end)
@@ -230,7 +305,7 @@ local ok,err=xpcall(run,debug.traceback);if not ok then cleanup(false,err)end
     script = folder / 'verify.lua'; script.write_text(source, encoding='utf-8')
     subprocess.Popen(['C:/Program Files/REAPER (x64)/reaper.exe', '-nonewinst', str(script)])
     result = folder / 'result.json'
-    for _ in range(250):
+    for _ in range(450):
         if result.exists(): break
         time.sleep(.2)
     if not result.exists(): raise RuntimeError('No REAPER result; inspect ' + str(folder))

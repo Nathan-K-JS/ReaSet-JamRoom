@@ -62,6 +62,7 @@ function M.export(self,s)
     local copies={}
     for i=0,reaper.CountMediaItems(0)-1 do
       local it=reaper.GetMediaItem(0,i)
+      if s.song.free then reaper.SetMediaItemInfo_Value(it,'C_BEATATTACHMODE',0)end
       for n=0,reaper.CountTakes(it)-1 do
         local take=reaper.GetTake(it,n)
         if not reaper.TakeIsMIDI(take) then
@@ -86,9 +87,10 @@ function M.export(self,s)
       expected[#expected+1]=row
     end
     local tempo={};local num,den,bpm=reaper.TimeMap_GetTimeSigAtTime(0,s.song.start)
+    if s.song.free then num=s.song.beats;den=4;bpm=s.song.bpm end
     for i=0,reaper.CountTempoTimeSigMarkers(0)-1 do
       local yes,pos,measure,beat,b,n,d,linear=reaper.GetTempoTimeSigMarker(0,i)
-      if yes and pos>s.song.start and pos<s.song.finish then tempo[#tempo+1]={pos-s.song.start,b,n,d,linear}end
+      if not s.song.free and yes and pos>s.song.start and pos<s.song.finish then tempo[#tempo+1]={pos-s.song.start,b,n,d,linear}end
     end
     for i=reaper.CountTempoTimeSigMarkers(0)-1,0,-1 do reaper.DeleteTempoTimeSigMarker(0,i)end
     reaper.SetTempoTimeSigMarker(0,-1,0,-1,-1,bpm,num,den,false)

@@ -3406,10 +3406,11 @@
         .rec-meter.stereo{height:14px;display:flex;flex-direction:column;gap:2px}.rec-meter.stereo i{height:6px}
         .rec-status{min-height:24px;color:#b8c4d4;margin-bottom:12px;overflow-wrap:anywhere}.rec-status.error{color:#ff9aa8}
         .rec-volume label{display:flex;justify-content:space-between;align-items:center;font-weight:650}.rec-volume input[type=range]{width:100%;accent-color:#70dba6;margin:18px 0 10px;min-height:28px}.rec-volume small{color:#aeb8c5}
-        .rec-setup-row{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin:12px 0}.rec-setup-row span{min-width:125px}.rec-setup-row input{width:65px;color:#eef2f7;background:#252c35;border:1px solid #485464;padding:8px;border-radius:6px}
+        .rec-setup-row{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin:12px 0}.rec-setup-row span{min-width:125px}.rec-setup-row input,.rec-jam input[type=number],.rec-jam select{width:65px;color:#eef2f7;background:#252c35;border:1px solid #485464;padding:8px;border-radius:6px}
         #tab-btn-recording.capturing{color:#ff6176}.rec-card summary{cursor:pointer;padding:6px 0;min-height:32px}
         .app-topbar{overflow-x:auto;scrollbar-width:thin}.app-menu-btn,.vtab{flex-shrink:0}
         .rec-start{position:sticky;top:0;background:var(--bg-app);padding:8px 0;z-index:1}
+        .rec-jam label{display:flex;align-items:center;gap:6px;min-height:44px}.rec-jam input[type=checkbox]{width:22px;height:22px;accent-color:#70cbbb}
         .rec-input-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:0 24px}
         .rec-input-grid .rec-input{padding:9px 0;min-height:48px}
         .rec-input span{min-width:0;overflow-wrap:anywhere}
@@ -5437,7 +5438,7 @@
         syncLeadSlider();
         tkRenderPanel();             // paints the performance chips on load
         // Shown in the sidebar so a stale cached page is obvious after a deploy.
-        var REASET_VERSION = "v3.7 - reliability and interface";
+        var REASET_VERSION = "v3.8 - free-jam recording";
         var _rv = document.getElementById("reasetVer");
         if (_rv) _rv.textContent = REASET_VERSION;
         (function () { var t = localStorage.getItem("reasetlist_theme") || "dark"; setTheme(t, true); })();
@@ -8957,7 +8958,7 @@
         function recRender() {
             var host=document.getElementById('recording-body');if(!host)return;
             var state=g_recState||{},online=recOnline(),song=recSong(),mode=state.mode||'idle';
-            var busy=mode==='recording'||mode==='countin',review=mode==='review'||mode==='audition';
+            var busy=mode==='recording'||mode==='countin',review=mode==='review'||mode==='audition',free=state.recordMode==='freejam',jam=state.jam||{bpm:100,beats:4,click:true};
             var sessions=state.sessions||[],session=sessions.find(function(s){return s.id===state.selected;});
             var take=session&&(session.takes||[]).find(function(t){return t.id===state.take;});
             var notice=document.getElementById('rec-startup-notice'),display=online&&state.notice&&!busy?'flex':'none';
@@ -8974,8 +8975,10 @@
             else if(!online)html+='<div class="rec-card"><h2>Recording controller unavailable</h2><p>Run ReaSet_Startup.lua in REAPER, then reconnect. If recording is running, use REAPER to stop it.</p></div>';
             else if(!state.ready)html+='<div class="rec-card">Save the REAPER setlist project before recording.</div>';
             else{
-                if(state.notice)html+='<div class="rec-card"><h3>Recordings to tidy up</h3><p>'+state.pending+' song sessions awaiting export. Saved takes stay silent during rehearsal.</p>'+recButton('Later','later')+'</div>';
-                html+='<div class="rec-card"><h2>'+trEsc(busy||review?session&&session.song.name||'Recording':song?song.name:'Cue a song to record')+'</h2>';
+                if(state.notice)html+='<div class="rec-card"><h3>Recordings to tidy up</h3><p>'+state.pending+' recording sessions awaiting export. Saved takes stay silent during rehearsal.</p>'+recButton('Later','later')+'</div>';
+                if(!busy&&!review)html+='<div class="rec-actions">'+recButton((!free?'✓ ':'')+'Song','recordMode',{value:'song'})+recButton((free?'✓ ':'')+'Free jam','recordMode',{value:'freejam'})+'</div>';
+                html+='<div class="rec-card"><h2>'+trEsc(busy||review?session&&session.song.name||'Recording':free?'Free jam':song?song.name:'Cue a song to record')+'</h2>';
+                if((busy||review)&&session&&session.song.free)html+='<div class="rec-sub">'+session.song.bpm+' BPM · '+session.song.beats+'/4 · '+(session.song.click?'Click on during recording':'No recording click')+'</div>';
                 if(busy){
                     html+='<div class="rec-sub">'+(mode==='countin'?'Two-bar count-in':state.paused?'Paused — same take':'Recording · '+trTime(Math.max(0,currentPos-(session?session.song.start:0))))+'</div><div class="rec-actions">'
                         +recButton(state.paused?'Resume':'Pause','pause',{},mode==='countin')+recButton('Stop','stop',{},false,true)+'</div>';
@@ -8988,16 +8991,17 @@
                         +recButton('Keep & record another','keep',{session:session.id,take:take.id},mode==='audition',true)
                         +recButton('Discard & re-record','retry',{session:session.id,take:take.id},mode==='audition'||take!==session.takes[session.takes.length-1])
                         +recButton('Done','done',{},mode==='audition')+'</div>';
-                    html+='<div class="rec-actions">'+recButton('Backing '+(state.backingOn?'on':'off'),'mix',{group:'backing',value:!state.backingOn})+recButton('Recording '+(state.recordingOn?'on':'off'),'mix',{group:'recording',value:!state.recordingOn})+'</div><details><summary>Instrument playback</summary><div class="rec-actions">';
+                    html+='<div class="rec-actions">'+(session.song.free?'':recButton('Backing '+(state.backingOn?'on':'off'),'mix',{group:'backing',value:!state.backingOn}))+recButton('Recording '+(state.recordingOn?'on':'off'),'mix',{group:'recording',value:!state.recordingOn})+'</div><details><summary>Instrument playback</summary><div class="rec-actions">';
                     (state.inputs||[]).forEach(function(c){if((take.inputs||[]).indexOf(c.id)>=0)html+=recButton(c.name+((state.recMutes||{})[c.id]?' muted':''),'mix',{group:'input',input:c.id,value:!(state.recMutes||{})[c.id]});});
-                    ['DRUMS','PERC_FX','BASS','GTR1','GTR2','KEYS','BVS','LEAD_VOX','CLICK','EXTRA'].forEach(function(id){html+=recButton(recStemName(id)+((state.stemMutes||{})[id]?' muted':' backing'),'mix',{group:'stem',input:id,value:!(state.stemMutes||{})[id]});});
+                    (session.song.free?[]:['DRUMS','PERC_FX','BASS','GTR1','GTR2','KEYS','BVS','LEAD_VOX','CLICK','EXTRA']).forEach(function(id){html+=recButton(recStemName(id)+((state.stemMutes||{})[id]?' muted':' backing'),'mix',{group:'stem',input:id,value:!(state.stemMutes||{})[id]});});
                     html+='</div></details>';
                 }else{
                     var exists=(state.inputs||[]).some(function(c){return c.exists;}),selected=(state.inputs||[]).filter(function(c){return c.selected;});
                     if(!exists)html+=recButton('Set up recording tracks','setup',{},false,true);
                     else{
-                        html+='<div class="rec-sub">'+selected.length+' instruments selected</div>';
-                        html+='<div class="rec-actions rec-start">'+recButton('Record','record',{song:song&&song.key},!song||!selected.length||selected.some(function(c){return !c.available;}),true)
+                        if(free)html+='<div class="rec-jam rec-actions"><label>Tempo <input id="rec-jam-bpm" type="number" min="40" max="240" step="1" value="'+jam.bpm+'" style="width:76px;min-height:44px"> BPM</label><label>Beats per bar <select id="rec-jam-beats" style="min-height:44px">'+[2,3,4,5,6,7].map(function(n){return '<option '+(n===jam.beats?'selected':'')+'>'+n+'</option>';}).join('')+'</select></label><label><input id="rec-jam-click" type="checkbox" '+(jam.click?'checked':'')+'> Click during recording</label></div><p class="rec-sub">No backing song. Record until you press Stop. Click uses the existing click output and level.</p>';
+                        html+='<div class="rec-sub">'+selected.length+' inputs selected</div>';
+                        html+='<div class="rec-actions rec-start">'+recButton('Record','record',{song:song&&song.key},(!free&&!song)||!selected.length||selected.some(function(c){return !c.available;}),true)
                             +recButton('Count-in: '+(state.countin?'2 bars':'off'),'countin',{value:!state.countin})+'</div>';
                         function inputRow(c){return '<label class="rec-input"><input type="checkbox" data-rec-input="'+trEsc(c.id)+'" '+(c.selected?'checked':'')+' '+(g_recPending?'disabled':'')+'><span>'+trEsc(c.name)+(c.stereo?' · stereo':'')+(!c.available?' · unavailable':'')+'</span><div class="rec-meter'+(c.stereo?' stereo':'')+'" data-rec-meter="'+trEsc(c.id)+'"><i></i>'+(c.stereo?'<i></i>':'')+'</div></label>';}
                         html+='<div class="rec-input-grid">';
@@ -9031,12 +9035,12 @@
             }
             if(html!==g_recHtml){
                 var focused=document.activeElement, editing=host.contains(focused)&&focused.matches('input[type=number],input[type=text],textarea');
-                var draft=editing?Array.from(host.querySelectorAll('.rec-setup-row input')).map(function(e){return {id:e.id,value:e.value};}):[];
+                var draft=Array.from(host.querySelectorAll(editing?'.rec-setup-row input,.rec-jam input,.rec-jam select':'.rec-jam input,.rec-jam select')).map(function(e){return {id:e.id,value:e.value,checked:e.checked};});
                 var focusId=editing?focused.id:null;
                 var open=Array.from(host.querySelectorAll('details[open]')).map(function(e){return e.id||e.querySelector('summary').textContent;});
                 g_recHtml=html;host.innerHTML=html;
                 host.querySelectorAll('details').forEach(function(e){if(open.indexOf(e.id||e.querySelector('summary').textContent)>=0)e.open=true;});
-                draft.forEach(function(d){var e=document.getElementById(d.id);if(e)e.value=d.value;});
+                draft.forEach(function(d){var e=document.getElementById(d.id);if(e){e.value=d.value;if(e.type==='checkbox')e.checked=d.checked;}});
                 if(focusId && document.getElementById(focusId))document.getElementById(focusId).focus({preventScroll:true});
             }
             (state.inputs||[]).forEach(function(c){var meter=host.querySelector('[data-rec-meter="'+c.id+'"]');if(meter){Array.from(meter.children).forEach(function(bar,i){var level=c.stereo?(i===0?c.left:c.right):c.peak;bar.style.width=Math.min(100,Math.sqrt(Math.max(0,level||0))*100)+'%';});meter.classList.toggle('clip',c.peak>=1);}});
@@ -9048,6 +9052,9 @@
             if(op==='deleteBatch'){if(!window.confirm('Delete '+c.sessions.length+' selected recording sessions? Their audio stays recoverable.'))return;c.confirm=c.sessions.join('|');}
             if(op==='rename'){var name=window.prompt('Take name (optional):','');if(name===null)return;c.name=name;}
             if(op==='configure'){c.channel=Number(document.getElementById('rec-in-'+c.input).value)-1;c.output=Number(document.getElementById('rec-out-'+c.input).value)-1;}
+            if(op==='record'&&g_recState.recordMode==='freejam'){
+                c.jam={bpm:Number(document.getElementById('rec-jam-bpm').value),beats:Number(document.getElementById('rec-jam-beats').value),click:document.getElementById('rec-jam-click').checked};
+            }
             b.blur();recSend(op,c);
         });
         document.getElementById('recording-body').addEventListener('change',function(e){
