@@ -64,6 +64,40 @@ class BrowserTests(unittest.TestCase):
         self.assertIn('Sections saved', self.page.evaluate('g_chartMessage'))
         self.assertIn('|layout|', self.page.evaluate('decodeURIComponent(sent[sent.length-1])'))
 
+    def test_performance_drawer_reserves_scroll_space(self):
+        self.load_reaset()
+        for width, height in ((1280, 800), (390, 844), (844, 390)):
+            self.page.set_viewport_size({'width': width, 'height': height})
+            self.page.evaluate('''() => {
+              document.querySelector('#setlist').innerHTML='<li style="height:2000px">Songs</li><li id="last-song">Last song</li>';
+              tkRenderPanel=function(){document.querySelector('#perfBody').innerHTML='<div style="height:400px">Tempo/key controls</div>';};
+              g_perfOpen=false;togglePerf();
+            }''')
+            self.page.wait_for_function("document.querySelector('.app-content').getBoundingClientRect().bottom <= document.querySelector('#perfBar').getBoundingClientRect().top + 1")
+            result = self.page.evaluate('''() => {
+              const content=document.querySelector('.app-content');content.scrollTop=content.scrollHeight;
+              const bar=document.querySelector('#perfBar').getBoundingClientRect();
+              return {content:content.getBoundingClientRect().bottom,
+                last:document.querySelector('#last-song').getBoundingClientRect().bottom,bar:bar.top};
+            }''')
+            self.assertLessEqual(result['content'], result['bar'] + 1)
+            self.assertLessEqual(result['last'], result['bar'] + 1)
+
+    def test_muted_click_item_uses_bridge_and_waits_for_confirmation(self):
+        self.load_reaset()
+        self.page.evaluate('''() => {
+          g_jrHb={val:1,changedAt:Date.now()};
+          window.clickSong={name:'Song',controls:[{pb:'PB CLICK',label:'Click',click:true,clickBlocked:true,clickKey:'test:1',order:9}]};
+          jrActiveSong=()=>clickSong;g_jrData={globalIssues:[]};
+          g_jrTracks={'PB CLICK':{idx:9,muted:false}};
+          renderTracksPanel();jrTapControl('PB CLICK');jrConfirmPending();
+        }''')
+        self.assertIn('CLICK DISABLED', self.page.locator('#jr-body').inner_text())
+        self.assertIn('SET/EXTSTATE/ReaSetJR/clickWant/test:1|0', self.page.evaluate('decodeURIComponent(sent[sent.length-1])'))
+        self.assertTrue(self.page.evaluate("!!g_jrPending['PB CLICK']"))
+        self.page.evaluate("clickSong.controls[0].clickBlocked=false;clickSong.controls[0].clickKey='test:2';jrConfirmPending();renderTracksPanel()")
+        self.assertFalse(self.page.evaluate("!!g_jrPending['PB CLICK']"))
+
     def test_removed_precise_view_uses_chart_and_old_repair_links_request_upgrade(self):
         self.load_reaset()
         self.page.evaluate("setChordView('big');currentPos=15;renderChordsView()")

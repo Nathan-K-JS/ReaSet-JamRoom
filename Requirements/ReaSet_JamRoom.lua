@@ -15,7 +15,7 @@
 --   setup, and publishes the result as chunked JSON via NON-PERSISTENT global
 --   ExtState so ReaSet.html can poll it through REAPER's web interface.
 --
---   This script never mutes/unmutes anything and holds no mute state.
+--   Click enable commands clear item/subtrack mutes that TRACK cannot see.
 --   Mute state & commands travel over the web interface's native TRACK API;
 --   REAPER's PB-bus mute is the single source of truth.
 --
@@ -47,6 +47,9 @@ local SLOTS = {
 }
 local SLOT_BY_ID = {}
 for _, s in ipairs(SLOTS) do SLOT_BY_ID[s.id] = s end
+local click_targets = {}
+local click_revision = 0
+local click_instance = tostring(reaper.time_precise())
 
 -- ─── Small helpers ────────────────────────────────────────────────────────────
 local function trim(s) return (s:gsub("^%s+", ""):gsub("%s+$", "")) end
@@ -138,6 +141,8 @@ end
 
 -- Full discovery pass. Returns the payload JSON string (single line).
 local function discover()
+    click_targets = {}
+    click_revision = click_revision + 1
     local tracks = scan_tracks()
     local songs  = scan_song_regions()
     local global_issues = {}
@@ -248,11 +253,32 @@ local function discover()
                         .. table.concat(names, ", ") .. '. Neither is shown until resolved.') .. '"}'
                 else
                     local jr = claim[1]
+                    local click_fields = ''
+                    if slotdef.click then
+                        local key = click_instance .. ':' .. click_revision .. ':' .. song.id
+                        local target = { tracks = {}, items = {}, pb = tracks[pb_by_norm.CLICK].tr }
+                        local blocked = false
+                        for ti = jr.ti, jr.last do
+                            local tr = tracks[ti].tr
+                            target.tracks[#target.tracks + 1] = tr
+                            if reaper.GetMediaTrackInfo_Value(tr, 'B_MUTE') ~= 0 then blocked = true end
+                            for ii = 0, reaper.CountTrackMediaItems(tr) - 1 do
+                                local it = reaper.GetTrackMediaItem(tr, ii)
+                                local p = reaper.GetMediaItemInfo_Value(it, 'D_POSITION')
+                                if p < song.e and p + reaper.GetMediaItemInfo_Value(it, 'D_LENGTH') > song.s then
+                                    target.items[#target.items + 1] = it
+                                    if reaper.GetMediaItemInfo_Value(it, 'B_MUTE') ~= 0 then blocked = true end
+                                end
+                            end
+                        end
+                        click_targets[key] = target
+                        click_fields = ',"clickKey":"' .. jesc(key) .. '","clickBlocked":' .. tostring(blocked)
+                    end
                     controls[#controls + 1] = '{"slot":"' .. slotdef.id
                         .. '","order":' .. slotdef.order
                         .. ',"label":"' .. jesc(jr.label)
                         .. '","pb":"' .. jesc(slotdef.pb)
-                        .. '","click":' .. tostring(slotdef.click) .. '}'
+                        .. '","click":' .. tostring(slotdef.click) .. click_fields .. '}'
                 end
             end
         end
@@ -298,6 +324,7 @@ local function publish(json)
 end
 
 local function clear_all_keys()
+    reaper.SetExtState(SEC, "clickWant", "", false)
     reaper.SetExtState(SEC, "meta", "", false)
     reaper.SetExtState(SEC, "heartbeat", "", false)
     for i = 0, MAX_CHUNKS - 1 do
@@ -335,6 +362,25 @@ local function main_loop()
         if json ~= s_last_json then
             s_last_json = json
             publish(json)
+        end
+    end
+
+    -- A rescan invalidates the key before handling a moved song/project.
+    local request = reaper.GetExtState(SEC, 'clickWant')
+    if request ~= '' then
+        reaper.SetExtState(SEC, 'clickWant', '', false)
+        local key, mute = request:match('^(.-)|([01])$')
+        local target = click_targets[key]
+        if target then
+            reaper.Undo_BeginBlock()
+            if mute == '0' then
+                for _, tr in ipairs(target.tracks) do reaper.SetMediaTrackInfo_Value(tr, 'B_MUTE', 0) end
+                for _, it in ipairs(target.items) do reaper.SetMediaItemInfo_Value(it, 'B_MUTE', 0) end
+            end
+            reaper.SetMediaTrackInfo_Value(target.pb, 'B_MUTE', tonumber(mute))
+            reaper.UpdateArrange()
+            reaper.Undo_EndBlock('ReaSet: set click playback', -1)
+            s_last_csc = -1
         end
     end
 

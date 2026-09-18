@@ -488,6 +488,8 @@
         /* SCROLLABLE CONTENT */
         .app-content {
             flex: 1;
+            min-height: 0;
+            margin-bottom: var(--perf-height, 42px);
             overflow-y: auto;
             padding: 4px 14px 12px;
             scrollbar-width: thin;
@@ -4842,7 +4844,8 @@
             + '.pchip.on{background:#17304d;color:#cfe3ff;border-color:#2f6fed;font-weight:600}'
             + '.pchip.pending{opacity:.5;font-style:italic}'
             + '.pchip-caret{background:transparent;border:0;color:#6b7280}'
-            + '#perfBody{max-height:52vh;overflow-y:auto;padding:4px 8px 12px;'
+            + '#lyrics-panel,#chords-panel,#tracks-panel{bottom:var(--perf-clearance,128px)}'
+            + '#perfBody{max-height:min(52vh,var(--perf-body-max,40vh));overflow-y:auto;padding:4px 8px 12px;'
             + 'border-top:1px solid #2c3038}'
             // ReaSet had no .hide class of its own (it came from the importer
             // page), so anything marked hidden here was staying visible.
@@ -5093,12 +5096,35 @@
 
         // The performance bar is collapsed by default; the chips stay visible.
         var g_perfOpen = false;
+        function perfLayout() {
+            var footer = document.querySelector('.app-transport');
+            var bar = document.getElementById('perfBar');
+            var root = document.documentElement;
+            var bottom = footer ? footer.getBoundingClientRect().height : 0;
+            var content = document.querySelector('.app-content');
+            var chips = document.getElementById('perfChips');
+            var available = innerHeight - bottom - (content ? content.getBoundingClientRect().top : 160)
+                - (chips ? chips.getBoundingClientRect().height : 44) - 80;
+            root.style.setProperty('--perf-body-max', Math.max(40, available) + 'px');
+            var height = bar ? bar.getBoundingClientRect().height : 0;
+            root.style.setProperty('--perf-bottom', bottom + 'px');
+            root.style.setProperty('--perf-height', height + 'px');
+            root.style.setProperty('--perf-clearance', (bottom + height) + 'px');
+        }
+        var g_perfResize = typeof ResizeObserver === 'function' ? new ResizeObserver(perfLayout) : null;
+        if (g_perfResize) {
+            g_perfResize.observe(document.getElementById('perfBar'));
+            g_perfResize.observe(document.querySelector('.app-transport'));
+        }
+        window.addEventListener('resize', perfLayout);
+        perfLayout();
         function togglePerf() {
             g_perfOpen = !g_perfOpen;
             document.getElementById('perfBody').classList.toggle('hide', !g_perfOpen);
             var c = document.getElementById('pchipCaret');
             if (c) c.textContent = g_perfOpen ? '▼' : '▲';
             if (g_perfOpen) tkRenderPanel();
+            perfLayout();
         }
 
         // Chips summarise state at a glance from any screen; they dim when at
@@ -8780,10 +8806,14 @@
         // Drop a pending command once the TRACK poll confirms it (or after a
         // timeout, so the display simply returns to the confirmed truth).
         function jrConfirmPending() {
+            var song = jrActiveSong();
             for (var pb in g_jrPending) {
                 var t = g_jrTracks && g_jrTracks[pb];
                 var p = g_jrPending[pb];
-                if ((t && t.muted === p.want) || (Date.now() - p.at) > 2500) {
+                var c = song && (song.controls || []).find(function(control) { return jrNormName(control.pb) === pb; });
+                var confirmed = t && t.muted === p.want;
+                if (p.clickKey) confirmed = confirmed && c && c.clickKey !== p.clickKey && (p.want || !c.clickBlocked);
+                if (confirmed || (Date.now() - p.at) > 2500) {
                     delete g_jrPending[pb];
                 }
             }
@@ -8796,9 +8826,16 @@
             if (!jrBridgeOnline()) return;
             var t = g_jrTracks && g_jrTracks[pbNorm];
             if (!t || g_jrPending[pbNorm]) return;
-            var want = !t.muted;
+            var song = jrActiveSong();
+            var control = song && (song.controls || []).find(function(c) { return jrNormName(c.pb) === pbNorm; });
+            var want = !(t.muted || (control && control.clickBlocked));
             g_jrPending[pbNorm] = { want: want, at: Date.now() };
-            wwr_req("SET/TRACK/" + t.idx + "/MUTE/" + (want ? 1 : 0));
+            if (control && control.clickKey) {
+                g_jrPending[pbNorm].clickKey = control.clickKey;
+                wwr_req('SET/EXTSTATE/ReaSetJR/clickWant/' + encodeURIComponent(control.clickKey + '|' + (want ? 1 : 0)));
+            } else {
+                wwr_req("SET/TRACK/" + t.idx + "/MUTE/" + (want ? 1 : 0));
+            }
             renderTracksPanel();
         }
 
@@ -9482,7 +9519,7 @@
                         var t = g_jrTracks ? g_jrTracks[pbn] : null;
                         var cls, txt;
                         if (!t)          { cls = 'jr-state-unavail'; txt = 'UNAVAILABLE'; }
-                        else if (t.muted){ cls = 'jr-state-muted';   txt = '✕ MUTED'; }
+                        else if (t.muted || c.clickBlocked){ cls = 'jr-state-muted';   txt = c.clickBlocked ? 'CLICK DISABLED — TAP TO ENABLE' : '✕ MUTED'; }
                         else             { cls = 'jr-state-audible'; txt = '● AUDIBLE'; }
                         var pend = g_jrPending[pbn] ? '<span class="jr-pend">●</span>' : '';
                         var row = '<div class="jr-row' + (t ? '' : ' jr-disabled')

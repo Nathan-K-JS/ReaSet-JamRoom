@@ -99,6 +99,27 @@ local ok,why=pcall(function()
   local bridge_exit
   reaper.atexit=function(fn)bridge_exit=fn end
   reaper.SetToggleCommandState=function()end
+  -- Exercise click enable through the production bridge, including a muted
+  -- item under an unmuted PB bus (the native TRACK state misses this).
+  local jr_set,jr_get=reaper.SetExtState,reaper.GetExtState
+  reaper.SetExtState=function(sec,key,value,persist)real_set(sec=='ReaSetJR' and 'ReaSetSmokeJR' or sec,key,value,persist)end
+  reaper.GetExtState=function(sec,key)return real_get(sec=='ReaSetJR' and 'ReaSetSmokeJR' or sec,key)end
+  local click_item=C.install(ct,reaper.PCM_Source_CreateFromFile(folder..'/click.wav'),0,60,'Smoke',true)
+  local later_item=C.install(ct,reaper.PCM_Source_CreateFromFile(folder..'/click.wav'),80,60,'Later',true)
+  real_dofile(root..'/Requirements/ReaSet_JamRoom.lua');tick()
+  local function jr_payload()
+    local n=tonumber(real_get('ReaSetSmokeJR','meta'):match(':(%d+)$'))
+    local pieces={};for i=0,n-1 do pieces[#pieces+1]=real_get('ReaSetSmokeJR','d'..i):match('^[^:]+:(.*)$')end
+    return J.decode(table.concat(pieces))
+  end
+  local control=jr_payload().songs[tostring(id)].controls[1]
+  check(control.clickBlocked,'Bridge reports item mute under enabled bus')
+  real_set('ReaSetSmokeJR','clickWant',control.clickKey..'|0',false);tick();tick()
+  check(reaper.GetMediaItemInfo_Value(click_item,'B_MUTE')==0,'Click enable clears current song item mute')
+  check(reaper.GetMediaItemInfo_Value(later_item,'B_MUTE')==1,'Click enable preserves other song item')
+  check(not jr_payload().songs[tostring(id)].controls[1].clickBlocked,'Bridge confirms click enabled')
+  bridge_exit()
+  reaper.SetExtState,reaper.GetExtState=jr_set,jr_get
   reaper.SetEditCurPos(10,false,false)
   real_dofile(root..'/Requirements/ReaSet_ChordsLyrics.lua')
   local meta=real_get('ReaSetSmokeCL','meta');local chunks=tonumber(meta:match(':(%d+)$'))
