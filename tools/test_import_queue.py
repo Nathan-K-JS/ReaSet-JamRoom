@@ -77,6 +77,33 @@ class QueueTests(unittest.TestCase):
         self.assertEqual(len(self.queue.jobs), 1)
         self.assertNotIn('secret', self.queue.path.read_text())
 
+    def test_removed_youtube_review_reopens_from_its_fadr_asset(self):
+        ident=self.add();row=self.review(ident)
+        folder=self.queue.folder(ident);job=ji.load_job(folder)
+        job['fadr']={'asset_id':'asset-one'};ji.save_job(folder,job)
+        row['draft']={'lyrics_offset':1.25};self.queue._save()
+        self.queue.action(ident,'remove',{})
+        reopened=ImportQueue(self.bridge,self.cfg);reopened.paused=True
+        with patch.object(ji,'Fadr') as fadr:
+            result=reopened.add({'band':'Band','title':'Song','asset':'asset-one'})
+            self.assertEqual(result['id'],ident)
+            self.assertEqual(reopened.jobs[ident]['state'],'review')
+            self.assertEqual(reopened.jobs[ident]['draft'],{'lyrics_offset':1.25})
+            fadr.assert_not_called()
+        with self.assertRaises(Conflict):
+            reopened.add({'band':'Band','title':'Song','asset':'different-asset'})
+
+    def test_unfinished_and_legacy_cached_fadr_work_can_be_selected_again(self):
+        ident=self.add();self.review(ident)
+        folder=self.queue.folder(ident);job=ji.load_job(folder)
+        job['fadr']={'asset_id':'asset-one'};ji.save_job(folder,job)
+        body={'band':'Band','title':'Song','asset':'asset-one'}
+        self.assertEqual(self.queue.add(body)['id'],ident)
+        self.queue.jobs={};self.queue._save()
+        recovered=self.queue.add(body)['id']
+        self.assertEqual(self.queue.jobs[recovered]['state'],'cached')
+        self.assertEqual(self.queue.jobs[recovered]['asset'],'asset-one')
+
     def test_draft_survives_restart_and_rejects_stale_browser(self):
         ident = self.add(); self.review(ident)
         draft = {'slots':{'stems/bass.wav':'SKIP'}, 'labels':{'stems/bass.wav':'Custom'}, 'lyrics_offset':1.25}
@@ -264,13 +291,19 @@ class QueueTests(unittest.TestCase):
                 page.on('pageerror', lambda e: errors.append(str(e)))
                 page.route('**/api/checks', lambda r:r.fulfill(json={'build':ji.BUILD, 'key':True, 'reaper':True}))
                 page.goto('http://127.0.0.1:' + str(http.server_port))
-                page.get_by_role('button', name='Band - One', exact=True).click()
+                page.get_by_role('button', name='Open Band - One', exact=True).wait_for()
+                self.assertFalse(page.get_by_role('button',name='Remove from queue',exact=True).first.is_visible())
+                page.locator('#importQueue details[data-song] summary').first.click()
+                page.once('dialog',lambda dialog:dialog.dismiss())
+                page.get_by_role('button',name='Remove from queue',exact=True).first.click()
+                self.assertEqual(self.queue.jobs[first]['state'],'review')
+                page.get_by_role('button', name='Open Band - One', exact=True).click()
                 page.locator('#stemList input.lbl').fill('My custom bass')
                 page.locator('#stemList select').select_option('SKIP')
                 page.locator('#lyrOffset').fill('1.25')
-                page.get_by_role('button', name='Band - Two', exact=True).click()
+                page.get_by_role('button', name='Open Band - Two', exact=True).click()
                 page.wait_for_function("document.getElementById('progTitle').textContent.includes('Band - Two')")
-                page.get_by_role('button', name='Band - One', exact=True).click()
+                page.get_by_role('button', name='Open Band - One', exact=True).click()
                 page.wait_for_function("document.querySelector('#stemList select')?.value === 'SKIP'")
                 self.assertEqual(page.locator('#stemList select').input_value(), 'SKIP')
                 self.assertEqual(page.locator('#stemList input.lbl').input_value(), 'My custom bass')

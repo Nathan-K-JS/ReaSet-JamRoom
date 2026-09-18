@@ -245,31 +245,37 @@ class BrowserTests(unittest.TestCase):
             self.assertLessEqual(result['content'], result['bar'] + 1)
             self.assertLessEqual(result['last'], result['bar'] + 1)
 
-    def test_more_menu_is_clickable_and_fullscreen_exit_restores_transport(self):
+    def test_retired_views_are_absent_and_connection_menu_still_works(self):
         self.load_reaset()
         for width,height in ((1280,800),(768,1024),(390,844),(320,568),(844,390)):
             self.page.set_viewport_size({'width':width,'height':height})
-            self.page.evaluate('liveFontScale=1')
             self.page.locator('#more-views-toggle').click()
-            self.page.locator('#tab-btn-live').click()
-            self.assertTrue(self.page.locator('#live-view').is_visible())
-            self.page.evaluate('adjustLiveSize(0)')
-            before=self.page.locator('#live-song-name').evaluate('e=>parseFloat(getComputedStyle(e).fontSize)')
-            self.page.evaluate('adjustLiveSize(-1)')
-            after=self.page.locator('#live-song-name').evaluate('e=>parseFloat(getComputedStyle(e).fontSize)')
-            self.assertLess(after,before)
-            self.page.locator('#tab-btn-show').click()
+            self.assertEqual(self.page.locator('#tab-btn-live,#tab-btn-canvas').count(),0)
+            self.assertTrue(self.page.locator('#connection-menu').is_visible())
+            self.page.evaluate('closeMoreViews();openLiveView();openCanvasMode()')
+            self.page.keyboard.press('v');self.page.keyboard.press('n')
             self.assertFalse(self.page.locator('#live-view').is_visible())
-            self.page.locator('#more-views-toggle').click()
-            self.page.locator('#tab-btn-canvas').click()
-            self.page.evaluate('closeCanvasMode()')
+            self.assertFalse(self.page.locator('#canvas-mode').is_visible())
             self.assertTrue(self.page.locator('#main-play-btn').is_visible())
             bounds=self.page.locator('#more-views-toggle').bounding_box()
             self.assertLessEqual(bounds['x']+bounds['width'],width+1)
-        self.page.locator('#more-views-toggle').click()
-        self.page.set_viewport_size({'width':390,'height':844})
-        self.page.wait_for_timeout(100)
-        self.assertFalse(self.page.locator('#more-views-menu').is_visible())
+
+    def test_artist_default_title_sort_and_custom_order(self):
+        self.load_reaset()
+        self.page.evaluate("""displayList=[
+          {id:1,name:'Zulu - Alpha',start:0,end:60,duration:60},
+          {id:2,name:'Abba - Zebra',start:70,end:130,duration:60},
+          {id:3,name:'Abba - Bravo',start:140,end:200,duration:60}];
+          autoSortSetlists={};applyAutoSort(displayList);""")
+        self.assertEqual(self.page.evaluate('displayList.map(s=>s.id)'),[3,2,1])
+        self.page.select_option('#songSort','title')
+        self.assertEqual(self.page.evaluate('displayList.map(s=>s.id)'),[1,3,2])
+        self.assertEqual(self.page.evaluate('JSON.parse(localStorage.getItem(_autoSortKey()))[currentSetlistName]'),'title')
+        self.page.select_option('#songSort','manual')
+        self.assertFalse(self.page.evaluate('autoSortActive()'))
+        self.page.select_option('#songSort','artist')
+        self.assertEqual(self.page.evaluate('displayList.map(s=>s.id)'),[3,2,1])
+        self.assertFalse(self.page.evaluate("sent.some(s=>s==='40044')"))
 
     def test_dialogs_cover_performance_bar_and_landscape_chart_keeps_music_space(self):
         self.load_reaset()
@@ -327,7 +333,7 @@ class BrowserTests(unittest.TestCase):
         self.assertIn('RESUME',self.page.locator('#main-play-btn').inner_text())
         self.page.evaluate("g_recState.mode='idle';g_recHb.at=0;recRender()")
         self.assertTrue(self.page.locator('#main-play-btn').is_disabled())
-        self.page.evaluate('openLiveView()')
+        self.page.evaluate('showMainView()')
         self.assertFalse(self.page.locator('#recording-panel').is_visible())
         self.assertNotIn('RECORD',self.page.locator('#main-play-btn').inner_text())
 

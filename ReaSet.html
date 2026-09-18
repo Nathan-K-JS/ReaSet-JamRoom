@@ -3661,6 +3661,11 @@
             #live-view{padding:50px 16px 16px;gap:8px}#live-song-name{font-size:calc(32px * var(--live-font-scale,1))!important}
         }
         @media(max-width:360px){.app-menu-btn{width:32px}.more-views{width:34px;font-size:9px}.app-topbar>.vtab{font-size:9px;padding:0 1px}}
+
+        #live-view,#canvas-mode{display:none!important}
+        .app-info-row{flex-wrap:wrap;row-gap:6px}
+        .connection-symbol{display:none}
+        @media(max-width:600px){.connection-label{display:none}.connection-symbol{display:inline}}
     </style>
 </head>
 
@@ -3687,7 +3692,7 @@
             </div>
             <div class="vtab" id="tab-btn-recording" onclick="recTogglePanel()"><span class="vtab-icon">●</span><span id="rec-tab-label">RECORD</span></div>
 
-            <button class="more-views" id="more-views-toggle" aria-label="More views and connection" aria-expanded="false" aria-controls="more-views-menu" onclick="toggleMoreViews()">More ▾</button>
+            <button class="more-views" id="more-views-toggle" aria-label="Connection options" aria-expanded="false" aria-controls="more-views-menu" onclick="toggleMoreViews()"><span class="connection-label">Connection ▾</span><span class="connection-symbol" aria-hidden="true">⋯</span></button>
             <div class="vtab-spacer"></div>
 
             <div class="app-topbar-info">
@@ -3705,9 +3710,6 @@
             <div class="dotmenu-wrap" id="dotMenuWrap" style="position:relative">
                 <button class="n-dotmenu-btn" onclick="toggleDotMenu(event)" title="Options">···</button>
                 <div class="dotmenu-dropdown" id="dotMenuDropdown">
-                    <button class="dotmenu-item" onclick="toggleAutoSort();closeDotMenu()">
-                        <span class="dm-icon">⇅</span> <span id="autoSortLabel">Sort: Band A–Z</span>
-                    </button>
                     <button class="dotmenu-item" onclick="exportSetlists();closeDotMenu()">
                         <span class="dm-icon">↓</span> Export setlists
                     </button>
@@ -3727,6 +3729,8 @@
             <span class="info-setlist-name" id="current-setlist-name-display">Active Setlist</span>
             <span class="info-live-chip" id="live-indicator-chip" style="display:none;">● LIVE</span>
             <span class="info-spacer"></span>
+            <label for="songSort" style="display:inline-flex;align-items:center;font-size:12px;white-space:nowrap;margin-left:auto">Sort
+            <select id="songSort" aria-label="Song order" onchange="setSongSort(this.value)" style="max-width:145px;min-width:0;margin-left:6px;background:#20252a;color:inherit;border:1px solid #555;border-radius:6px;padding:6px"><option value="artist">Artist A-Z</option><option value="title">Song title A-Z</option><option value="manual">Custom order</option></select></label>
             <!-- removed count and time as it is on the top bar now, just keep space for balance -->
         </div>
 
@@ -3749,8 +3753,6 @@
     </div>
 
     <div class="more-views-menu hide" id="more-views-menu">
-        <button class="vtab" id="tab-btn-live" onclick="closeMoreViews();openLiveView()">Live dashboard</button>
-        <button class="vtab" id="tab-btn-canvas" onclick="closeMoreViews();openCanvasMode()">Stage display</button>
         <div id="connection-menu"><div class="connection-summary connection-status" role="status">Connecting to REAPER…</div><button onclick="reconnectRoom()">Reconnect</button></div>
     </div>
 
@@ -4151,7 +4153,7 @@
     </div>
 
     <!-- LIVE VIEW -->
-    <div id="live-view">
+    <div hidden inert id="live-view">
         <button class="chord-close-btn" onclick="closeLiveView()"
             style="position:absolute; top:30px; right:40px;">✕</button>
         <p class="live-now-label" id="live-now-label">LIVE <span class="live-indicator">●</span> <span id="live-show-time"
@@ -4255,7 +4257,7 @@
     </div>
 
     <!-- CANVAS MODE -->
-    <div id="canvas-mode">
+    <div hidden inert id="canvas-mode">
         <div class="canvas-header" id="canvas-header" style="justify-content: flex-start; gap: 10px;">
             <button class="lt-btn lt-ghost" onclick="closeCanvasMode()" style="font-size: 14px; padding: 6px 16px;">✕
                 Exit</button>
@@ -5449,12 +5451,16 @@
         var setlists = JSON.parse(localStorage.getItem(STORAGE_KEY)) || { "Default": [] };
         var currentSetlistName = localStorage.getItem(CURRENT_KEY) || "Default";
 
-        // --- Auto-sort (Band A–Z) — per-setlist opt-in, project-scoped ---
+        // Artist/title order is remembered per setlist and project. Legacy flags default to artist.
         var autoSortSetlists = (function () {
             try { return JSON.parse(localStorage.getItem('reaset_autosort') || '{}'); }
             catch (e) { return {}; }
         })();
-        function autoSortActive() { return autoSortSetlists[currentSetlistName] === true; }
+        function songSortMode() {
+            var mode=autoSortSetlists[currentSetlistName];
+            return mode==='title'||mode==='manual'?mode:'artist';
+        }
+        function autoSortActive() { return songSortMode() !== 'manual'; }
         function saveAutoSort() { localStorage.setItem(_autoSortKey(), JSON.stringify(autoSortSetlists)); }
         // Sort key from "Band - Song"; songs without " - " sort after all bands,
         // by full name. Case-insensitive; ties broken by timeline position.
@@ -5467,20 +5473,19 @@
         function applyAutoSort(list) {
             list.sort(function (a, b) {
                 var ka = _bandSongKey(a), kb = _bandSongKey(b);
+                if(songSortMode()==='title'){ka=[ka[1],ka[0]];kb=[kb[1],kb[0]];}
                 if (ka[0] !== kb[0]) return ka[0] < kb[0] ? -1 : 1;
                 if (ka[1] !== kb[1]) return ka[1] < kb[1] ? -1 : 1;
                 return a.start - b.start;
             });
         }
-        function toggleAutoSort() {
-            autoSortSetlists[currentSetlistName] = !autoSortActive();
+        function setSongSort(mode) {
+            autoSortSetlists[currentSetlistName]=mode;
             saveAutoSort();
-            if (autoSortActive() && displayList.length > 0) {
-                applyAutoSort(displayList);
-                saveCurrentState();
-                lastRenderChecksum = null;  // force re-render
-                renderSetlist(); updatePlaybackUI();
-            }
+            if(autoSortActive())applyAutoSort(displayList);
+            saveCurrentState();lastRenderChecksum=null;
+            renderSetlist();updatePlaybackUI();
+            document.getElementById('songSort').value=songSortMode();
         }
         if (!setlists["Default"]) setlists["Default"] = [];
         if (!setlists[currentSetlistName]) currentSetlistName = "Default";
@@ -5492,7 +5497,7 @@
         syncLeadSlider();
         tkRenderPanel();             // paints the performance chips on load
         // Shown in the sidebar so a stale cached page is obvious after a deploy.
-        var REASET_VERSION = "v3.12 - Importer activity";
+        var REASET_VERSION = "v3.13 - Song browsing and import recovery";
         var _rv = document.getElementById("reasetVer");
         if (_rv) _rv.textContent = REASET_VERSION;
         (function () { var t = localStorage.getItem("reasetlist_theme") || "dark"; setTheme(t, true); })();
@@ -7306,14 +7311,7 @@
         var activeWidget = null;
         var initialX, initialY, currentX, currentY;
 
-        function openCanvasMode() {
-            closeOtherPanels('canvas');
-            canvasOpen = true;
-            document.getElementById("canvas-mode").classList.add("open");
-            var tabBtn = document.getElementById('tab-btn-canvas'); if (tabBtn) tabBtn.classList.add('active');
-            updateTopTabs();
-            updatePlaybackUI();
-        }
+        function openCanvasMode() { /* Retired view: no navigation entry point. */ }
 
         function closeCanvasMode() {
             canvasOpen = false;
@@ -7959,17 +7957,7 @@
         loadCanvasPrefs();
 
         // --- 14. LIVE VIEW ---
-        function openLiveView() {
-            closeOtherPanels('live');
-            liveViewOpen = true;
-            document.getElementById("live-view").classList.add("open");
-            document.getElementById("live-setlist-name").innerText = currentSetlistName;
-            var tl = document.getElementById('tab-btn-live'); if (tl) tl.classList.add('active');
-            _lrmLastSongId = null; // force region map rebuild on open
-            applyLiveSettings();
-            updateTopTabs();
-            updatePlaybackUI();
-        }
+        function openLiveView() { /* Retired view: no navigation entry point. */ }
         function closeLiveView() {
             liveViewOpen = false;
             document.getElementById("live-view").classList.remove("open");
@@ -8094,6 +8082,7 @@
 
         // --- 15. FILE I/O ---
         function updateSetlistDropdown() {
+            document.getElementById('songSort').value=songSortMode();
             var sel = document.getElementById("setlistSelect"); sel.innerHTML = "";
             for (var name in setlists) {
                 if (setlists.hasOwnProperty(name)) {
@@ -8112,8 +8101,7 @@
         // --- 3-DOT MENU ---
         function toggleDotMenu(e) {
             e.stopPropagation();
-            var asl = document.getElementById('autoSortLabel');
-            if (asl) asl.textContent = 'Sort: Band A–Z' + (autoSortActive() ? ' ✓' : '');
+            document.getElementById('songSort').value=songSortMode();
             document.getElementById('dotMenuDropdown').classList.toggle('open');
         }
         function closeDotMenu() {
@@ -8164,6 +8152,7 @@
         }
         function changeSetlist() {
             currentSetlistName = document.getElementById("setlistSelect").value;
+            document.getElementById('songSort').value=songSortMode();
             localStorage.setItem(CURRENT_KEY, currentSetlistName); displayList = []; initialized = false; syncRegions();
         }
         function exportSetlists() {
@@ -8225,8 +8214,8 @@
                 if (autoSortActive()) {
                     // Manual reorder would be silently undone on the next region
                     // sync — turn the auto-sort off instead, and say so.
-                    autoSortSetlists[currentSetlistName] = false; saveAutoSort();
-                    showAppAlert("Auto-sort (Band A–Z) is now OFF for this setlist because you reordered it manually.", "Auto-sort off");
+                    autoSortSetlists[currentSetlistName] = 'manual'; saveAutoSort();document.getElementById('songSort').value='manual';
+                    showAppAlert("Custom order is now selected because you moved a song manually.", "Auto-sort off");
                 }
             }
         });
@@ -8266,8 +8255,6 @@
                     break;
                 case 'KeyC': event.preventDefault(); toggleChordsPanel(); break;
                 case 'KeyG': event.preventDefault(); toggleGridView(); break;
-                case 'KeyV': event.preventDefault(); if (liveViewOpen) closeLiveView(); else openLiveView(); break;
-                case 'KeyN': event.preventDefault(); if (canvasOpen) closeCanvasMode(); else openCanvasMode(); break;
                 case 'ArrowLeft':
                     event.preventDefault();
                     if (activeIdx !== -1) { playRegion(displayList[activeIdx].start, displayList[activeIdx].id); flashRow(displayList[activeIdx].id); }

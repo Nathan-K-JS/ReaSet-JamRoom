@@ -38,6 +38,12 @@ ancestry first; never force-push or overwrite divergent changes. Pushing only
 `feature/timing-repair` does not deliver an update to standard installations.
 
 Current architecture:
+- v3.13 reopens removed/prepared imports by saved Fadr identity across YouTube
+  and Fadr entry points. Open is explicit; removal lives under More. Playback
+  sorting defaults to artist, with title/custom order remembered per setlist.
+  Live dashboard and Stage display are retired at the user's request; their
+  inert legacy DOM remains for shared rendering compatibility. Do not restore
+  their navigation or shortcuts. Lyrics, Chords, Tracks and Record remain.
 - v3.12 centralizes importer status in a sticky bar and Activity view; see
   `docs/IMPORTER_ACTIVITY.md`. Poll `/api/updates/status` for batch progress;
   never rescan song folders or rebuild the chooser on each progress tick.
@@ -130,8 +136,8 @@ scratch-project REAPER check are in the delivery guide.
 ## Existing features that must keep working
 
 Setlist management, REAPER region-based song discovery, transport controls (play/
-pause/stop/cue/seek), song chaining/looping/auto-stop, Lyrics view, Chords view, Live
-view, Canvas view, MIDI mappings, and all existing browser localStorage-based
+pause/stop/cue/seek), song chaining/looping/auto-stop, Lyrics view, Chords view,
+MIDI mappings, and all existing browser localStorage-based
 persistence. Don't redesign these — the new feature needs to coexist alongside them.
 
 ## The feature being built: "Jam Room" backing-track control

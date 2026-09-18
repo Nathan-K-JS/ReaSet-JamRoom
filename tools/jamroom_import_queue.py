@@ -131,12 +131,19 @@ class ImportQueue:
         if not band or not title or not (url or asset):
             raise ValueError('Recording, band and title are required')
         name = f'{band} - {title}'
+        def same_recording(row, job):
+            source = job.get('source') or {}
+            saved_url = row.get('url') or source.get('youtube_url')
+            saved_assets = [row.get('asset'), (job.get('fadr') or {}).get('asset_id')]
+            return bool((url and url == saved_url) or
+                        (asset and str(asset) in {str(a) for a in saved_assets if a}))
         with self.guard:
             if self.server.STATE['state'] in self.server.ACTIVE_STATES:
                 raise Conflict('Finish the import started by the previous interface first.')
             for row in self.jobs.values():
                 if row['song'] == name:
-                    if row.get('url') == url and row.get('asset') == asset:
+                    job = ji.load_job(self.folder(row['id']))
+                    if same_recording(row, job):
                         if row['state'] == 'removed':
                             row['state'] = row.pop('removed_state', 'cached')
                             self._save()
@@ -151,6 +158,12 @@ class ImportQueue:
                 raise Conflict('This song is already in the open project. Use a distinct title for another version.')
             folder = self.root / ji.sanitize_filename(name)
             if (folder / 'job.json').exists():
+                job = ji.load_job(folder)
+                if same_recording({}, job):
+                    row = self._record(job, str(folder), 'cached')
+                    self.jobs[row['id']] = row
+                    self._save()
+                    return {'ok': True, 'id': row['id']}
                 raise Conflict('Cached work already uses this title. Open it in the song list, or use a distinct title.')
             job = dict(schema=1, stages={}, band=band, title=title, region_name=name,
                        source={'youtube_url': url}, duration=body.get('duration') or 0)

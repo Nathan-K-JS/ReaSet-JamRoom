@@ -127,7 +127,9 @@ window.ImportJobs = (function(){
     var signature = JSON.stringify([rows, selected, paused]);
     if(signature === listSignature) return;
     listSignature = signature;
-    var expanded = list.querySelector('details') && list.querySelector('details').open;
+    var completed = list.querySelector('details[data-completed]');
+    var expanded = completed && completed.open;
+    var openMenus = new Set(Array.from(list.querySelectorAll('details[data-song]')).filter(function(n){return n.open;}).map(function(n){return n.dataset.song;}));
     list.replaceChildren();
     var active = rows.filter(function(r){return r.state !== 'done' && r.state !== 'cached';});
     var ready = active.filter(function(r){return r.state === 'review';}).length;
@@ -135,8 +137,10 @@ window.ImportJobs = (function(){
     function draw(row, parent){
       var line = el('div', undefined, parent);
       line.style.cssText = 'display:flex;gap:8px;align-items:center;flex-wrap:wrap;padding:8px 0;border-bottom:1px solid #ffffff18';
-      var open = button(row.song, function(){return select(row.id);}, line);
-      open.style.flex = '1'; open.style.textAlign = 'left';
+      var name=el('strong',row.song,line);name.style.cssText='flex:1;min-width:140px;overflow-wrap:anywhere';
+      var open = button('Open', async function(){await select(row.id);if(row.state==='review')$('reviewCard').scrollIntoView({block:'start'});}, line);
+      open.setAttribute('aria-label','Open '+row.song);
+      open.style.background='#207d59';
       if(selected === row.id) open.style.outline = '2px solid #70cbbb';
       el('span', names[row.state] || row.state, line).className = 'note';
       if(['failed','paused','interrupted','cached'].includes(row.state)){
@@ -155,15 +159,20 @@ window.ImportJobs = (function(){
         await select(row.id); await request('/' + row.id + '/reopen', {revision:detail.revision});
         await refresh();
       }, line);
-      if(!['preparing','applying','editing','checking'].includes(row.state)) button('Remove', async function(){
+      if(!['preparing','applying','editing','checking'].includes(row.state)) {
+        var more=el('details',undefined,line);more.dataset.song=row.id;more.open=openMenus.has(row.id);el('summary','More',more).style.cssText='cursor:pointer;padding:12px';
+        button('Remove from queue', async function(){
+        if(!confirm('Remove '+row.song+' from the queue? Downloaded files and saved review choices are kept. You can reopen it later.'))return;
         if(row.id === selected) await close();
         await request('/' + row.id + '/remove', {}); await refresh();
-      }, line);
+      }, more);
+      }
     }
     active.forEach(function(row){draw(row, list);});
     var rest = rows.filter(function(r){return r.state === 'done' || r.state === 'cached';});
     if(rest.length){
       var other = el('details', undefined, list);
+      other.dataset.completed='1';
       other.open = !!expanded;
       el('summary', 'Completed and cached songs (' + rest.length + ')', other);
       rest.forEach(function(row){draw(row, other);});
@@ -199,7 +208,11 @@ window.ImportJobs = (function(){
       var result = await request('', body);
       $('confirmCard').classList.add('hide');
       await refresh();
-      if(!previous){await select(result.id);if(window.ImporterActivity)ImporterActivity.open();}
+      if(!previous){
+        await select(result.id);
+        if(detail.state==='review')$('reviewCard').scrollIntoView({block:'start'});
+        else if(window.ImporterActivity)ImporterActivity.open();
+      }
       else message.textContent = body.band + ' - ' + body.title + ' is in your import list. Your current review is still open.';
     } catch(error){failure(error);}
     finally {$('importBtn').disabled = false; setPipelineActive(false);}
