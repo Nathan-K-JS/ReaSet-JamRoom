@@ -38,11 +38,13 @@ ancestry first; never force-push or overwrite divergent changes. Pushing only
 `feature/timing-repair` does not deliver an update to standard installations.
 
 Current architecture:
+- ReaSet v3.8 adds free-jam recording; see `docs/FREE_JAM_RECORDING.md`.
+  Reuses the recording journal/export; `ReaSet_FreeJam.lua` owns generated click
+  and jam settings. Free-jam exports contain takes and tempo, not library stems.
+  Suggested song-level loudness matching is the remaining agreed next upgrade.
 - v3.7 fixes review findings 1-7; see `docs/RELIABILITY_AND_UI.md` for recovery,
   checkpointed updates, UI changes and first-upgrade instructions.
-  Agreed NEXT upgrades: free-jam recording with click and suggested song-level
-  loudness matching. Remind Nathan of both after this bug-fix release; they are
-  not implemented yet. Preserve the simple REAPER-controller scope.
+  Preserve the simple REAPER-controller scope.
 - v3.6 adds persistent import workspaces, autosaved review and restart recovery;
   see `docs/IMPORT_QUEUE_AND_RESUME.md`. Queue state lives in
   `tools/jamroom_import_queue.py`; its browser controller is `tools/importer-queue.js`.

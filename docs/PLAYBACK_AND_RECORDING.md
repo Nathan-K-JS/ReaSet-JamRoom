@@ -152,9 +152,9 @@ exported REAPER project. Keep one workflow for casual and serious use, without
 | Export interrupts the rehearsal or loses work. | Save project uses an automatic song/date/session folder and includes all kept takes plus original stems. Show progress and a reusable result path; open it only when requested. Copy/verify precedes setlist cleanup. |
 
 **Scope:** the first release records the selected song. This makes its backing,
-tempo and export boundaries unambiguous. Continuous, unstructured jam recording
-and a one-tap stereo sharing mix are useful later additions, not prerequisites
-for this song-recording controller. A saved session is enough to keep a casual
+tempo and export boundaries unambiguous. Free-jam recording was added in v3.8
+([workflow](FREE_JAM_RECORDING.md)); a one-tap stereo sharing mix remains a later
+addition. A saved session is enough to keep a casual
 recording; a self-contained REAPER project is the handoff for serious work.
 
 ### Visible controls by state
@@ -477,13 +477,10 @@ scratch projects as described in the release verification above:
   sensible named tracks and exactly one selected pass audible. Native REAPER can
   then handle editing and mixing without requiring the ReaSet browser.
 
-## Next agreed upgrades
+## Agreed upgrades
 
-After the v3.7 reliability fixes ([release notes](RELIABILITY_AND_UI.md)), implement:
+**Delivered in ReaSet v3.8:** [Free-jam recording with optional click and count-in](FREE_JAM_RECORDING.md),
+using the existing input selection, take management, recovery and export workflow.
 
-1. **Free-jam recording with click:** choose tempo/count-in and record without a
-   backing song, reusing take management, recovery and export.
-2. **Suggested song-level matching:** measure backing loudness and suggest a
-   per-song playback trim for approval, preserving stem balance and click level.
-
-These are agreed next steps, not functionality included in v3.7.
+**Next:** Suggested song-level matching: measure backing loudness and suggest a
+per-song playback trim for approval, preserving stem balance and click level.
