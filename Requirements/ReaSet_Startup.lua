@@ -7,8 +7,9 @@
 --   Actions → Show action list → Load ReaScript… → select this file
 --   Then either:
 --     • Options → Preferences → General → set this as the startup action, or
---     • copy this file to  %APPDATA%\REAPER\Scripts\__startup.lua
---       (REAPER auto-runs a script with that exact name at launch)
+--     Or create %APPDATA%/REAPER/Scripts/__startup.lua with:
+--       dofile([[C:/JamRoom/Requirements/ReaSet_Startup.lua]])
+--     Adjust that path to the installation; keep the launcher with its modules.
 --
 -- WHAT IT STARTS
 --   ReaSet_Recording.lua    -- recording, recovery and per-song volume

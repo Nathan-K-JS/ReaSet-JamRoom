@@ -171,6 +171,7 @@ local function run()
     check(count==0,'Verified export clears recording items from setlist')
     check(reaper.CountTrackMediaItems(reaper.GetTrack(0,0))==1,'Original stem remains in setlist')
     check(core:state().pending==0,'Exported session no longer prompts housekeeping')
+    core.db.inputs[1].name=string.rep(utf8.char(0xe9,0x1f3b5),220);core:save(false)
     -- Run the actual wire bridge in this scratch tab with a controlled defer
     -- scheduler, so it cannot move on to the user's project after this test.
     local native_defer,native_exit,native_time=reaper.defer,reaper.atexit,reaper.time_precise
@@ -181,12 +182,13 @@ local function run()
     local function wire_state()
       local gen,count,slot=reaper.GetExtState('ReaSetRec','meta'):match('^(%d+):(%d+):(%d+)$')
       local raw=''
-      for i=0,tonumber(count)-1 do local value=reaper.GetExtState('ReaSetRec','d'..slot..'_'..i);assert(value:match('^(%d+):')==gen);raw=raw..value:match('^%d+:(.*)$')end
+      for i=0,tonumber(count)-1 do local value=reaper.GetExtState('ReaSetRec','d'..slot..'_'..i);assert(value:match('^(%d+):')==gen);assert(utf8.len(value),'Wire chunk splits a Unicode character');raw=raw..value:match('^%d+:(.*)$')end
       return M.J.decode(raw)
     end
     local worked,why=pcall(function()
       dofile(root..'/Requirements/ReaSet_Recording.lua')
       local state=wire_state()
+      check(state.inputs[1].name==core.db.inputs[1].name,'Unicode names survive individually valid wire chunks')
       local c={project=state.project,revision=state.revision,nonce='gain-once',op='gain',song=state.songs[1].key,value=.7}
       reaper.SetExtState('ReaSetRec','want',M.J.encode(c),false);offset=offset+.2;next_bridge()
       state=wire_state();check(state.ack==c.nonce and math.abs(state.songs[1].gain-.7)<.00001,'Wire bridge acknowledges confirmed song volume')

@@ -118,7 +118,7 @@ not been tested; failure injection and interrupted-session reconstruction have.
 Nathan approved the recording plan, with the direction to keep ReaSet a simple,
 functional web controller for the existing REAPER setup. This final pass refines
 that approved direction; no further general design approval is needed. Recording
-and per-song volume are implemented below; the design notes remain as context.
+and per-song volume are implemented as described above; the design notes remain as context.
 
 The recording proposal below incorporates the requested default input/track
 template and explicit post-stop retry/keep actions. Nathan's supplied live input

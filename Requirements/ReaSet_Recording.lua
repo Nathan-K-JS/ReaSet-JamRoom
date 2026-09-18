@@ -10,10 +10,16 @@ local function publish(value)
   local json=M.J.encode(value)
   if json==last_data then return end
   last_data=json;generation=generation+1
-  local count=math.ceil(#json/800)
+  local chunks,pos={},1
+  while pos<=#json do
+    local finish=math.min(pos+799,#json)
+    while finish<#json and json:byte(finish+1)>=128 and json:byte(finish+1)<192 do finish=finish-1 end
+    chunks[#chunks+1]=json:sub(pos,finish);pos=finish+1
+  end
+  local count=#chunks
   -- Keep recent generations readable while a tablet fetches a chunk burst.
   local slot=generation%16
-  for i=0,count-1 do reaper.SetExtState(SEC,'d'..slot..'_'..i,generation..':'..json:sub(i*800+1,(i+1)*800),false)end
+  for i=0,count-1 do reaper.SetExtState(SEC,'d'..slot..'_'..i,generation..':'..chunks[i+1],false)end
   reaper.SetExtState(SEC,'meta',generation..':'..count..':'..slot,false)
 end
 local function leave()
