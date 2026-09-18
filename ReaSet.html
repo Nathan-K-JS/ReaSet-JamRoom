@@ -3410,6 +3410,18 @@
         #tab-btn-recording.capturing{color:#ff6176}.rec-card summary{cursor:pointer;padding:6px 0;min-height:32px}
         .app-topbar{overflow-x:auto;scrollbar-width:thin}.app-menu-btn,.vtab{flex-shrink:0}
         .rec-start{position:sticky;top:0;background:var(--bg-app);padding:8px 0;z-index:1}
+        .rec-input-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:0 24px}
+        .rec-input-grid .rec-input{padding:9px 0;min-height:48px}
+        .rec-input span{min-width:0;overflow-wrap:anywhere}
+        .rec-meter{flex-shrink:0}
+        .legacy-chart-notice{padding:10px 14px;font-size:13px;color:#c6ccd5;background:#252c35;border-radius:8px;margin-bottom:12px}
+        .more-views{position:relative;align-self:center;color:#b9c5c4;font-size:12px;flex-shrink:0}
+        .more-views summary{cursor:pointer;padding:14px 10px;min-height:44px}
+        .more-views:has(.vtab.active) summary{color:#70dba6}
+        .more-views-menu{position:fixed;top:56px;right:12px;z-index:20000;background:#20262d;border:1px solid #485464;border-radius:10px;padding:8px;box-shadow:0 8px 30px #0008}
+        .more-views-menu .vtab{min-width:140px;min-height:48px;flex-direction:row;gap:10px}
+        button:focus-visible,summary:focus-visible,.vtab:focus-visible{outline:2px solid #70dba6;outline-offset:2px}
+        @media(max-width:620px){.rec-input-grid{grid-template-columns:1fr}.more-views summary{padding:12px 6px}}
         @media(max-width:900px){.app-topbar-info{display:none}.vtab{padding:0 9px}}
 
         .jr-song-name {
@@ -3608,7 +3620,7 @@
             <button class="app-menu-btn" onclick="openSidebar()" title="Menu">☰</button>
 
             <div class="vtab t-show active" id="tab-btn-show" onclick="showMainView()">
-                <span class="vtab-icon">▶</span><span>SHOW</span>
+                <span class="vtab-icon">▶</span><span>SONGS</span>
             </div>
             <div class="vtab" id="tab-btn-lyrics" onclick="toggleLyricsPanel()">
                 <span class="vtab-icon">♪</span><span>LYRICS</span>
@@ -3616,17 +3628,18 @@
             <div class="vtab" id="tab-btn-chords" onclick="toggleChordsPanel()">
                 <span class="vtab-icon">♭</span><span>CHORDS</span>
             </div>
-            <div class="vtab" id="tab-btn-live" onclick="openLiveView()">
-                <span class="vtab-icon">▶</span><span>LIVE</span>
-            </div>
-            <div class="vtab" id="tab-btn-canvas" onclick="openCanvasMode()">
-                <span class="vtab-icon">▣</span><span>CANVAS</span>
-            </div>
+
+
             <div class="vtab" id="tab-btn-tracks" onclick="toggleTracksPanel()">
-                <span class="vtab-icon">▥</span><span>TRACKS</span>
+                <span class="vtab-icon">▥</span><span>BACKING</span>
             </div>
             <div class="vtab" id="tab-btn-recording" onclick="recTogglePanel()"><span class="vtab-icon">●</span><span id="rec-tab-label">RECORD</span></div>
 
+            <details class="more-views"><summary>More views</summary><div class="more-views-menu">            <div class="vtab" id="tab-btn-live" onclick="openLiveView();this.closest('details').open=false">
+                <span class="vtab-icon">▶</span><span>Live dashboard</span>
+            </div>            <div class="vtab" id="tab-btn-canvas" onclick="openCanvasMode();this.closest('details').open=false">
+                <span class="vtab-icon">▣</span><span>Stage display</span>
+            </div></div></details>
             <div class="vtab-spacer"></div>
 
             <div class="app-topbar-info">
@@ -3921,7 +3934,7 @@
 
             <div class="appearance-slider-row">
                 <div class="appearance-slider-label-row">
-                    <span class="appearance-slider-name">Luminancia</span>
+                    <span class="appearance-slider-name">Brightness</span>
                     <span class="appearance-slider-value" id="appearance-val-brightness">100%</span>
                 </div>
                 <input type="range" class="appearance-slider" id="appearance-slider-brightness"
@@ -3931,7 +3944,7 @@
 
             <div class="appearance-slider-row">
                 <div class="appearance-slider-label-row">
-                    <span class="appearance-slider-name">Contraste</span>
+                    <span class="appearance-slider-name">Contrast</span>
                     <span class="appearance-slider-value" id="appearance-val-contrast">100%</span>
                 </div>
                 <input type="range" class="appearance-slider" id="appearance-slider-contrast"
@@ -3941,7 +3954,7 @@
 
             <div class="appearance-slider-row">
                 <div class="appearance-slider-label-row">
-                    <span class="appearance-slider-name">Saturación</span>
+                    <span class="appearance-slider-name">Saturation</span>
                     <span class="appearance-slider-value" id="appearance-val-saturation">100%</span>
                 </div>
                 <input type="range" class="appearance-slider" id="appearance-slider-saturation"
@@ -3950,7 +3963,7 @@
             </div>
 
             <hr class="appearance-divider">
-            <button class="appearance-reset-btn" onclick="resetAppearance()">Restablecer valores</button>
+            <button class="appearance-reset-btn" onclick="resetAppearance()">Reset defaults</button>
         </div>
     </div>
 
@@ -3962,26 +3975,26 @@
             <!-- Status row -->
             <div class="midi-status-row">
                 <span class="midi-dot" id="midi-status-dot"></span>
-                <span id="midi-status-text">Inicializando…</span>
+                <span id="midi-status-text">Connecting…</span>
             </div>
 
             <!-- Learn section -->
             <div class="midi-learn-box">
-                <div class="midi-section-label">Acción a asignar</div>
+                <div class="midi-section-label">Action to assign</div>
                 <select id="midi-action-select" class="midi-action-select">
                     <option value="play">▶ Play</option>
                     <option value="stop">■ Stop</option>
                     <option value="play_pause">⏸ Play / Pause</option>
-                    <option value="next_song">→ Canción siguiente</option>
-                    <option value="prev_song">← Canción anterior</option>
-                    <option value="next_section">↓ Sección siguiente</option>
-                    <option value="prev_section">↑ Sección anterior</option>
-                    <option value="toggle_loop">⟳ Toggle Loop (canción activa)</option>
-                    <option value="restart_song">↺ Reiniciar canción</option>
-                    <option value="toggle_skip">⊘ Toggle Skip (canción activa)</option>
+                    <option value="next_song">→ Next song</option>
+                    <option value="prev_song">← Previous song</option>
+                    <option value="next_section">↓ Next section</option>
+                    <option value="prev_section">↑ Previous section</option>
+                    <option value="toggle_loop">⟳ Toggle Loop (active song)</option>
+                    <option value="restart_song">↺ Restart song</option>
+                    <option value="toggle_skip">⊘ Toggle Skip (active song)</option>
                 </select>
                 <button id="midi-learn-btn" class="midi-learn-btn" onclick="toggleMidiLearn()">
-                    Escuchar siguiente nota / CC…
+                    Listen for next note / CC…
                 </button>
                 <div id="midi-listen-status" class="midi-listen-status"></div>
             </div>
@@ -3989,16 +4002,16 @@
             <hr class="midi-hr">
 
             <!-- Current mappings -->
-            <div class="midi-section-label" style="margin-bottom:8px">Asignaciones activas</div>
+            <div class="midi-section-label" style="margin-bottom:8px">Active mappings</div>
             <div id="midi-mappings-list" class="midi-mappings-list">
                 <div style="font-size:12px;color:rgba(255,255,255,0.3);text-align:center;padding:12px 0">
-                    Sin asignaciones todavía
+                    No mappings yet
                 </div>
             </div>
-            <button class="midi-clear-btn" onclick="clearAllMidiMappings()">Borrar todas las asignaciones</button>
+            <button class="midi-clear-btn" onclick="clearAllMidiMappings()">Clear all mappings</button>
 
             <div class="midi-modal-footer">
-                <button class="midi-close-btn" onclick="closeMidiModal()">Cerrar</button>
+                <button class="midi-close-btn" onclick="closeMidiModal()">Close</button>
             </div>
         </div>
     </div>
@@ -4058,7 +4071,7 @@
     <!-- JAM ROOM TRACKS PANEL -->
     <div id="tracks-panel">
         <div class="panel-header">
-            <span class="panel-title">Tracks</span>
+            <span class="panel-title">Backing</span>
             <span class="panel-close-btn" onclick="toggleTracksPanel()">✕</span>
         </div>
         <div class="jr-body" id="jr-body">
@@ -4310,7 +4323,7 @@
         // Jam Room bridge (ReaSet_JamRoom.lua): tiny status poll only —
         // payload chunks are burst-fetched on demand when meta's generation changes
         wwr_req_recur("GET/EXTSTATE/ReaSetJR/heartbeat;GET/EXTSTATE/ReaSetJR/meta", 500);
-        wwr_req_recur('GET/EXTSTATE/ReaSetRec/heartbeat;GET/EXTSTATE/ReaSetRec/meta', 250);
+        wwr_req_recur('GET/EXTSTATE/ReaSetRec/instance;GET/EXTSTATE/ReaSetRec/heartbeat;GET/EXTSTATE/ReaSetRec/meta', 250);
         wwr_req_recur("GET/EXTSTATE/ReaSetCL/heartbeat;GET/EXTSTATE/ReaSetCL/meta;GET/EXTSTATE/ReaSetCL/repair", 500);
         wwr_req_recur("GET/EXTSTATE/ReaSetTK/heartbeat;GET/EXTSTATE/ReaSetTK/state", 500);
         // Jam Room: live per-track mute state straight from REAPER (mute = flags & 8)
@@ -4548,8 +4561,8 @@
                 + '<div class="song-ctx-row"><input type="number" min="0" max="300" step="1" class="song-ctx-input num-input" id="_ctx_delay_' + songId + '" value="' + delayAfter + '" ' + (stopAfter ? 'disabled' : '') + ' placeholder="0" onchange="_ctxSetDelay(\'' + songId + '\',this.value)">'
                 + '<span class="song-ctx-label" style="font-size:11px;color:rgba(255,255,255,0.38)">s</span></div></div>'
                 + '<div class="song-ctx-section">'
-                + '<div class="song-ctx-sublabel"><svg width="13" height="13" viewBox="0 0 13 13" style="display:inline;vertical-align:-2px"><rect x="2" y="1.5" width="9" height="10" rx="1.2" stroke="rgba(255,255,255,0.65)" stroke-width="1.2" fill="none"/><path d="M4.5 5h4M4.5 7h4M4.5 9h2.5" stroke="rgba(255,255,255,0.65)" stroke-width="1.1" stroke-linecap="round"/></svg> Nota / Descripci\u00f3n</div>'
-                + '<textarea class="song-ctx-input" rows="2" id="_ctx_desc_' + songId + '" placeholder="Nota sobre la canci\u00f3n\u2026" style="resize:none" onchange="_ctxSetDesc(\'' + songId + '\',this.value)">' + desc + '</textarea>'
+                + '<div class="song-ctx-sublabel"><svg width="13" height="13" viewBox="0 0 13 13" style="display:inline;vertical-align:-2px"><rect x="2" y="1.5" width="9" height="10" rx="1.2" stroke="rgba(255,255,255,0.65)" stroke-width="1.2" fill="none"/><path d="M4.5 5h4M4.5 7h4M4.5 9h2.5" stroke="rgba(255,255,255,0.65)" stroke-width="1.1" stroke-linecap="round"/></svg> Notes / description</div>'
+                + '<textarea class="song-ctx-input" rows="2" id="_ctx_desc_' + songId + '" placeholder="Song notes..." style="resize:none" onchange="_ctxSetDesc(\'' + songId + '\',this.value)">' + desc + '</textarea>'
                 + '</div>'
                 + '<div class="song-ctx-section"><div class="song-ctx-row">'
                 + '<span class="song-ctx-label"><svg width="13" height="13" viewBox="0 0 13 13" style="display:inline;vertical-align:-2px"><circle cx="6.5" cy="6.5" r="5" stroke="rgba(255,255,255,0.65)" stroke-width="1.2" fill="none"/><circle cx="4.2" cy="5" r="1.1" fill="rgba(255,255,255,0.65)"/><circle cx="8.8" cy="5" r="1.1" fill="rgba(255,255,255,0.65)"/><circle cx="6.5" cy="9" r="1.1" fill="rgba(255,255,255,0.65)"/></svg> Color</span>'
@@ -4662,8 +4675,8 @@
             panel.innerHTML =
                 '<div class="song-ctx-header">' + (secName.length > 22 ? secName.slice(0,20) + '\u2026' : secName) + '</div>'
                 + '<div class="song-ctx-section">'
-                + '<div class="song-ctx-sublabel"><svg width="13" height="13" viewBox="0 0 13 13" style="display:inline;vertical-align:-2px"><rect x="2" y="1.5" width="9" height="10" rx="1.2" stroke="rgba(255,255,255,0.65)" stroke-width="1.2" fill="none"/><path d="M4.5 5h4M4.5 7h4M4.5 9h2.5" stroke="rgba(255,255,255,0.65)" stroke-width="1.1" stroke-linecap="round"/></svg> Nota / Descripci\u00f3n</div>'
-                + '<textarea class="song-ctx-input" rows="2" id="_ctx_subdesc_' + subId + '" placeholder="Nota sobre la secci\u00f3n\u2026" style="resize:none" onchange="_ctxSetDesc(\'' + subId + '\',this.value)">' + desc + '</textarea>'
+                + '<div class="song-ctx-sublabel"><svg width="13" height="13" viewBox="0 0 13 13" style="display:inline;vertical-align:-2px"><rect x="2" y="1.5" width="9" height="10" rx="1.2" stroke="rgba(255,255,255,0.65)" stroke-width="1.2" fill="none"/><path d="M4.5 5h4M4.5 7h4M4.5 9h2.5" stroke="rgba(255,255,255,0.65)" stroke-width="1.1" stroke-linecap="round"/></svg> Notes / description</div>'
+                + '<textarea class="song-ctx-input" rows="2" id="_ctx_subdesc_' + subId + '" placeholder="Section notes..." style="resize:none" onchange="_ctxSetDesc(\'' + subId + '\',this.value)">' + desc + '</textarea>'
                 + '</div>'
                 + '<div class="song-ctx-section"><div class="song-ctx-row">'
                 + '<span class="song-ctx-label"><svg width="13" height="13" viewBox="0 0 13 13" style="display:inline;vertical-align:-2px"><circle cx="6.5" cy="6.5" r="5" stroke="rgba(255,255,255,0.65)" stroke-width="1.2" fill="none"/><circle cx="4.2" cy="5" r="1.1" fill="rgba(255,255,255,0.65)"/><circle cx="8.8" cy="5" r="1.1" fill="rgba(255,255,255,0.65)"/><circle cx="6.5" cy="9" r="1.1" fill="rgba(255,255,255,0.65)"/></svg> Color</span>'
@@ -5424,7 +5437,7 @@
         syncLeadSlider();
         tkRenderPanel();             // paints the performance chips on load
         // Shown in the sidebar so a stale cached page is obvious after a deploy.
-        var REASET_VERSION = "v1.9 - transport fix";
+        var REASET_VERSION = "v3.7 - reliability and interface";
         var _rv = document.getElementById("reasetVer");
         if (_rv) _rv.textContent = REASET_VERSION;
         (function () { var t = localStorage.getItem("reasetlist_theme") || "dark"; setTheme(t, true); })();
@@ -6633,7 +6646,7 @@
             var item, i;
             for (i = 0; i < displayList.length; i++) { if (displayList[i].id == id) { item = displayList[i]; break; } }
             if (!item) return;
-            var newPos = parseInt(prompt('Nueva posici\u00f3n para "' + item.name + '"?'));
+            var newPos = parseInt(prompt('New position for "' + item.name + '"?'));
             if (!newPos || newPos < 1 || newPos > displayList.length) return;
             displayList.splice(newPos - 1, 0, displayList.splice(i, 1)[0]);
             var newOrder = [];
@@ -7944,7 +7957,7 @@
             document.getElementById("live-progress-fill").style.width = pct + "%";
             var rem = activeRegion ? (activeRegion.end - currentPos) : 0; if (rem < 0) rem = 0;
             document.getElementById("live-time-rem").innerText = "-" + formatTime(rem);
-            // Mapa de Regiones
+            // Section map
             if (g_liveSettings && g_liveSettings.showRegionMap) {
                 updateLiveRegionMap(activeRegion, pct, liveActiveSub, isLooping);
             }
@@ -8185,12 +8198,12 @@
             'play':          '▶ Play',
             'stop':          '■ Stop',
             'play_pause':    '⏸ Play / Pause',
-            'next_song':     '→ Canción siguiente',
-            'prev_song':     '← Canción anterior',
-            'next_section':  '↓ Sección siguiente',
-            'prev_section':  '↑ Sección anterior',
+            'next_song':     '→ Next song',
+            'prev_song':     '← Previous song',
+            'next_section':  '↓ Next section',
+            'prev_section':  '↑ Previous section',
             'toggle_loop':   '⟳ Toggle Loop',
-            'restart_song':  '↺ Reiniciar canción',
+            'restart_song':  '↺ Restart song',
             'toggle_skip':   '⊘ Toggle Skip'
         };
 
@@ -8337,7 +8350,7 @@
                 loadMidiMappings();
                 updateMidiStatusUI();
             }, function(err) {
-                setMidiStatusUI('error', 'Acceso MIDI denegado: ' + err.message);
+                setMidiStatusUI('error', 'MIDI access denied: ' + err.message);
             });
         }
 
@@ -8364,19 +8377,19 @@
 
         function startMidiLearn() {
             if (!g_midiAccess) {
-                document.getElementById('midi-listen-status').innerText = 'MIDI no inicializado. Recarga la página.';
+                document.getElementById('midi-listen-status').innerText = 'MIDI is not connected. Reload the page.';
                 return;
             }
             g_midiLearnActive = true;
             var btn = document.getElementById('midi-learn-btn');
             btn.classList.add('listening');
-            btn.innerText = 'Escuchando… (toca una nota o mueve un CC)';
+            btn.innerText = 'Listening... (play a note or move a CC)';
             document.getElementById('midi-listen-status').innerText = '';
 
             // Auto-cancel after 10s
             g_midiLearnTimeout = setTimeout(function() {
                 cancelMidiLearn();
-                document.getElementById('midi-listen-status').innerText = 'Tiempo agotado. Inténtalo de nuevo.';
+                document.getElementById('midi-listen-status').innerText = 'Timed out. Try again.';
             }, 10000);
         }
 
@@ -8386,7 +8399,7 @@
             var btn = document.getElementById('midi-learn-btn');
             if (btn) {
                 btn.classList.remove('listening');
-                btn.innerText = 'Escuchar siguiente nota / CC…';
+                btn.innerText = 'Listen for next note / CC…';
             }
         }
 
@@ -8402,14 +8415,14 @@
             var btn = document.getElementById('midi-learn-btn');
             if (btn) {
                 btn.classList.remove('listening');
-                btn.innerText = 'Escuchar siguiente nota / CC…';
+                btn.innerText = 'Listen for next note / CC…';
             }
 
             var typeNames = { 9: 'Note', 11: 'CC', 12: 'PC' };
             var typeName  = typeNames[type] || 'Msg';
             var chLabel   = 'Ch' + (channel + 1);
             document.getElementById('midi-listen-status').innerText =
-                '✓ Asignado: ' + typeName + ' ' + data1 + ' (' + chLabel + ') → ' + (MIDI_ACTION_LABELS[actionId] || actionId);
+                '✓ Assigned: ' + typeName + ' ' + data1 + ' (' + chLabel + ') → ' + (MIDI_ACTION_LABELS[actionId] || actionId);
         }
 
         function deleteMidiMapping(key) {
@@ -8419,7 +8432,7 @@
         }
 
         function clearAllMidiMappings() {
-            if (!confirm('¿Borrar todas las asignaciones MIDI?')) return;
+            if (!confirm('Clear all MIDI mappings?')) return;
             g_midiMappings = {};
             saveMidiMappings();
             renderMidiMappingsList();
@@ -8431,7 +8444,7 @@
             if (!list) return;
             var keys = Object.keys(g_midiMappings);
             if (keys.length === 0) {
-                list.innerHTML = '<div style="font-size:12px;color:rgba(255,255,255,0.3);text-align:center;padding:12px 0">Sin asignaciones todavía</div>';
+                list.innerHTML = '<div style="font-size:12px;color:rgba(255,255,255,0.3);text-align:center;padding:12px 0">No mappings yet</div>';
                 return;
             }
             var html = '';
@@ -8462,7 +8475,7 @@
             var ind  = document.getElementById('midi-sidebar-indicator');
             if (!dot || !text) return;
             if (!g_midiAccess) {
-                setMidiStatusUI('error', 'No inicializado');
+                setMidiStatusUI('error', 'Not connected');
                 return;
             }
             var inputs = [];
@@ -8470,7 +8483,7 @@
             if (inputs.length === 0) {
                 dot.className  = 'midi-dot';
                 if (ind) ind.className = 'midi-indicator';
-                text.innerText = 'Ningún dispositivo MIDI conectado';
+                text.innerText = 'No MIDI device connected';
             } else {
                 dot.className  = 'midi-dot active';
                 if (ind) ind.className = 'midi-indicator active';
@@ -8525,22 +8538,22 @@
             showTimeRem:      true,   // remaining time
             showUpNext:       true,   // "Up Next"
             showTransport:    true,   // transport buttons
-            showRegionMap:    false,  // Mapa de Regiones (new)
+            showRegionMap:    false,  // Section map (new)
         };
 
         // ── Config panel definitions ───────────────────────────────
         var LIVE_CFG_DEFS = [
-            { key: 'showHeader',       label: 'Cabecera LIVE + reloj' },
-            { key: 'showSetlistName',  label: 'Nombre del setlist' },
-            { key: 'showSongName',     label: 'Nombre de canción' },
-            { key: 'showSubRegion',    label: 'Sección activa' },
+            { key: 'showHeader',       label: 'Dashboard header and clock' },
+            { key: 'showSetlistName',  label: 'Setlist name' },
+            { key: 'showSongName',     label: 'Song name' },
+            { key: 'showSubRegion',    label: 'Current section' },
             null,
-            { key: 'showProgressBars', label: 'Barras de progreso' },
-            { key: 'showRegionMap',    label: 'Mapa de Regiones ✦', isNew: true },
+            { key: 'showProgressBars', label: 'Progress bars' },
+            { key: 'showRegionMap',    label: 'Section map ✦', isNew: true },
             null,
-            { key: 'showTimeRem',      label: 'Tiempo restante' },
-            { key: 'showUpNext',       label: 'Siguiente canción' },
-            { key: 'showTransport',    label: 'Controles de transporte' },
+            { key: 'showTimeRem',      label: 'Time remaining' },
+            { key: 'showUpNext',       label: 'Next song' },
+            { key: 'showTransport',    label: 'Transport controls' },
         ];
 
         // ── Persistence ────────────────────────────────────────────
@@ -8646,7 +8659,7 @@
             return 'rgba(' + r + ',' + g + ',' + b + ',' + alpha + ')';
         }
 
-        // ── Mapa de Regiones renderer ──────────────────────────────
+        // ── Section map renderer ──────────────────────────────
         var _lrmLastSongId = null;
 
         function updateLiveRegionMap(activeRegion, pct, liveActiveSub, isLooping) {
@@ -8834,7 +8847,14 @@
         }
 
         // --- 19. JAM ROOM TRACKS (see docs/JAMROOM_DESIGN.md) ---
-        var g_recState=null, g_recHb={val:null,at:0}, g_recFetch=null, g_recGen=null, g_recPending=null, g_recError='', g_recHtml='', g_recSelected={};
+        var g_recState=null, g_recHb={val:null,at:0}, g_recFetch=null, g_recGen=null, g_recPending=null, g_recError='', g_recHtml='', g_recSelected={}, g_recProbe=null, g_recInstance=null;
+        function recCheckStatus(){
+            if(!g_recState)return;
+            var nonce=Date.now().toString(36)+'-'+Math.random().toString(36).slice(2);
+            g_recProbe={nonce:nonce,at:Date.now()};g_recGen=null;g_recFetch=null;
+            wwr_req('SET/EXTSTATE/ReaSetRec/probe/'+encodeURIComponent(JSON.stringify({nonce:nonce,project:g_recState.project,pending:g_recPending&&g_recPending.nonce}))+';GET/EXTSTATE/ReaSetRec/meta');
+            g_recError='Checking the current REAPER state. No recording or export action is repeated.';recRender();
+        }
         function recOnline() {
             return g_recState && Date.now()-g_recHb.at<4000 && (!g_stableId || g_recState.project===g_stableId);
         }
@@ -8861,6 +8881,7 @@
             if (g_recPending && op!=='stop')return;
             var nonce=Date.now().toString(36)+'-'+Math.random().toString(36).slice(2);
             var command=Object.assign({op:op,project:g_recState.project,revision:g_recState.revision,nonce:nonce},extra||{});
+            g_recProbe=null;
             g_recPending={nonce:nonce,op:op,at:Date.now()};g_recError='';
             if (['record','retry','keep','listen'].indexOf(op)>=0) { cancelTransportActions();queuedRegion=null;_reaperNativeLoopOff(); }
             wwr_req('SET/EXTSTATE/ReaSetRec/want/'+encodeURIComponent(JSON.stringify(command)));
@@ -8868,6 +8889,10 @@
         }
         function recHandleExtState(tok) {
             var key=tok[2],v=jrUnescape(tok.slice(3).join('\t'));
+            if(key==='instance'){
+                if(v!==g_recInstance){g_recInstance=v;g_recGen=null;g_recFetch=null;g_recProbe=null;g_recHb={val:null,at:0};}
+                return;
+            }
             if(key==='heartbeat'){if(v!==g_recHb.val){g_recHb={val:v,at:Date.now()};}return;}
             if(key==='meta'){
                 var m=v.match(/^(\d+):(\d+):(\d+)$/);if(!m || +m[2]>512)return;
@@ -8885,11 +8910,16 @@
             var raw='';for(var n=0;n<g_recFetch.count;n++)raw+=g_recFetch.parts[n];
             try{
                 var state=JSON.parse(raw);
-                if(g_recState && state.project!==g_recState.project){g_recSelected={};g_recPending=null;}
+                if(g_recState && state.project!==g_recState.project){g_recSelected={};g_recPending=null;g_recProbe=null;}
                 g_recState=state;g_recGen=g_recFetch.gen;g_recFetch=null;
                 if(g_recPending && state.ack===g_recPending.nonce){
                     if(g_recPending.op==='done' && !state.error){document.getElementById('recording-panel').classList.remove('open');updateTopTabs();}
                     g_recPending=null;
+                    g_recError=state.error||'';
+                }
+                if(g_recProbe && state.recovery && state.recovery.nonce===g_recProbe.nonce){
+                    g_recError=state.recovery.error|| (state.recovery.confirmed?'Current REAPER state checked.':'Current REAPER state checked. The unconfirmed request was cancelled; review the state before trying again.');
+                    g_recPending=null;g_recProbe=null;
                 }
                 recRender();recUpdateGain();
                 if(tracksPanelOpen && !document.getElementById('playback-gain'))renderTracksPanel();
@@ -8903,6 +8933,10 @@
             if(open)closeOtherPanels('recording');
             panel.classList.toggle('open',open);updateTopTabs();recRender();
             if(recOnline() && g_recState.mode==='idle' && (g_recState.inputs||[]).every(function(c){return c.exists;}))recSend(open?'ready':'done');
+        }
+        function recStemName(id){
+            var song=jrActiveSong(),control=song&&(song.controls||[]).find(function(c){return c.slot===id;});
+            return control&&control.label||({DRUMS:'Drums',PERC_FX:'Percussion / effects',BASS:'Bass',GTR1:'Guitar 1',GTR2:'Guitar 2',KEYS:'Keys',BVS:'Backing vocals',LEAD_VOX:'Lead vocals',CLICK:'Click',EXTRA:'Extras'})[id]||id;
         }
         function recGainHtml() {
             var s=recOnline() && recSong();
@@ -8935,6 +8969,7 @@
             document.getElementById('main-stop-btn').textContent=busy?'■ STOP · '+(state.paused?'PAUSED':'REC'):'■ STOP';
             if(g_recPending && Date.now()-g_recPending.at>15000){g_recError='Still waiting for REAPER. Exporting large sessions can take a while. Stop remains available.';}
             var html='<div role="status" class="rec-status'+(g_recError||state.error?' error':'')+'">'+trEsc(g_recError||state.error||(g_recPending?'Waiting for REAPER…':state.message||''))+'</div>';
+            if(!online || g_recPending || g_recError)html+='<button class="rec-btn" onclick="recCheckStatus()">Reconnect / check status</button>';
             if(!online && g_recPending && /^export/.test(g_recPending.op))html+='<div class="rec-card"><h2>Waiting for export confirmation</h2><p>Copying a large session can take a while. Leave REAPER open. Source takes are retained until the new project is verified.</p></div>';
             else if(!online)html+='<div class="rec-card"><h2>Recording controller unavailable</h2><p>Run ReaSet_Startup.lua in REAPER, then reconnect. If recording is running, use REAPER to stop it.</p></div>';
             else if(!state.ready)html+='<div class="rec-card">Save the REAPER setlist project before recording.</div>';
@@ -8955,7 +8990,7 @@
                         +recButton('Done','done',{},mode==='audition')+'</div>';
                     html+='<div class="rec-actions">'+recButton('Backing '+(state.backingOn?'on':'off'),'mix',{group:'backing',value:!state.backingOn})+recButton('Recording '+(state.recordingOn?'on':'off'),'mix',{group:'recording',value:!state.recordingOn})+'</div><details><summary>Instrument playback</summary><div class="rec-actions">';
                     (state.inputs||[]).forEach(function(c){if((take.inputs||[]).indexOf(c.id)>=0)html+=recButton(c.name+((state.recMutes||{})[c.id]?' muted':''),'mix',{group:'input',input:c.id,value:!(state.recMutes||{})[c.id]});});
-                    ['DRUMS','PERC_FX','BASS','GTR1','GTR2','KEYS','BVS','LEAD_VOX','CLICK','EXTRA'].forEach(function(id){html+=recButton('Backing '+id+((state.stemMutes||{})[id]?' muted':''),'mix',{group:'stem',input:id,value:!(state.stemMutes||{})[id]});});
+                    ['DRUMS','PERC_FX','BASS','GTR1','GTR2','KEYS','BVS','LEAD_VOX','CLICK','EXTRA'].forEach(function(id){html+=recButton(recStemName(id)+((state.stemMutes||{})[id]?' muted':' backing'),'mix',{group:'stem',input:id,value:!(state.stemMutes||{})[id]});});
                     html+='</div></details>';
                 }else{
                     var exists=(state.inputs||[]).some(function(c){return c.exists;}),selected=(state.inputs||[]).filter(function(c){return c.selected;});
@@ -8965,7 +9000,9 @@
                         html+='<div class="rec-actions rec-start">'+recButton('Record','record',{song:song&&song.key},!song||!selected.length||selected.some(function(c){return !c.available;}),true)
                             +recButton('Count-in: '+(state.countin?'2 bars':'off'),'countin',{value:!state.countin})+'</div>';
                         function inputRow(c){return '<label class="rec-input"><input type="checkbox" data-rec-input="'+trEsc(c.id)+'" '+(c.selected?'checked':'')+' '+(g_recPending?'disabled':'')+'><span>'+trEsc(c.name)+(c.stereo?' · stereo':'')+(!c.available?' · unavailable':'')+'</span><div class="rec-meter'+(c.stereo?' stereo':'')+'" data-rec-meter="'+trEsc(c.id)+'"><i></i>'+(c.stereo?'<i></i>':'')+'</div></label>';}
+                        html+='<div class="rec-input-grid">';
                         (state.inputs||[]).filter(function(c){return !c.extra;}).forEach(function(c){html+=inputRow(c);});
+                        html+='</div>';
                         html+='<details><summary>Additional inputs</summary>';
                         (state.inputs||[]).filter(function(c){return c.extra;}).forEach(function(c){html+=inputRow(c);});html+='</details>';
                     }
@@ -8992,10 +9029,15 @@
                 (state.inputs||[]).forEach(function(c){html+='<div class="rec-setup-row"><span>'+trEsc(c.name)+'</span><label>Input <input type="number" min="1" max="128" id="rec-in-'+c.id+'" value="'+(c.input+1)+'"></label><label>Output <input type="number" min="1" max="128" id="rec-out-'+c.id+'" value="'+(c.output+1)+'"></label>'+recButton('Apply','configure',{input:c.id},busy||review)+'</div>';});
                 html+=recButton('Create missing tracks','setup',{},busy||review)+recButton('Retry save','save',{},busy)+'</details>';
             }
-            if(html!==g_recHtml && !host.contains(document.activeElement)){
+            if(html!==g_recHtml){
+                var focused=document.activeElement, editing=host.contains(focused)&&focused.matches('input[type=number],input[type=text],textarea');
+                var draft=editing?Array.from(host.querySelectorAll('.rec-setup-row input')).map(function(e){return {id:e.id,value:e.value};}):[];
+                var focusId=editing?focused.id:null;
                 var open=Array.from(host.querySelectorAll('details[open]')).map(function(e){return e.id||e.querySelector('summary').textContent;});
                 g_recHtml=html;host.innerHTML=html;
                 host.querySelectorAll('details').forEach(function(e){if(open.indexOf(e.id||e.querySelector('summary').textContent)>=0)e.open=true;});
+                draft.forEach(function(d){var e=document.getElementById(d.id);if(e)e.value=d.value;});
+                if(focusId && document.getElementById(focusId))document.getElementById(focusId).focus({preventScroll:true});
             }
             (state.inputs||[]).forEach(function(c){var meter=host.querySelector('[data-rec-meter="'+c.id+'"]');if(meter){Array.from(meter.children).forEach(function(bar,i){var level=c.stereo?(i===0?c.left:c.right):c.peak;bar.style.width=Math.min(100,Math.sqrt(Math.max(0,level||0))*100)+'%';});meter.classList.toggle('clip',c.peak>=1);}});
         }
@@ -9457,12 +9499,14 @@
                 return;
             }
             var list = g_clData.chords;
+            if(!clAlive()){host.innerHTML=legacyChartNotice()+list.map(function(c){return '<div class="cv-cell">'+trEsc(c[2])+'</div>';}).join('');return;}
             // Lead is wall-clock: at 120% playrate, 0.5s of warning arrives in
             // 0.5 real seconds only if we look 0.6 project-seconds ahead.
             var tkRate = (g_tkState && g_tkState.rate) || 1.0;
             var tkSemis = (g_tkState && g_tkState.semis) || 0;
             var t = currentPos + getLead() * tkRate;
             var cur = clIndexAtOrBefore(list, t);
+            var active = clIndexAt(list,t);
             if (cur < 0) cur = 0;
             // What the player should FINGER: the sounding chord, moved by any
             // audio key change, then down by the capo fret.
@@ -9530,12 +9574,12 @@
                         for (var d2 = 0; d2 < inLine.length; d2++) {
                             var pctL = Math.max(0, Math.min(92, inLine[d2][0]));
                             chHtml += '<span class="cs-ch'
-                                + (g_preciseFollow && inLine[d2][1] === cur ? ' on' : '')
+                                + (g_preciseFollow && inLine[d2][1] === active ? ' on' : '')
                                 + '" style="left:' + pctL.toFixed(1) + '%">'
                                 + trEsc(X(list[inLine[d2][1]][2])) + '</span>';
                         }
                         var words = lys[b][2] || '';
-                        out.push('<div class="cs-line' + (g_preciseFollow && b === li ? ' on' : '') + '">'
+                        out.push('<div class="cs-line' + (g_preciseFollow && b === clIndexAt(lys,t) ? ' on' : '') + '">'
                             + '<div class="cs-chords">' + chHtml + '</div>'
                             + '<div class="cs-words">' + trEsc(words) + '</div></div>');
                     }
@@ -9558,7 +9602,7 @@
                         if (idx >= list.length) { cellsHtml += '<div class="cv-cell empty"></div>'; continue; }
                         var fs = (r === 1)
                             ? 'calc(' + aheadFont + ' * 0.6)' : nowFont;
-                        cellsHtml += '<div class="cv-cell' + (g_preciseFollow && idx === cur ? ' on' : '')
+                        cellsHtml += '<div class="cv-cell' + (g_preciseFollow && idx === active ? ' on' : '')
                             + (r === 1 ? ' ahead' : '') + '" style="font-size:' + fs
                             + '">' + trEsc(X(list[idx][2])) + '</div>';
                     }
@@ -9570,15 +9614,14 @@
             var bits = [];
             if (tkSemis) bits.push('Key ' + (tkSemis > 0 ? '+' : '') + tkSemis);
             if (Math.abs(tkRate - 1) > 0.005) bits.push('Tempo ' + Math.round(tkRate * 100) + '%');
-            if (capo) bits.push('Capo ' + capo + ' — shapes to play, sounding '
-                                + transposeChordName(list[cur][2], tkSemis));
+            if (capo) bits.push('Capo ' + capo + (active>=0?' — shapes to play, sounding '+transposeChordName(list[active][2], tkSemis):''));
             if (!g_preciseFollow) bits.push('Passage view');
             var badge = bits.length
                 ? '<div class="cv-tkbadge">' + bits.join(' · ') + '</div>' : '';
             var isSheet = (g_chordView === 'sheet');
             host.classList.toggle('sheet', isSheet);
             host.style.fontSize = isSheet ? 'clamp(0.95rem,3.4vw,1.5rem)' : '';
-            host.innerHTML = html + badge + '<div class="cv-meta">' + trEsc(meta) + '</div>';
+            host.innerHTML = legacyChartNotice() + html + badge + '<div class="cv-meta">' + trEsc(meta) + '</div>';
             // Keep the line being sung in view without yanking the page about
             // while someone is reading ahead.
             if (isSheet) {
@@ -9591,6 +9634,10 @@
         }
 
         // ── Lyrics view with lookahead ───────────────────────────────────────
+        function legacyChartNotice(){
+            return '<div class="legacy-chart-notice" role="status">'+(clAlive()?'Older chart format. Timing is estimated.':'Disconnected — showing saved text without live highlighting.')
+                +' <button class="rec-btn" onclick="openSongUpdates()">Review chart updates</button></div>';
+        }
         function renderLyricsView() {
             var host = document.getElementById('lyrics-live');
             if(!host && g_clData && g_clData.document){
@@ -9602,6 +9649,7 @@
             host.classList.remove('structured-chart');host._chartHtml=null;document.getElementById('chords-panel').classList.remove('source-chart');document.getElementById('chords-panel').style.bottom='';
             if (!g_clData || !g_clData.lyrics || !g_clData.lyrics.length) {host.textContent='No lyrics for this song.';return;}
             var list = g_clData.lyrics;
+            if(!clAlive()){host.innerHTML=legacyChartNotice()+list.map(function(line){return '<div class="lv-block-line">'+trEsc(line[2])+'</div>';}).join('');return;}
             var t = currentPos + getLead() * ((g_tkState && g_tkState.rate) || 1.0);
             var cur = clIndexAt(list, t);
             var out = '';
@@ -9632,7 +9680,7 @@
                     + (cur + 1 < list.length
                         ? '<div class="lv-next">' + trEsc(list[cur + 1][2]) + '</div>' : '');
             }
-            host.innerHTML = out;
+            host.innerHTML = legacyChartNotice()+out;
         }
 
         function jrHandleExtState(tok) {
@@ -9818,6 +9866,8 @@
         // no onreply ticks, so re-evaluate the heartbeat age on a timer too.
         setInterval(function () {
             if (tracksPanelOpen) renderTracksPanel();
+            recRender();
+            if(g_recPending && Date.now()-g_recPending.at>15000 && recOnline() && (!g_recProbe || Date.now()-g_recProbe.at>5000))recCheckStatus();
         }, 2000);
     </script>
 </body>

@@ -87,6 +87,40 @@ class BrowserTests(unittest.TestCase):
         self.assertEqual(self.page.evaluate('g_recPending.op'),'stop')
         self.assertEqual(json.loads(self.page.evaluate("decodeURIComponent(sent.at(-1)).split('/want/')[1]"))['op'],'stop')
 
+    def test_recording_focus_never_blocks_transport_state_and_setup_draft_survives(self):
+        self.recording_state()
+        self.page.get_by_role('button', name='Record', exact=True).focus()
+        self.page.evaluate("g_recState.mode='recording';recRender()")
+        self.assertTrue(self.page.get_by_role('button', name='Stop', exact=True).is_visible())
+        self.assertEqual(self.page.get_by_role('button', name='Record', exact=True).count(), 0)
+        self.page.evaluate("g_recState.mode='idle';recRender();document.getElementById('rec-setup').open=true")
+        self.page.locator('#rec-in-1').fill('12')
+        self.page.evaluate("g_recState.message='New confirmed state';recRender()")
+        self.assertEqual(self.page.locator('#rec-in-1').input_value(), '12')
+
+    def test_recording_probe_unlocks_only_after_matching_fresh_snapshot(self):
+        self.recording_state()
+        self.page.evaluate("recSend('record',{song:'song1'});recCheckStatus()")
+        self.assertIsNotNone(self.page.evaluate('g_recPending'))
+        self.assertEqual(self.page.evaluate("sent.filter(x=>x.includes('/want/')).length"),1)
+        self.page.evaluate('''() => {
+          const state=Object.assign({},g_recState,{recovery:{nonce:g_recProbe.nonce,confirmed:false}});
+          recHandleExtState(['EXTSTATE','ReaSetRec','meta','22:1:6']);
+          recHandleExtState(['EXTSTATE','ReaSetRec','d6_0','22:'+JSON.stringify(state)]);
+        }''')
+        self.assertIsNone(self.page.evaluate('g_recPending'))
+        self.assertIn('cancelled', self.page.evaluate('g_recError'))
+        self.assertEqual(self.page.evaluate("sent.filter(x=>x.includes('/want/')).length"),1)
+
+    def test_legacy_chart_does_not_highlight_expired_or_disconnected_events(self):
+        self.load_reaset()
+        self.page.evaluate("g_clData.document=null;g_clData.chords=[[10,12,'Am',10],[20,24,'G',20]];currentPos=15;g_preciseFollow=true;g_chordView='chart';renderChordsView()")
+        self.assertEqual(self.page.locator('#chords-live .cv-cell.on').count(),0)
+        self.page.evaluate("g_clHb.changedAt=0;currentPos=11;renderChordsView();renderLyricsView()")
+        self.assertIn('Disconnected',self.page.locator('#chords-live').inner_text())
+        self.assertEqual(self.page.locator('#chords-live .on').count(),0)
+        self.assertIn('Disconnected',self.page.locator('#lyrics-live').inner_text())
+
     def test_recording_chunks_survive_newer_metadata_and_acknowledge(self):
         self.recording_state()
         self.page.evaluate('''() => {
@@ -113,7 +147,7 @@ class BrowserTests(unittest.TestCase):
 
     def test_playback_volume_is_song_scoped_and_confirmed(self):
         self.recording_state()
-        self.page.evaluate("document.getElementById('recording-body').innerHTML=recGainHtml()")
+        self.page.evaluate("document.body.insertAdjacentHTML('beforeend','<div id=\"gain-test\">'+recGainHtml()+'</div>')")
         self.page.locator('#playback-gain').fill('80')
         self.page.locator('#playback-gain').dispatch_event('change')
         command=json.loads(self.page.evaluate("decodeURIComponent(sent.at(-1)).split('/want/')[1]"))
@@ -475,10 +509,12 @@ class BrowserTests(unittest.TestCase):
         posts=[]
         def route(req):
             if req.request.url.endswith('/importer-queue.js'):
-                return req.fulfill(body='', content_type='text/javascript')
+                return req.fulfill(path=str(ROOT/'tools/importer-queue.js'), content_type='text/javascript')
             url=req.request.url
-            if '/api/import_library' in url:
-                posts.append(req.request.post_data_json);req.fulfill(json={'ok':True})
+            if url.endswith('/api/jobs') and req.request.method == 'POST':
+                posts.append(req.request.post_data_json);req.fulfill(json={'ok':True,'id':'queued'})
+            elif url.endswith('/api/jobs'):req.fulfill(json={'schema':1,'paused':False,'jobs':[]})
+            elif '/api/jobs/queued' in url:req.fulfill(json={'id':'queued','song':song['name'],'state':'queued','revision':0})
             elif '/api/library' in url:req.fulfill(json={'songs':[song]})
             elif '/api/' in url:req.fulfill(json={'songs':[],'state':'idle'})
             else:req.fulfill(path=str(ROOT/'tools/importer.html'))
@@ -491,7 +527,7 @@ class BrowserTests(unittest.TestCase):
         self.assertEqual(self.page.locator('#title').input_value(),'Misery Business')
         self.page.locator('#importBtn').click()
         self.page.wait_for_timeout(200)
-        self.assertEqual(posts[0]['id'],'split-song')
+        self.assertEqual(posts[0]['asset'],'split-song')
         self.assertEqual(posts[0]['title'],'Misery Business')
         self.assertEqual(posts[0]['duration'],199.3)
 

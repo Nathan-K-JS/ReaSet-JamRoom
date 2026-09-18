@@ -30,8 +30,21 @@ echo Fetching the latest Jam Room version...
 echo Folder: %CD%
 echo Branch: %UPDATE_BRANCH%
 echo Installed commit: %BEFORE%
+git fetch
+if errorlevel 1 exit /b 1
+set UPSTREAM=
+for /f "delims=" %%i in ('git rev-parse @{u} 2^>nul') do set UPSTREAM=%%i
+if not "%UPSTREAM%"=="%BEFORE%" (
+  powershell.exe -NoProfile -ExecutionPolicy Bypass -File "%CD%\tools\restart_importer.ps1" -RepoRoot "%CD%" -PrepareOnly
+  if errorlevel 1 (
+    echo Update postponed. Running work has not been stopped.
+    pause
+    exit /b 1
+  )
+)
 git pull --ff-only
 if errorlevel 1 (
+  powershell.exe -NoProfile -ExecutionPolicy Bypass -File "%CD%\tools\restart_importer.ps1" -RepoRoot "%CD%" -ResumeOnly
   echo.
   echo UPDATE FAILED - see the message above. Nothing was changed, and your
   echo current setup still works. Common cause: a file here was edited by hand.
@@ -59,6 +72,7 @@ findstr /i /c:"tools/" "%TEMP%\jr_changed.txt" >nul && set NEED_IMPORTER=1
 
 :nochange
 echo.
+if "%BEFORE%"=="%AFTER%" goto :deploy
 echo Recovering the importer so it uses the updated code...
 powershell.exe -NoProfile -ExecutionPolicy Bypass -File "%CD%\tools\restart_importer.ps1" -RepoRoot "%CD%"
 if errorlevel 1 (
@@ -66,6 +80,7 @@ if errorlevel 1 (
   pause
   exit /b 1
 )
+:deploy
 echo.
 echo Deploying ReaSet to REAPER's web interface...
 call "%CD%\tools\deploy_reaset.bat"
@@ -82,7 +97,7 @@ echo ============================================
 if "%BEFORE%"=="%AFTER%" (
   echo  Already on the latest commit for branch %UPDATE_BRANCH%.
   echo  The browser files were redeployed. Refresh ReaSet with Ctrl+F5.
-  echo  Any running importer was restarted automatically.
+  echo  Running importer work was left alone because no code changed.
   echo  Restart REAPER if its scripts were changed in an earlier update.
   goto :done
 )

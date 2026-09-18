@@ -46,6 +46,29 @@ class QueueTests(unittest.TestCase):
         self.queue._save()
         return row
 
+    def test_update_drain_blocks_new_work_and_waits_for_workers(self):
+        import requests
+        http = server.ThreadingHTTPServer(('127.0.0.1', 0), server.Handler)
+        thread = threading.Thread(target=http.serve_forever, daemon=True)
+        thread.start()
+        url = 'http://127.0.0.1:' + str(http.server_port)
+        try:
+            with patch.object(server, 'QUEUE', self.queue), patch.object(server, 'UPDATES', Mock()):
+                self.queue.running.add('worker')
+                result = requests.post(url + '/api/drain', json={}, timeout=5)
+                self.assertFalse(result.json()['ready'])
+                self.assertTrue(self.queue.paused)
+                result = requests.post(url + '/api/jobs', json={}, timeout=5)
+                self.assertEqual(result.status_code, 503)
+                self.queue.running.clear()
+                self.assertTrue(requests.get(url + '/api/drain', timeout=5).json()['ready'])
+                requests.post(url + '/api/drain', json={'resume':True}, timeout=5).raise_for_status()
+                self.assertFalse(server.DRAIN.is_set())
+                self.assertTrue(self.queue.paused)
+        finally:
+            server.DRAIN.clear()
+            http.shutdown(); http.server_close(); thread.join()
+
     def test_duplicate_add_and_separate_recording_conflict(self):
         ident = self.add()
         self.assertEqual(self.add(), ident)
@@ -174,6 +197,44 @@ class QueueTests(unittest.TestCase):
     def test_apply_started_freezes_review_media_choices(self):
         ident = self.add(); row = self.review(ident); row['apply_started'] = True
         with self.assertRaises(Conflict):self.queue.draft(ident, {'revision':0, 'draft':{}})
+
+    def test_preparation_failure_does_not_freeze_review(self):
+        ident = self.add(); row = self.review(ident)
+        with patch.object(ji, 'stage_mixdown', side_effect=RuntimeError('disk full')):
+            self.queue.action(ident,'apply',{'revision':0})
+            deadline = time.monotonic()+5
+            while self.bridge.BUSY.locked() and time.monotonic()<deadline:time.sleep(.01)
+        self.assertEqual(row['state'],'review')
+        self.assertFalse(row.get('apply_started'))
+        self.queue.draft(ident,{'revision':0,'draft':{}})
+        self.queue.action(ident,'target',{'revision':1})
+
+    def test_provider_check_releases_failed_task_without_resubmitting(self):
+        ident = self.add(); row = self.queue.jobs[ident];row['state']='failed'
+        folder=self.queue.folder(ident);job=ji.load_job(folder)
+        job['fadr_tasks']={'asset:main':{'asset':'asset','id':'task','state':'waiting'}}
+        ji.save_job(folder,job)
+        with patch.object(ji,'Fadr') as constructor:
+            fadr=constructor.return_value;fadr.asset.return_value={'_id':'asset'}
+            fadr._check.return_value={'tasks':[{'_id':'task','status':{'failed':True}}]}
+            result=self.queue.recover_provider(ident,{})
+            self.assertTrue(result['retryable'])
+            fadr.stem_task.assert_not_called();fadr.upload.assert_not_called()
+            self.assertEqual(ji.load_job(folder)['fadr_tasks']['asset:main']['state'],'failed')
+            self.queue.recover_provider(ident,{'retry_failed':True})
+            self.assertEqual(ji.load_job(folder)['fadr_tasks'],{})
+            fadr.stem_task.assert_not_called()
+
+    def test_recover_completed_upload_without_reupload(self):
+        ident=self.add();self.queue.jobs[ident]['state']='failed'
+        folder=self.queue.folder(ident);job=ji.load_job(folder);job['upload_pending']=True;ji.save_job(folder,job)
+        with patch.object(ji,'Fadr') as constructor:
+            constructor.return_value.asset.return_value={'_id':'existing','assetType':'upload','stems':['stem']}
+            self.queue.recover_provider(ident,{'asset':'existing'})
+            constructor.return_value.upload.assert_not_called()
+        job=ji.load_job(folder)
+        self.assertNotIn('upload_pending',job)
+        self.assertEqual(job['fadr']['asset_id'],'existing')
 
     def test_removed_workspace_can_be_reopened_from_library(self):
         ident = self.add(); self.review(ident)

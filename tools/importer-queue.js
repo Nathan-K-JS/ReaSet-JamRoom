@@ -3,7 +3,7 @@ window.ImportJobs = (function(){
   'use strict';
   var api = {enabled:false}, selected = null, detail = null, rows = [], paused = false;
   var dirty = false, timer = null, saving = null, version = 0, selection = 0, busy = false, polling = false;
-  var rendered = '', listSignature = '', card, list, message, saved, target;
+  var rendered = '', listSignature = '', card, list, message, saved, target, recovery;
   function el(tag, text, parent){
     var node = document.createElement(tag);
     if(text !== undefined) node.textContent = text;
@@ -99,7 +99,7 @@ window.ImportJobs = (function(){
     try {row = await request('/' + id);}
     finally {busy = false; $('reviewCard').inert = false;}
     if(generation !== selection) return;
-    stopPolling(); dismissReceipt(); resetReviewPanel();
+    dismissReceipt(); resetReviewPanel();
     selected = id; detail = row; rendered = ''; dirty = false;
     localStorage.setItem('jamroom-import-job', id);
     message.textContent = ''; renderDetail(row); renderList();
@@ -115,7 +115,7 @@ window.ImportJobs = (function(){
   }
   var names = {queued:'Queued', preparing:'Processing', review:'Ready to review',
     applying:'Adding to REAPER', done:'Added — save REAPER', failed:'Needs attention',
-    interrupted:'Resume available', paused:'Paused', cached:'Cached song', editing:'Updating review'};
+    interrupted:'Resume available', paused:'Paused', cached:'Cached song', editing:'Updating review', checking:'Checking Fadr'};
   function renderList(){
     var signature = JSON.stringify([rows, selected, paused]);
     if(signature === listSignature) return;
@@ -138,6 +138,7 @@ window.ImportJobs = (function(){
           if(row.apply_started){ await api.apply(); return; }
           await request('/' + row.id + '/resume', {}); await refresh();
         }, line);
+        if(row.state!=='cached' && !row.apply_started)button('Check Fadr / recover', function(){return provider(row.id);}, line);
       }
       if(row.state === 'queued'){
         button('Move first', async function(){await request('/' + row.id + '/first', {}); await refresh();}, line);
@@ -147,7 +148,7 @@ window.ImportJobs = (function(){
         await select(row.id); await request('/' + row.id + '/reopen', {revision:detail.revision});
         await refresh();
       }, line);
-      if(!['preparing','applying','editing'].includes(row.state)) button('Remove', async function(){
+      if(!['preparing','applying','editing','checking'].includes(row.state)) button('Remove', async function(){
         if(row.id === selected) await close();
         await request('/' + row.id + '/remove', {}); await refresh();
       }, line);
@@ -225,13 +226,33 @@ window.ImportJobs = (function(){
     finally {busy = false; btn.disabled = false;}
   };
   api.close = function(){return close().catch(failure);};
+  async function provider(id, body){
+    var result=await request('/'+id+'/provider',body||{});
+    await refresh();message.textContent=result.summary;
+    recovery.replaceChildren();el('p',result.summary,recovery);
+    if(result.retryable)button('Retry failed split (may charge)',async function(){
+      if(!confirm('Fadr confirmed failure. Allow a replacement split, which may incur a new charge?'))return;
+      await provider(id,{retry_failed:true});await request('/'+id+'/resume',{});await refresh();
+    },recovery);
+    button('Choose existing Fadr recording',async function(){
+      var response=await fetch('/api/library'),data=await response.json();
+      if(data.error)throw new Error(data.error);
+      var chooser=el('select',undefined,recovery);chooser.setAttribute('aria-label','Existing Fadr recording');
+      (data.songs||[]).forEach(function(song){var option=el('option',song.name||song.title||song.id,chooser);option.value=song.id;});
+      button('Use selected recording',async function(){
+        if(!chooser.value)return;
+        if(!confirm('Use '+chooser.selectedOptions[0].textContent+' as this song’s recovered recording?'))return;
+        await provider(id,{asset:chooser.value});
+      },recovery);
+    },recovery);
+  }
   api.source = async function(source){
     try {await close(); setSource(source, true);} catch(error){failure(error);}
   };
   async function init(){
     var result = await request('');
     if(result.schema !== 1) return; // Old-server/browser test compatibility.
-    api.enabled = true; stopPolling(); setPipelineActive(false);
+    api.enabled = true; setPipelineActive(false);
     card = document.createElement('div'); card.className = 'card'; card.id = 'importQueue';
     $('checksCard').after(card);
     el('h2', 'Your imports', card); el('div', '', card).id = 'queueCounts';
@@ -242,6 +263,7 @@ window.ImportJobs = (function(){
     button('Pause / continue queue', async function(){await request('/control', {pause:!paused}); await refresh();}, controls);
     list = el('div', undefined, card);
     message = el('div', '', card); message.id = 'queueMessage'; message.setAttribute('role','status');
+    recovery = el('div', '', card);recovery.id='queueRecovery';
     el('p', 'You can close this page while work continues. After restarting the importer, use Resume unfinished. Pause lets the current stage finish; files are kept when a song is removed.', card).className = 'note';
     var bar = document.createElement('div'); bar.style.cssText = 'margin:10px 0;display:flex;gap:12px;flex-wrap:wrap;align-items:center';
     $('reviewCard').prepend(bar);

@@ -1,4 +1,4 @@
-param([string]$RepoRoot = (Split-Path -Parent $PSScriptRoot))
+param([string]$RepoRoot = (Split-Path -Parent $PSScriptRoot), [switch]$PrepareOnly, [switch]$ResumeOnly)
 
 $ErrorActionPreference = 'Stop'
 
@@ -26,6 +26,26 @@ function Stop-VerifiedProcess($Snapshot) {
     }
 }
 
+function Wait-ImporterCheckpoint {
+    try {
+        $state = Invoke-RestMethod 'http://127.0.0.1:8765/api/drain' -Method Post -ContentType 'application/json' -Body '{}' -TimeoutSec 10
+    } catch {
+        throw 'This importer cannot confirm a safe checkpoint. Finish its work and close it normally, then run Update again. It was NOT stopped.'
+    }
+    $deadline = [DateTime]::UtcNow.AddMinutes(15)
+    while (-not $state.ready) {
+        if ([DateTime]::UtcNow -gt $deadline) {
+            throw 'Work has not reached a checkpoint yet. The importer was NOT stopped. Wait for it to finish and run Update again.'
+        }
+        Write-Host 'Waiting for imports/library changes to save a checkpoint. Existing Fadr task IDs are retained...'
+        Start-Sleep -Seconds 3
+        $state = Invoke-RestMethod 'http://127.0.0.1:8765/api/drain' -TimeoutSec 10
+    }
+    Write-Host 'Importer work is checkpointed. Unfinished jobs can be resumed after updating.'
+}
+
+function Ensure-ImporterRuntime { & (Join-Path $PSScriptRoot 'ensure_importer_dependencies.ps1') }
+
 function Restart-Importer {
     $root = (Resolve-Path -LiteralPath $RepoRoot).Path
     $listeners = @(Get-NetTCPConnection -State Listen -ErrorAction Stop |
@@ -44,6 +64,9 @@ function Restart-Importer {
         }
         $targets += $owner
     }
+    Wait-ImporterCheckpoint
+    if ($PrepareOnly) { return }
+    Ensure-ImporterRuntime
     # Snapshot children before stopping parents. Identity checks prevent killing
     # a recycled PID, and creation times exclude older, unrelated orphan processes.
     $tree = @($targets)
@@ -55,7 +78,7 @@ function Restart-Importer {
             $_.ProcessId -notin $tree.ProcessId
         })
     }
-    Write-Host 'Stopping the old importer and its workers. Any unfinished import is interrupted.'
+    Write-Host 'Restarting the checkpointed importer.'
     foreach ($process in $tree) {
         Write-Host "  Stopping $($process.Name), PID $($process.ProcessId)"
         Stop-VerifiedProcess $process
@@ -111,8 +134,16 @@ function Restart-Importer {
 # Dot-sourcing exposes functions for isolated tests without stopping anything.
 if ($MyInvocation.InvocationName -ne '.') {
     try {
-        & (Join-Path $PSScriptRoot 'ensure_importer_dependencies.ps1')
+        if ($ResumeOnly) {
+            try { Invoke-RestMethod 'http://127.0.0.1:8765/api/drain' -Method Post -ContentType 'application/json' -Body '{"resume":true}' -TimeoutSec 5 | Out-Null } catch { }
+            exit 0
+        }
         Restart-Importer; exit 0
     }
-    catch { Write-Host "IMPORTER RECOVERY FAILED: $($_.Exception.Message)"; exit 1 }
+    catch {
+        Write-Host "IMPORTER RECOVERY FAILED: $($_.Exception.Message)"
+        # Release admission after an aborted update; checkpointed jobs stay paused.
+        try { Invoke-RestMethod 'http://127.0.0.1:8765/api/drain' -Method Post -ContentType 'application/json' -Body '{"resume":true}' -TimeoutSec 5 | Out-Null } catch { }
+        exit 1
+    }
 }

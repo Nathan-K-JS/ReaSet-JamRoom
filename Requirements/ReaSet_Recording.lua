@@ -56,6 +56,19 @@ local function tick()
       M.P.reconcile();last_csc=reaper.GetProjectStateChangeCount(0)
     end
     controller:tick()
+    -- A read-only recovery request also cancels an unconsumed command nonce.
+    -- Handle it before the command mailbox so a delayed request cannot execute
+    -- after the browser has reconciled and unlocked its controls.
+    local probe=reaper.GetExtState(SEC,'probe')
+    if probe~='' then
+      reaper.SetExtState(SEC,'probe','',false)
+      local valid,p=pcall(M.J.decode,probe)
+      if valid and type(p)=='table' and p.project==controller.id and type(p.nonce)=='string' and #p.nonce<100 then
+        local prior=type(p.pending)=='string' and controller.seen[p.pending]
+        controller.recovery={nonce=p.nonce,confirmed=prior~=nil and prior~='cancelled',error=type(prior)=='table' and prior.error or nil}
+        if type(p.pending)=='string' and #p.pending<100 and not prior then controller.seen[p.pending]='cancelled' end
+      end
+    end
     local raw=reaper.GetExtState(SEC,'want')
     if raw~='' then
       reaper.SetExtState(SEC,'want','',false)
@@ -69,10 +82,12 @@ local function tick()
           controller.message=tostring(message)
           controller.error=tostring(message)
         end
+        controller.seen[c.nonce]={error=not success and tostring(message) or nil}
         controller.ack=c.nonce;controller.revision=controller.revision+1
       end
     end
     local state=controller:state()
+    state.instance=instance;state.recovery=controller.recovery
     reaper.SetExtState(SEC,'lock',controller.mode~='idle' and controller.id or '',false)
     publish(state)
   end,debug.traceback)

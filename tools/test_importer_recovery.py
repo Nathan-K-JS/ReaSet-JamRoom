@@ -59,9 +59,27 @@ try { Stop-VerifiedProcess ([pscustomobject]@{ProcessId=42; CreationDate=1}); th
 catch { if ($_.Exception.Message -notlike '*changed identity*') { throw } }
 ''')
 
-    def test_hung_importer_and_children_stopped_before_restart(self):
+    def test_unresponsive_importer_is_not_force_stopped(self):
+        self.run_ps(r'''
+function Invoke-RestMethod { throw 'Offline' }
+function Stop-Process { throw 'Must not stop uncheckpointed work' }
+try { Wait-ImporterCheckpoint; throw 'Expected checkpoint rejection' }
+catch { if ($_.Exception.Message -notlike '*NOT stopped*') { throw } }
+''')
+
+    def test_checkpoint_waits_until_ready(self):
+        self.run_ps(r'''
+$script:checks=0
+function Invoke-RestMethod { $script:checks++;[pscustomobject]@{ready=($script:checks -ge 3)} }
+function Start-Sleep { }
+Wait-ImporterCheckpoint
+if ($script:checks -ne 3) { throw 'Did not wait for checkpoint' }
+''')
+
+    def test_checkpointed_importer_and_children_stopped_before_restart(self):
         self.run_ps(r'''
 $script:stopped = @()
+function Ensure-ImporterRuntime { }
 $script:restarted = $false
 $script:snapshot = @(
     [pscustomobject]@{ProcessId=42; ParentProcessId=1; CreationDate=1; Name='python.exe'; CommandLine='python tools/jamroom_importer_server.py'},
@@ -84,7 +102,8 @@ function Start-Process {
     $script:restarted = $true
     [pscustomobject]@{Id=99}
 }
-function Invoke-RestMethod {
+function Invoke-RestMethod($Uri) {
+    if ($Uri -like '*/api/drain') { return [pscustomobject]@{ready=$true} }
     [pscustomobject]@{app='jamroom-importer'; source=(Resolve-Path $RepoRoot).Path; pid=99; build='test'}
 }
 Restart-Importer

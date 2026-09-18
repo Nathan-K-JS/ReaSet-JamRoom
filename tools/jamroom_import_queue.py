@@ -64,7 +64,10 @@ class ImportQueue:
                 data = json.loads(self.path.with_suffix('.previous').read_text(encoding='utf-8'))
             self.jobs = data['jobs']
             for row in self.jobs.values():
-                if row['state'] in ('queued', 'preparing', 'applying', 'editing'):
+                if row.get('apply_started') and not row.get('apply_prepared'):
+                    row['apply_started'] = False
+                    row['apply_phase'] = 'preparing'
+                if row['state'] in ('queued', 'preparing', 'applying', 'editing', 'checking'):
                     row['state'] = 'interrupted'
                     row['summary'] = 'Importer restarted. Resume to continue from saved work.'
         # Old cached imports remain explicitly labelled: absence from a project
@@ -153,7 +156,7 @@ class ImportQueue:
                        source={'youtube_url': url}, duration=body.get('duration') or 0)
             if asset:
                 job['fadr'] = {'asset_id': str(asset)}
-                job['source']['from_fadr_library'] = True
+                job.setdefault('source', {})['from_fadr_library'] = True
                 job['stages']['download'] = True
             row = self._record(job, str(folder), 'queued')
             row['asset'] = asset
@@ -254,7 +257,7 @@ class ImportQueue:
                 if other == ident or row['state'] in ('review', 'done', 'cached'):
                     continue
                 job = ji.load_job(self.folder(other))
-                if any(task.get('state') != 'complete' for task in job.get('fadr_tasks', {}).values()):
+                if any(task.get('state') not in ('complete', 'failed') for task in job.get('fadr_tasks', {}).values()):
                     raise RuntimeError('Another saved Fadr task may still be running for ' + row['song'] +
                                        '. Resume/check that song first, then retry this one. No new split was submitted.')
 
@@ -276,6 +279,68 @@ class ImportQueue:
                 result['review'] = scope(result['review'])
             return result
 
+    def recover_provider(self, ident, body):
+        """Read existing provider state. Never create an upload or split here."""
+        with self.guard:
+            row = self.jobs[ident]
+            if row['state'] not in ('failed', 'interrupted', 'paused') or row.get('apply_started'):
+                raise Conflict('Pause/finish processing before checking its Fadr result')
+            previous = row['state']
+            row['state'] = 'checking'
+            self._save()
+        try:
+            folder = self.folder(ident)
+            job = ji.load_job(folder)
+            fadr = ji.Fadr(self.config(row)['fadr_api_key'])
+            asset_id = body.get('asset')
+            if asset_id:
+                known = job.get('fadr', {}).get('asset_id')
+                if known and known != asset_id:
+                    raise Conflict('This job already owns a different Fadr asset; check its existing task instead.')
+                asset = fadr.asset(str(asset_id))
+                if not asset.get('stems') or asset.get('assetType') != 'upload':
+                    raise ValueError('Choose a completed original recording from the Fadr library')
+                job.setdefault('fadr', {})['asset_id'] = str(asset_id)
+                job.pop('upload_pending', None)
+                job.setdefault('source', {})['from_fadr_library'] = True
+                job['stages']['download'] = True
+                row['asset'] = str(asset_id)
+            records = job.get('fadr_tasks', {})
+            for key, task in records.items():
+                if task.get('state') in ('complete', 'failed'):
+                    continue
+                asset = fadr.asset(task.get('asset') or key.split(':')[0])
+                if asset.get('stems'):
+                    task['state'] = 'complete'
+                elif task.get('id'):
+                    data = fadr._check(fadr._read('post', ji.FADR_API + '/tasks/query', json={'_ids':[task['id']]}), 'check saved task')
+                    found = next((t for t in data.get('tasks', []) if t.get('_id') == task['id']), None)
+                    status = found and found.get('status')
+                    if isinstance(status, dict) and (status.get('failed') is True or status.get('complete') is True and status.get('error')):
+                        task['state'] = 'failed'
+                        task['error'] = str(status.get('msg') or status.get('error') or 'Provider reported failure')
+            failed = [k for k, t in records.items() if t.get('state') == 'failed']
+            pending = [k for k, t in records.items() if t.get('state') not in ('complete', 'failed')]
+            if body.get('retry_failed'):
+                if not failed or pending or job.get('upload_pending'):
+                    raise Conflict('Only provider-confirmed failed tasks can be replaced; unresolved submissions must be checked first.')
+                job.setdefault('fadr_task_history', []).extend(records[k] for k in failed)
+                for key in failed:
+                    del records[key]
+                failed = []
+            ji.save_job(folder, job)
+            text = ('Upload needs checking. Select its completed recording from the Fadr library below.' if job.get('upload_pending') else
+                    'Fadr still has an unresolved task. Wait, then check again; no replacement split was submitted.' if pending else
+                    'Fadr confirmed a failed task. You can explicitly retry it; a new split may be charged.' if failed else
+                    'Saved Fadr results checked. Resume this song to continue.')
+            with self.guard:
+                row.update(summary=text, provider_retryable=bool(failed and not pending), revision=row['revision'] + 1)
+            return {'ok':True, 'summary':text, 'retryable':row['provider_retryable']}
+        finally:
+            with self.guard:
+                row['state'] = previous
+                self._save()
+
     def draft(self, ident, body):
         with self.guard:
             row = self.jobs[ident]
@@ -292,6 +357,7 @@ class ImportQueue:
             if offset is not None and (not isinstance(offset, (int, float)) or not math.isfinite(offset)):
                 raise ValueError('Invalid lyric offset')
             row['draft'] = copy.deepcopy(draft)
+            row['apply_prepared'] = False
             row['revision'] += 1
             self._save()
             return {'ok': True, 'revision': row['revision']}
@@ -358,11 +424,11 @@ class ImportQueue:
                 self.schedule()
                 return {'ok': True}
             if action == 'remove':
-                if ident in self.running or row['state'] in ('applying', 'editing'):
+                if ident in self.running or row['state'] in ('applying', 'editing', 'checking'):
                     raise Conflict('Pause the queue and let this stage finish before removing the song')
                 job = ji.load_job(self.folder(ident))
                 if row['state'] not in ('review', 'done', 'cached') and any(
-                        task.get('state') != 'complete' for task in job.get('fadr_tasks', {}).values()):
+                        task.get('state') not in ('complete', 'failed') for task in job.get('fadr_tasks', {}).values()):
                     raise Conflict('This song has an unresolved Fadr task. Resume/check it before removing its workspace.')
                 row['removed_state'] = row['state']
                 row['state'] = 'removed'
@@ -385,6 +451,7 @@ class ImportQueue:
                 if row.get('apply_started'):
                     raise Conflict('An Apply is unresolved. Reopen the original target project and retry there.')
                 row['target'] = self.server.project_identity()
+                row['apply_prepared'] = False
                 row['revision'] += 1
                 self._save()
                 return {'ok': True, 'revision': row['revision'], 'target': row['target']}
@@ -397,7 +464,7 @@ class ImportQueue:
                     raise Conflict('Another REAPER change is running. Try again when it finishes.')
                 old_state = row['state']
                 try:
-                    row.update(state='applying', apply_started=True)
+                    row.update(state='applying', apply_phase='submitted' if row.get('apply_started') else 'preparing')
                     self._save()
                     threading.Thread(target=self.apply, args=(ident,), daemon=True).start()
                 except Exception:
@@ -437,11 +504,14 @@ class ImportQueue:
                 with self.guard:
                     row['apply_prepared'] = True
                     self._save()
+            with self.guard:
+                row.update(apply_started=True, apply_phase='submitted')
+                self._save()  # Durable intent precedes the shared REAPER request.
             ji.stage_apply(job, folder, cfg, True)
             if not (folder / 'applied.txt').is_file():
                 raise RuntimeError('REAPER did not confirm Apply. Open the intended project, stop playback/recording, then retry. The same operation ID prevents a duplicate append.')
             with self.guard:
-                row.update(state='done', summary='Added to REAPER. Save the project to keep it.')
+                row.update(state='done', apply_phase='confirmed', summary='Added to REAPER. Save the project to keep it.')
                 self._save()
         except Exception as error:
             with self.guard:

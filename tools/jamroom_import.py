@@ -39,7 +39,7 @@ import jamroom_click as click_model
 # what is on disk — the importer server holds its modules in memory, so this is
 # how you tell "did the update take effect?" from "is the old process still up?"
 # BUMP THIS whenever the importer changes, and quote it when handing over.
-BUILD = "v3.6"
+BUILD = "v3.7"
 BUILD_DATE = "2026-09-18"
 
 # Fadr's S3 throttles each connection independently, so several transfers at
@@ -407,6 +407,7 @@ class Fadr:
         log(f"Waiting for Fadr task: {label} (polling every 5s)...")
         t0 = time.time()
         while True:
+            check_import_pause()
             j = self._check(self._read('post', f"{FADR_API}/tasks/query",
                                         json={"_ids": [task_id]}),
                             "poll task")
@@ -510,6 +511,7 @@ class Fadr:
                     win_t, win_b = time.time(), 0
                     with open(part, "ab" if resuming else "wb") as f:
                         for chunk in r.iter_content(1 << 16):
+                            check_import_pause()
                             f.write(chunk)
                             got += len(chunk)
                             win_b += len(chunk)
@@ -641,6 +643,8 @@ def resume_fadr_task(fadr, job, job_dir, asset_id, split_type=None):
                 save_job(job_dir, job)
             return asset
         record = journal.get(key)
+        if record and record.get('state') == 'failed':
+            raise RuntimeError('Fadr confirmed this task failed. Use Check Fadr / recover to explicitly allow a replacement split.')
         if record and not record.get('id'):
             raise RuntimeError('Fadr submission needs checking: the previous request '
                                'may have been accepted. No replacement task was submitted. '

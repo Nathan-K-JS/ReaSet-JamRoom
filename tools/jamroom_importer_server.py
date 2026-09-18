@@ -42,15 +42,26 @@ SLOT_CHOICES = [
     ("CLICK", "Click"), ("EXTRA", "Extras"), ("SKIP", "— don't import —"),
 ]
 
-# States: idle -> preparing -> review -> applying -> done | failed.
-# `operation` lets the page report "Re-added" rather than calling every task
-# an import. A finished state remains available across a page reload until the
-# browser acknowledges that it rendered the receipt.
+# Compatibility status and maintenance log; imports live exclusively in QUEUE.
 STATE = {"state": "idle", "operation": None, "song": "", "log": [],
          "summary": "", "review": None}
-CURRENT = {"job_dir": None}
 BUSY = threading.Lock()
 ACTIVE_STATES = ("preparing", "review", "applying")
+DRAIN = threading.Event()
+REQUEST_GUARD = threading.Lock()
+ACTIVE_REQUESTS = 0
+
+
+def drain_status():
+    with REQUEST_GUARD:
+        active = ACTIVE_REQUESTS
+    queued = False
+    if QUEUE is not None:
+        with QUEUE.guard:
+            queued = bool(QUEUE.running) or any(
+                row['state'] in ('applying', 'editing', 'checking') for row in QUEUE.jobs.values())
+    return {'draining': DRAIN.is_set(), 'ready': not active and not queued and not BUSY.locked(),
+            'message': 'Waiting for work to reach a saved checkpoint' if active or queued or BUSY.locked() else 'All work is checkpointed'}
 
 
 def _ui_log(msg):
@@ -273,52 +284,6 @@ def _usually_skipped(this_job_dir, min_songs=3, ratio=0.7):
             if tot >= min_songs and sk / tot >= ratio}
 
 
-def run_prepare(url, band, title, rebuild=False):
-    try:
-        cfg = ji.load_config(None)
-        band = ji.sanitize_region_name(band)
-        title = ji.sanitize_region_name(title)
-        if not band or not title:
-            raise RuntimeError("Band and song title are both required.")
-        job_dir = Path(cfg["jobs_dir"]) / ji.sanitize_filename(f"{band} - {title}")
-        old_job = ji.load_job(job_dir)
-        if (old_job.get("audio_deleted") or
-                (old_job.get("stages", {}).get("download") and
-                 not (job_dir / (old_job.get("source", {}).get("audio_file") or "source.wav")).is_file())):
-            rebuild = True
-        if rebuild:
-            # A replacement recording must not inherit completed pipeline
-            # flags, a chart placement, or lyrics from the previous audio.
-            # Keep only the operator's routing/display-name choices.
-            job = {"schema": 1, "stages": {}}
-            for key in ("slot_overrides", "label_overrides"):
-                if old_job.get(key):
-                    job[key] = old_job[key]
-            _ui_log("Rebuilding from the selected recording; cached audio, "
-                    "stems, lyrics and chords will all be replaced.")
-        else:
-            job = old_job
-        job.update({"band": band, "title": title,
-                    "region_name": f"{band} - {title}"})
-        job.setdefault("source", {})["youtube_url"] = url
-        ji.save_job(job_dir, job)
-        _ui_log(f"Job folder: {job_dir}")
-        ji.stage_download(job, job_dir, url, rebuild)
-        ji.stage_fadr(job, job_dir, cfg, rebuild)
-        ji.stage_chords(job, job_dir, rebuild)
-        ji.stage_lyrics(job, job_dir, rebuild)
-        ji.stage_lyrics_align(job, job_dir, rebuild)
-        CURRENT["job_dir"] = job_dir
-        STATE["review"] = build_review(job, job_dir, cfg)
-        STATE["state"] = "review"
-        _ui_log("Ready for review: listen to the stems, set their slots, "
-                "check the lyric timing, then Apply.")
-    except Exception as e:  # noqa: BLE001 — surface anything to the UI
-        STATE["summary"] = str(e)
-        STATE["state"] = "failed"
-        _ui_log(f"FAILED: {e}")
-    finally:
-        BUSY.release()
 
 
 def _reaper_web(cfg):
@@ -623,33 +588,6 @@ def orphan_jobs():
     return out
 
 
-def run_readd_local(name):
-    """Put a previously-downloaded song back into the project using the local
-    files — no Fadr, no internet, no waiting. Every stage is already cached, so
-    this only rebuilds the review screen from the saved job."""
-    try:
-        cfg = ji.load_config(None)
-        jobs_dir = Path(cfg.get("jobs_dir") or (ji.REPO_ROOT / "imports"))
-        job_dir = jobs_dir / ji.sanitize_filename(name)
-        job = ji.load_job(job_dir)
-        if not job.get("region_name"):
-            raise RuntimeError("No saved job for that song.")
-        if not job_has_audio(job_dir):
-            raise RuntimeError("The audio for this song was deleted. Re-import "
-                               "it from the Fadr library tab instead (free).")
-        CURRENT["job_dir"] = job_dir
-        _ui_log(f"Job folder: {job_dir}")
-        _ui_log("Re-adding from the local files — nothing to download.")
-        STATE["review"] = build_review(job, job_dir, cfg)
-        STATE["state"] = "review"
-        _ui_log("Ready for review — your previous group and name choices are "
-                "already filled in.")
-    except Exception as e:  # noqa: BLE001
-        STATE["summary"] = str(e)
-        STATE["state"] = "failed"
-        _ui_log(f"FAILED: {e}")
-    finally:
-        BUSY.release()
 
 
 def _trigger_reaper_action(cfg, ext_key, receipt, timeout=60):
@@ -882,97 +820,8 @@ def relyric_song(name, record_id=None, offset=None):
             "chords": len(chords or []), "source": ly.get("source")}
 
 
-def run_prepare_library(asset_id, band, title, duration, allow_new_splits=True):
-    """Same as run_prepare, but the song is already split on Fadr: skip the
-    download, the upload and the main split.
-
-    Sub-splits (lead/backing vocals, guitars/keys) are only free if they were
-    already done on that asset. When they were not and the operator declined to
-    pay, fall back to the four main stems rather than silently billing them."""
-    try:
-        cfg = ji.load_config(None)
-        if not allow_new_splits:
-            cfg = dict(cfg)
-            cfg["vocal_split"] = False
-            cfg["melodic_split"] = False
-            _ui_log("Extra splits declined — importing the main stems only, "
-                    "so nothing is charged.")
-        job_dir, job = ji.job_from_existing_asset(cfg, asset_id, band, title, duration)
-        CURRENT["job_dir"] = job_dir
-        _ui_log(f"Job folder: {job_dir}")
-        _ui_log("Using an already-split song from your Fadr library — "
-                "no upload, no split, no charge.")
-        ji.stage_fadr(job, job_dir, cfg, True)
-        ji.stage_chords(job, job_dir, True)
-        ji.stage_lyrics(job, job_dir, False)
-        ji.stage_lyrics_align(job, job_dir, False)
-        STATE["review"] = build_review(job, job_dir, cfg)
-        STATE["state"] = "review"
-        _ui_log("Ready for review.")
-    except Exception as e:  # noqa: BLE001
-        STATE["summary"] = str(e)
-        STATE["state"] = "failed"
-        _ui_log(f"FAILED: {e}")
-    finally:
-        BUSY.release()
 
 
-def run_apply(slots, labels, lyrics_offset):
-    try:
-        cfg = ji.load_config(None)
-        job_dir = CURRENT["job_dir"]
-        job = ji.load_job(job_dir)
-        job["slot_overrides"] = slots or {}
-        # Per-stem labels from the UI -> one label per slot (first stem
-        # assigned to a slot names its bus; labels ride the "[JR:SLOT] Label"
-        # track name into ReaSet's mute screen).
-        label_overrides = {}
-        for file, slot in (slots or {}).items():
-            lbl = ji.sanitize_region_name((labels or {}).get(file, ""))
-            if slot != "SKIP" and lbl and slot not in label_overrides:
-                label_overrides[slot] = lbl
-        job["label_overrides"] = label_overrides
-        ly = job.setdefault("lyrics", {})
-        if lyrics_offset is not None:
-            ly["offset_override"] = float(lyrics_offset)
-        else:
-            ly.pop("offset_override", None)
-        ji.save_job(job_dir, job)
-        ji.stage_mixdown(job, job_dir, cfg, True)
-        ji.write_reaper_job(job, job_dir)
-        ji.save_job(job_dir, job)
-        ji.stage_apply(job, job_dir, cfg, True)
-        applied = job_dir / "applied.txt"
-        if applied.exists():
-            STATE["summary"] = applied.read_text(encoding="utf-8").strip()
-            if job.get('click'):
-                STATE['summary'] += '\n'+job['click'].get('review','')+(' — click muted; review before use.' if job['click'].get('muted') else '')
-            STATE["state"] = "done"
-            _ui_log("Import complete. Review the song in REAPER, then SAVE "
-                    "the project.")
-        else:
-            # Ask REAPER why (the apply script leaves its reason in extstate).
-            why = ""
-            try:
-                web = cfg["reaper_web"].rstrip("/")
-                t = requests.get(f"{web}/_/GET/EXTSTATE/ReaSetJR/importer",
-                                 timeout=3).text.strip().split("\t")
-                if len(t) >= 4 and t[3].startswith("failed:"):
-                    why = " REAPER says: " + t[3][len("failed:"):]
-            except requests.RequestException:
-                pass
-            STATE["summary"] = ("REAPER did not confirm the apply." + why +
-                                " Fix that, then press Apply again.")
-            STATE["state"] = "review"
-            _ui_log(STATE["summary"])
-    except Exception as e:  # noqa: BLE001
-        STATE["summary"] = str(e)
-        # The reviewed job is still present, so keep Apply retryable instead of
-        # exposing a button that the server will reject as "nothing awaiting".
-        STATE["state"] = "review"
-        _ui_log(f"FAILED: {e}")
-    finally:
-        BUSY.release()
 
 
 from jamroom_updates import Updates
@@ -1027,7 +876,7 @@ class Handler(BaseHTTPRequestHandler):
 
     def _serve_audio(self):
         from urllib.parse import parse_qs, urlparse
-        job_dir = CURRENT["job_dir"]
+        job_dir = None
         query = parse_qs(urlparse(self.path).query)
         name = query.get("f", [""])[0]
         if query.get('job'):
@@ -1128,6 +977,8 @@ class Handler(BaseHTTPRequestHandler):
             self._send(200, checks())
         elif self.path == "/api/runtime":
             self._send(200, runtime())
+        elif self.path == '/api/drain':
+            self._send(200, drain_status())
         elif self.path == "/api/status":
             self._send(200, STATE)
         elif self.path == "/api/updates":
@@ -1159,8 +1010,25 @@ class Handler(BaseHTTPRequestHandler):
             self._send(404, {"error": "not found"})
 
     def do_POST(self):
+        global ACTIVE_REQUESTS
+        tracked = False
         try:
+            with REQUEST_GUARD:
+                if self.path != '/api/drain':
+                    if DRAIN.is_set():
+                        return self._send(503, {'error':'Importer is checkpointing for an update. Wait for the update to finish.'})
+                    ACTIVE_REQUESTS += 1
+                    tracked = True
             body = self._body()
+            if self.path == '/api/drain':
+                if body.get('resume'):
+                    DRAIN.clear()
+                else:
+                    DRAIN.set()
+                    UPDATES.stop.set()
+                    if QUEUE is not None:
+                        QUEUE.control({'pause':True})
+                return self._send(200, drain_status())
             if self.path == '/api/jobs':
                 return self._send(200, import_queue().add(body))
             if self.path == '/api/jobs/control':
@@ -1175,9 +1043,27 @@ class Handler(BaseHTTPRequestHandler):
                     return self._send(200, queue.draft(ident, body))
                 if action in ('lyrics', 'chart'):
                     return self._send(200, queue.choose(ident, action, body))
+                if action == 'provider':
+                    return self._send(200, queue.recover_provider(ident, body))
                 return self._send(200, queue.action(ident, action, body))
-            if QUEUE is not None and self.path in ('/api/import', '/api/import_library', '/api/readd', '/api/apply', '/api/lyrics_pick', '/api/ug_use'):
-                return self._send(409, {'error': 'Reload this page to use the saved import queue.'})
+            # Compatibility URLs dispatch to the same queue; no global active job.
+            if self.path in ('/api/import', '/api/import_library'):
+                if self.path == '/api/import_library':
+                    body['asset'] = body.get('id')
+                return self._send(200, import_queue().add(body))
+            if self.path == '/api/readd':
+                queue = import_queue()
+                result = queue.control({'open_cached':body.get('name')})
+                if queue.jobs[result['id']]['state'] == 'cached':
+                    queue.action(result['id'], 'resume', {})
+                return self._send(200, result)
+            if self.path in ('/api/apply', '/api/lyrics_pick', '/api/ug_use'):
+                if not body.get('job') or 'revision' not in body:
+                    raise Conflict('Reload the importer and select a saved workspace. A job ID and review revision are required.')
+                queue = import_queue()
+                if self.path == '/api/apply':
+                    return self._send(200, queue.action(body['job'], 'apply', body))
+                return self._send(200, queue.choose(body['job'], 'lyrics' if self.path == '/api/lyrics_pick' else 'chart', body))
             if QUEUE is not None and self.path in ('/api/delete_song', '/api/rechord', '/api/relyric'):
                 QUEUE.protect([body.get('name')])
             if QUEUE is not None and self.path == '/api/updates/start':
@@ -1214,113 +1100,6 @@ class Handler(BaseHTTPRequestHandler):
             elif self.path == "/api/setkey":
                 set_key(body.get("key", ""))
                 self._send(200, {"ok": True})
-            elif self.path == "/api/import":
-                if STATE["state"] in ACTIVE_STATES:
-                    self._send(409, {"error": "An import is already in "
-                                     "progress — finish or cancel it first."})
-                    return
-                band, title = body.get("band", ""), body.get("title", "")
-                url = body.get("url", "")
-                rebuild = bool(body.get("rebuild"))
-                clean_band = ji.sanitize_region_name(band)
-                clean_title = ji.sanitize_region_name(title)
-                if not clean_band or not clean_title or not str(url).strip():
-                    self._send(400, {"error": "Recording, Band and Song title "
-                                              "are all required."})
-                    return
-                region_name = f"{clean_band} - {clean_title}"
-                if clean_band and clean_title and any(
-                        song["name"] == region_name for song in project_songs()):
-                    self._send(409, {
-                        "code": "song_in_project",
-                        "error": region_name + " is already in REAPER. Use Song "
-                                 "Library → Review or repair, or delete that "
-                                 "song before replacing its recording.",
-                    })
-                    return
-                cfg = ji.load_config(None)
-                job_dir = Path(cfg["jobs_dir"]) / ji.sanitize_filename(
-                    region_name)
-                prior = ji.load_job(job_dir)
-                prior_url = (prior.get("source") or {}).get("youtube_url")
-                if (not rebuild and prior_url != url and
-                        job_has_cached_audio(job_dir)):
-                    self._send(409, {
-                        "code": "cached_recording",
-                        "error": "A different recording is already saved under "
-                                 "this Band - Song name.",
-                    })
-                    return
-                if not BUSY.acquire(blocking=False):
-                    self._send(409, {"error": "Another change is still finishing."})
-                    return
-                STATE.update({"state": "preparing", "operation": "import",
-                              "log": [], "summary": "",
-                              "review": None,
-                              "song": f"{band} - {title}"})
-                threading.Thread(target=run_prepare,
-                                 args=(url, band, title, rebuild),
-                                 daemon=True).start()
-                self._send(200, {"ok": True})
-            elif self.path == "/api/import_library":
-                if STATE["state"] in ACTIVE_STATES:
-                    self._send(409, {"error": "An import is already in "
-                                     "progress — finish or cancel it first."})
-                    return
-                clean_band = ji.sanitize_region_name(body.get("band", ""))
-                clean_title = ji.sanitize_region_name(body.get("title", ""))
-                if not clean_band or not clean_title or not body.get("id"):
-                    self._send(400, {"error": "Fadr song, Band and Song title "
-                                              "are all required."})
-                    return
-                region_name = f"{clean_band} - {clean_title}"
-                if any(song["name"] == region_name for song in project_songs()):
-                    self._send(409, {"error": region_name + " is already in "
-                                              "REAPER. Use Song Library instead."})
-                    return
-                if not BUSY.acquire(blocking=False):
-                    self._send(409, {"error": "Another change is still finishing."})
-                    return
-                STATE.update({"state": "preparing", "operation": "import_library",
-                              "log": [], "summary": "",
-                              "review": None,
-                              "song": f"{body.get('band')} - {body.get('title')}"})
-                threading.Thread(target=run_prepare_library,
-                                 args=(body.get("id", ""), body.get("band", ""),
-                                       body.get("title", ""),
-                                       body.get("duration", 0),
-                                       bool(body.get("allow_new_splits", True))),
-                                 daemon=True).start()
-                self._send(200, {"ok": True})
-            elif self.path == "/api/apply":
-                if STATE["state"] != "review":
-                    self._send(409, {"error": "Nothing awaiting review."})
-                    return
-                if not BUSY.acquire(blocking=False):
-                    self._send(409, {"error": "Another change is still finishing."})
-                    return
-                STATE["state"] = "applying"
-                threading.Thread(target=run_apply,
-                                 args=(body.get("slots") or {},
-                                       body.get("labels") or {},
-                                       body.get("lyrics_offset")),
-                                 daemon=True).start()
-                self._send(200, {"ok": True})
-            elif self.path == "/api/readd":
-                if STATE["state"] in ACTIVE_STATES:
-                    self._send(409, {"error": "An import is already in "
-                                     "progress — finish or cancel it first."})
-                    return
-                if not BUSY.acquire(blocking=False):
-                    self._send(409, {"error": "Another change is still finishing."})
-                    return
-                STATE.update({"state": "preparing", "operation": "readd",
-                              "log": [], "summary": "",
-                              "review": None, "song": body.get("name", "")})
-                threading.Thread(target=run_readd_local,
-                                 args=(body.get("name", ""),),
-                                 daemon=True).start()
-                self._send(200, {"ok": True})
             elif self.path == "/api/lyrics_search":
                 try:
                     self._send(200, {"results": ji.lyrics_search(
@@ -1329,25 +1108,6 @@ class Handler(BaseHTTPRequestHandler):
                         duration=float(body.get("duration") or 0))})
                 except Exception as e:  # noqa: BLE001
                     self._send(500, {"error": str(e)})
-            elif self.path == "/api/lyrics_pick":
-                if STATE["state"] != "review":
-                    self._send(409, {"error": "Nothing is awaiting review."})
-                    return
-                if not BUSY.acquire(blocking=False):
-                    return self._send(409, {"error": "Another change is running"})
-                try:
-                    cfg = ji.load_config(None)
-                    job_dir = CURRENT["job_dir"]
-                    job = ji.load_job(job_dir)
-                    ji.lyrics_use_record(job, job_dir, body.get("id"))
-                    ji.prepare_chart_document(job, job_dir)
-                    ji.save_job(job_dir, job)
-                    STATE["review"] = build_review(job, job_dir, cfg)
-                    self._send(200, {"ok": True, "review": STATE["review"]})
-                except Exception as e:  # noqa: BLE001
-                    self._send(500, {"error": str(e)})
-                finally:
-                    BUSY.release()
             elif self.path == "/api/ug_search":
                 try:
                     self._send(200, {"charts": ji.ug_search(
@@ -1355,53 +1115,6 @@ class Handler(BaseHTTPRequestHandler):
                         free=body.get("free", ""))})
                 except Exception as e:  # noqa: BLE001
                     self._send(500, {"error": str(e)})
-            elif self.path == "/api/ug_use":
-                if STATE["state"] != "review":
-                    self._send(409, {"error": "Nothing is awaiting review."})
-                    return
-                if not BUSY.acquire(blocking=False):
-                    return self._send(409, {"error": "Another change is running"})
-                try:
-                    cfg = ji.load_config(None)
-                    job_dir = CURRENT["job_dir"]
-                    job = ji.load_job(job_dir)
-                    if not job.get("chords_detected"):
-                        job["chords_detected"] = ji.detected_chords(job, job_dir)
-                    res = ji.build_chart_chords(job, body.get("url", ""),
-                                                job_dir=job_dir)
-                    if res.get("fallback_reason"):
-                        _ui_log(f"Could not place chords from the words "
-                                f"({res['fallback_reason']}) — matched the "
-                                f"chart against the detected chords instead.")
-                    if res.get("capo"):
-                        _ui_log(f"Chart has a capo at fret {res['capo']}; using "
-                                f"the pitches that actually sound.")
-                    if res.get("key_offset"):
-                        _ui_log(f"Chart is written {res['key_offset']:+d} "
-                                f"semitones from the record — transposed to "
-                                f"match the audio.")
-                    if res["method"] == "lyrics":
-                        _ui_log(f"Placed by the words: {res['lines_matched']} of "
-                                f"{res['chart_lines']} chart lines matched.")
-                    _ui_log("Source chart words, chord columns and section order preserved. "
-                            "Recording analysis supplies estimated page cues only.")
-                    job["chords"] = res["chords"]
-                    job["chart"] = {"url": body.get("url", ""),
-                                    "method": res["method"],
-                                    "key": res.get("key", ""),
-                                    "capo": res.get("capo", 0),
-                                    "key_offset": res.get("key_offset", 0),
-                                    "lines_matched": res.get("lines_matched"),
-                                    "chart_lines": res.get("chart_lines"),
-                                    "fallback_reason": res.get("fallback_reason", "")}
-                    ji.save_job(job_dir, job)
-                    STATE["review"] = build_review(job, job_dir, cfg)
-                    self._send(200, {"ok": True, "chart": job["chart"],
-                                     "review": STATE["review"]})
-                except Exception as e:  # noqa: BLE001
-                    self._send(500, {"error": str(e)})
-                finally:
-                    BUSY.release()
             elif self.path == "/api/rechord":
                 if not self._claim_maintenance():
                     return
@@ -1448,26 +1161,18 @@ class Handler(BaseHTTPRequestHandler):
                     self._send(500, {"error": str(e)})
                 finally:
                     BUSY.release()
-            elif self.path == "/api/cancel":
-                if STATE["state"] == "review":
-                    STATE.update({"state": "idle", "operation": None,
-                                  "song": "", "review": None,
-                                  "summary": "", "log": []})
-                    CURRENT["job_dir"] = None
-                self._send(200, {"ok": True})
-            elif self.path == "/api/ack":
-                if STATE["state"] in ("done", "failed"):
-                    STATE.update({"state": "idle", "operation": None,
-                                  "song": "", "review": None,
-                                  "summary": "", "log": []})
-                    CURRENT["job_dir"] = None
-                self._send(200, {"ok": True})
+            elif self.path in ("/api/cancel", "/api/ack"):
+                self._send(200, {"ok": True, "message": "Saved work is kept in the import queue."})
             else:
                 self._send(404, {"error": "not found"})
         except Conflict as e:
             self._send(409, {'error': str(e)})
         except Exception as e:  # noqa: BLE001
             self._send(500, {"error": str(e)})
+        finally:
+            if tracked:
+                with REQUEST_GUARD:
+                    ACTIVE_REQUESTS -= 1
 
 
 class ImporterServer(ThreadingHTTPServer):
