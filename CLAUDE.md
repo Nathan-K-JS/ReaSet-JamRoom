@@ -38,6 +38,11 @@ ancestry first; never force-push or overwrite divergent changes. Pushing only
 `feature/timing-repair` does not deliver an update to standard installations.
 
 Current architecture:
+- v3.7 fixes review findings 1-7; see `docs/RELIABILITY_AND_UI.md` for recovery,
+  checkpointed updates, UI changes and first-upgrade instructions.
+  Agreed NEXT upgrades: free-jam recording with click and suggested song-level
+  loudness matching. Remind Nathan of both after this bug-fix release; they are
+  not implemented yet. Preserve the simple REAPER-controller scope.
 - v3.6 adds persistent import workspaces, autosaved review and restart recovery;
   see `docs/IMPORT_QUEUE_AND_RESUME.md`. Queue state lives in
   `tools/jamroom_import_queue.py`; its browser controller is `tools/importer-queue.js`.

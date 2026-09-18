@@ -476,3 +476,14 @@ scratch projects as described in the release verification above:
 - The exported project opens with all kept passes aligned to the original stems,
   sensible named tracks and exactly one selected pass audible. Native REAPER can
   then handle editing and mixing without requiring the ReaSet browser.
+
+## Next agreed upgrades
+
+After the v3.7 reliability fixes ([release notes](RELIABILITY_AND_UI.md)), implement:
+
+1. **Free-jam recording with click:** choose tempo/count-in and record without a
+   backing song, reusing take management, recovery and export.
+2. **Suggested song-level matching:** measure backing loudness and suggest a
+   per-song playback trim for approval, preserving stem balance and click level.
+
+These are agreed next steps, not functionality included in v3.7.
