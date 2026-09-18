@@ -23,17 +23,70 @@ Validation: browser geometry at desktop, phone portrait and landscape; browser
 click command/confirmation; Lua enable and stale-command tests; live REAPER
 scratch-project checks with the original library left unchanged.
 
-## Proposal awaiting design approval
+## Approved recording direction and final usability review
 
-The repository's CLAUDE.md requires explicit approval before implementing a
-non-trivial design. The following covers the volume and recording features;
-neither is implemented in this checkpoint.
+Nathan approved the recording plan, with the direction to keep ReaSet a simple,
+functional web controller for the existing REAPER setup. This final pass refines
+that approved direction; no further general design approval is needed. Recording
+and per-song volume are still implementation work, not delivered features.
 
 The recording proposal below incorporates the requested default input/track
 template and explicit post-stop retry/keep actions. Nathan's supplied live input
 list is now recorded in [RECORDING_SETUP.md](RECORDING_SETUP.md): 14 recording
 tracks covering inputs 1–16, with stereo EAD10 (9/10) and Keys (11/12).
 Physical local/stagebox sourcing and the current USB patch remain unverified.
+
+### Product boundary: one recording screen, REAPER does the work
+
+REAPER owns audio capture, recording transport, media, takes and project saving.
+ReaSet provides named input selection, transport, whole-take review and project
+handoff. Use native REAPER capabilities wherever they support this workflow;
+the bridge supplies session ownership, confirmed state and safe export orchestration.
+Do not build an audio engine, waveform editor, timeline, plugin rack, comp editor,
+or separate browser mixer. Detailed editing, overdubbing and mixing belong in the
+exported REAPER project. Keep one workflow for casual and serious use, without
+"simple/pro" modes or separate feature trees.
+
+### Two use cases and the friction to remove
+
+| Situation / likely annoyance | Design response |
+| --- | --- |
+| Friends want to record before the moment passes. | After initial setup: cue song, open Recording, press Record. Remember selected instruments and count-in choice; show them immediately without a wizard. First use requires selecting inputs once. |
+| The first attempt falls apart. | Stop → Discard & re-record returns to the same start with the same inputs and count-in. No naming or confirmation dialog; the discard remains recoverable. |
+| It was fun, and everyone wants to play the next song. | Stop keeps the take automatically. Done returns to rehearsal; export is optional and can wait. Returning to a song finds its saved takes. |
+| Someone thinks a take was lost because the tablet slept. | Recording continues in REAPER. Reconnection reads actual transport/session state, and restores the review screen after a native Stop. Never claim the tablet stopped REAPER while disconnected. |
+| A serious take is spoiled by an unnoticed wrong input. | Named inputs with compact signal/clip indicators and a clear armed count. Show unavailable selected inputs before Record; silence alone is not an error. Input routing is configured once in Setup. |
+| Comparing attempts requires clicking many instrument controls. | A take selector changes the whole synchronized pass. A small favourite star and optional take name help identify the best performance. Listen resumes the review choices; no per-instrument take assembly in the browser. |
+| The recording and backing double each other during playback. | Review offers independent Backing and Recording on/off controls, with instrument mutes in an expandable detail area. Start from the backing mix used during the take; old recording passes remain silent. |
+| Export interrupts the rehearsal or loses work. | Save project uses an automatic song/date/session folder and includes all kept takes plus original stems. Show progress and a reusable result path; open it only when requested. Copy/verify precedes setlist cleanup. |
+
+**Scope:** the first release records the selected song. This makes its backing,
+tempo and export boundaries unambiguous. Continuous, unstructured jam recording
+and a one-tap stereo sharing mix are useful later additions, not prerequisites
+for this song-recording controller. A saved session is enough to keep a casual
+recording; a self-contained REAPER project is the handoff for serious work.
+
+### Visible controls by state
+
+| State | Main controls | Secondary details |
+| --- | --- | --- |
+| Ready | Song, selected instruments, compact meters, Record, Count-in Off / 2 bars | Takes; Setup; Additional inputs |
+| Recording / paused | Confirmed recording status, elapsed time, Pause / Resume, Stop | Input activity and clipping; no setup or take changes |
+| Review | Listen / Stop, Keep & record another, Discard & re-record, Done | Take selector; expandable backing/recording instrument mutes |
+| Saved takes | Select take, Listen, Record another, Save project | Favourite, optional name, Restore discarded take |
+
+Count-in defaults to two bars and remembers an Off choice. Pause resumes the
+same pass; Stop completes it. Use the same transport controls consistently:
+the existing Stop button must stop recording too, and normal Play during review
+must use audition behavior rather than invoke setlist chaining. A compact global
+recording indicator and Stop remain available if the user visits another tab;
+navigation alone does not end recording. Guard song/seek changes while recording
+with a direct explanation, not an apparently broken button.
+
+Setup holds input/output mapping and the recording folder. The normal screen
+shows instrument names and useful state, not channel numbers, file paths or
+bridge diagnostics. Show the saved path after export. Surface actionable errors
+in place (for example, "Keys input unavailable" or "Project could not be saved").
 
 ### Per-song playback volume
 
@@ -57,7 +110,8 @@ Physical local/stagebox sourcing and the current USB patch remain unverified.
 ### Recording screen and session lifecycle
 
 1. Cue a song and open Recording. Show the song, tempo/key, input availability,
-   recording destination and any existing unfinished session.
+   remembered selections and any existing unfinished session. Configure the
+   recording destination once in Setup; automatically name sessions and takes.
 2. On first use, offer **Set up recording tracks** using the jam-room input
    template and [initial X32 setup guide](RECORDING_SETUP.md). Create and name
    the dedicated recording tracks automatically, with their mono/stereo inputs
@@ -75,7 +129,9 @@ Physical local/stagebox sourcing and the current USB patch remain unverified.
 5. Audition a selected pass with independent original-stem and recorded-instrument
    mute controls. Only the selected pass plays by default. Recording mutes and
    rehearsal backing choices are distinct and restored when leaving audition.
-6. Save as recording project exports the chosen session's passes plus ALL original
+6. Done keeps the take and returns to rehearsal; changing songs does not require
+   export or a discard decision. The song's takes remain available on returning.
+   **Save project** exports the chosen session's kept passes plus ALL original
    stems, including currently muted stems, to a new self-contained project folder.
    Present the result/path and make opening the new project an explicit action.
 
@@ -89,8 +145,8 @@ Physical local/stagebox sourcing and the current USB patch remain unverified.
   physical socket/stagebox, X32 channel, USB input, mono/stereo pairing and
   instrument name. Do not infer live inputs from the backing-return slot map.
 - Create one named recording track for each mono source or confirmed stereo
-  pair, beneath a Recording folder. A multi-mic instrument has separate tracks
-  for each mic, with an optional group arm control (for example, Drums).
+  pair, beneath a Recording folder. Use the supplied EAD10 stereo pair directly;
+  no drum-mic grouping UI is needed for this rig.
 - Track names follow `REC <instrument/mic>`; users see just the friendly name.
   Stable internal tags identify ownership independently of later renaming.
   Store the edited rig template in project state so all tablets see the same map.
@@ -99,6 +155,11 @@ Physical local/stagebox sourcing and the current USB patch remain unverified.
   unavailable inputs rather than silently assigning a different input.
 - Keep the input assignments fixed between songs. Starting a take snapshots the
   armed inputs, names and format so later setup edits cannot reinterpret old takes.
+- Remember the selected instruments between visits and songs. Distinguish that
+  saved selection from confirmed REAPER arm state: setup/restart must not silently
+  arm inputs. Reapply the selection when entering Ready, then confirm native arm
+  state before Record. Restore managed arm/monitoring state when leaving recording
+  mode after Stop. Never change unrelated user tracks silently.
 - Verify each input with a meter before the first take. Keep REAPER software input
   monitoring off by default when the X32 provides the live monitor mix. Route
   recorded playback to the intended existing instrument return buses through an
@@ -119,7 +180,7 @@ Take 03 · 3:42 · 6 instruments                     Saved in session
 
 [ Keep & record another ]       [ Discard & re-record ]
 
-[ Finish recording ]            [ ☆ Mark favourite ]
+[ Done ]
 ```
 
 This is an inline screen, not a modal covering the controls. Show “Finishing
@@ -133,14 +194,15 @@ save failures while retaining the captured media and allowing a save retry.
 | Listen | Play this pass from its start with current backing/recording audition choices. Stop listening returns to the same review card. |
 | Keep & record another | Retain this pass, return to the song's recording start, run the selected count-in and start the next take using the same armed inputs. |
 | Discard & re-record | Mark only this latest pass discarded, remove it from normal audition/export selection, return to the same start and begin again with the same count-in and armed inputs. |
-| Finish recording | Keep the pass and return to the session's take list, where it can be auditioned or exported later. |
-| Mark favourite | Add an optional star to help choose between retained takes; it does not discard or mute other material by itself. |
+| Done | Keep the pass and return to rehearsal. Takes remain accessible from Recording, without requiring export. |
 
 Use a prominent filled Keep button and a separate, clearly labelled outlined
 Discard button, both with generous touch targets. Keep their positions fixed.
 Do not auto-start a new take on Stop, show a routine confirmation dialog, or
 require naming each take. Assign monotonically increasing take numbers, even
-after discarding; optional notes and names are available in the take list.
+after discarding. Optional names and a small favourite star live in the take
+list, rather than adding another decision to the post-stop card. Omit a separate
+notes editor from the first release.
 
 Discard is reversible within the session: retain its files and item metadata,
 with **Restore discarded take** available after stopping. Do not use REAPER's
@@ -167,6 +229,9 @@ whole-band take selection and recoverable discard are our design choices.
 
 ### Export, recovery and transport integration
 
+The following is implementation responsibility, not another set of controls or
+steps the musician must manage.
+
 - Save session identity, owned track/item GUIDs, pass boundaries, source files and
   export progress in persistent project state. Recover an unfinished session after
   restart; do not infer ownership merely from an item's position or track name.
@@ -174,6 +239,16 @@ whole-band take selection and recoverable discard are our design choices.
   one idempotent bridge command: apply the decision to its identified latest
   pass, then start at most one new take. Duplicate taps or another tablet must
   not discard an older pass or start multiple recordings.
+- Keep musical stem volume, key processing and rehearsal bus mutes from changing
+  recording tracks. Recorded audition may share hardware destinations with stems,
+  so its independent mute controls must operate before any shared bus that would
+  silence both. Save/restore audition overrides when returning to rehearsal; do
+  not overwrite the user's normal backing choices. Verify the actual routing
+  rather than adding another full mixer UI to compensate for it.
+- Use one tempo/key/playrate setting per recording session once its first pass
+  starts. Show it in the song summary; changing it deliberately starts a new
+  session with the old takes retained. This avoids silently retiming recorded
+  performances or exporting incompatible passes on one backing timeline.
 - Copy media first. Build the destination project in a separate project instance,
   retaining track routing/FX, take offsets/rates, and the tempo/key/playrate needed
   for the recorded audio to line up with the backing. Rebase the song to zero.
@@ -189,6 +264,10 @@ whole-band take selection and recoverable discard are our design choices.
 - While recording, suppress normal song chaining, skip/loop jumps, automatic cues
   and seek commands. Stop at the session/song boundary rather than recording into
   another song; do not impose rehearsal auto-stop behavior on count-in or audition.
+- Opening exported work must not let the background bridges reset its playrate,
+  pitch or mutes. Distinguish rehearsal projects from exported recording projects.
+  Retained raw files and recovery data are managed behind the scenes; storage
+  cleanup is an explicit maintenance action, not a recurring post-take prompt.
 - Detect native REAPER stop/project changes and disconnections; never show an
   optimistic recording light. Ordinary performance and recording remain local and
   do not depend on the optional importer server being available.
@@ -198,7 +277,7 @@ save/state functions. Exact count-in/pause and media-copy behavior still require
 scratch-project proof before the feature is considered supported:
 [official ReaScript API](https://www.reaper.fm/sdk/reascript/reascripthelp.html).
 
-### Implementation checkpoints after approval
+### Implementation checkpoints
 
 1. Verify physical source/USB routing against the supplied live input list and
    the initial X32 setup guide. Prove volume persistence/import interactions and recording count-in,
@@ -210,3 +289,19 @@ scratch-project proof before the feature is considered supported:
 5. Test two simultaneous tablets, normal playback regressions, restart recovery,
    discard/restore, repeated retries, changed arm selections and actual multichannel
    audio capture. Publish through the standard update branch.
+
+### Usability acceptance checks
+
+- With the rig configured, a musician can start from a cued song without entering
+  a filename, reopening Setup or reselecting every input.
+- Stop never discards a take. Both retry actions require one deliberate tap and
+  reuse the input/count-in selection; duplicate taps cannot start a second pass.
+- Done allows the next song immediately after the current take is safely saved.
+  Coming back later finds it without browsing REAPER files or exporting first.
+- Review can switch whole takes and independently mute backing/recorded parts;
+  it never stacks older passes or leaks its mute choices into rehearsal.
+- A tablet reload, native REAPER Stop or second tablet cannot invent recording
+  state, lose the latest take, or operate on the wrong song/session.
+- The exported project opens with all kept passes aligned to the original stems,
+  sensible named tracks and exactly one selected pass audible. Native REAPER can
+  then handle editing and mixing without requiring the ReaSet browser.

@@ -1,7 +1,8 @@
 # Initial recording setup — proposed template
 
-Recording is still being designed. This guide defines the setup to ship with
-the feature; no recording tracks have been created by this documentation update.
+The recording direction is approved; implementation is still pending. This guide
+defines the setup to ship with the feature; no recording tracks have been created
+by this documentation update.
 
 ## Confirmed live input list and default recording tracks
 
@@ -34,6 +35,9 @@ remain independent; the list does not designate a lead/backing vocal split.
 Create Utility Mic and Spare 1–4 as well, with those rows in an expandable
 Additional inputs group. Initial setup leaves every track disarmed; musicians
 select the instruments for a take and subsequent takes reuse that selection.
+Remember those selections across songs and visits; show confirmed REAPER arm
+state when entering the recording screen. The one-time setup stays separate from
+the everyday Record / Stop / Listen / retry controls.
 
 The channel list does not confirm the physical source sockets (local versus
 AES50 stagebox), expansion-card model or current USB patch. Use the local-input
