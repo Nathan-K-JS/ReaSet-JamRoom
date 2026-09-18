@@ -22,6 +22,11 @@ call "%~dp0tools\deploy_reaset.bat"
 echo.
 echo ============================================
 echo  Setup finished.
+echo  Recording tracks are created automatically in REAPER:
+echo  open and save your Jam Room setlist, stop playback, and run
+echo  Requirements\ReaSet_Startup.lua ^(normally your startup action^).
+echo  Then check the X32 input meters using docs\RECORDING_SETUP.md.
+echo.
 echo  Next: double-click "JamRoom Importer.bat".
 echo  (It will ask for your Fadr API key the first time.)
 echo ============================================

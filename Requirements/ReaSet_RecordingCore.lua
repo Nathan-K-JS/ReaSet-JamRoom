@@ -152,8 +152,24 @@ function M.new()
         reaper.SetMediaTrackInfo_Value(tr,'I_RECARM',0)
       end
     end
+    reaper.SetProjExtState(0,'ReaSetRec','templateSetup','1')
     reaper.TrackList_AdjustWindows(false);self:save(true)
     self.message='Recording tracks ready. Select instruments and check input meters.'
+  end
+  function self:auto_setup()
+    if not self.root or self.mode~='idle' or self.db.active or reaper.GetPlayState()~=0 then return false end
+    local _,done=reaper.GetProjExtState(0,'ReaSetRec','templateSetup')
+    local _,exported=reaper.GetProjExtState(0,'ReaSet','recordingProject')
+    if done=='1' or exported=='1' then return false end
+    -- Recognize the existing Jam Room bus layout, not an arbitrary open RPP.
+    local found={}
+    for i=0,reaper.CountTracks(0)-1 do
+      local _,name=reaper.GetTrackName(reaper.GetTrack(0,i));found[name]=true
+    end
+    if not (found['PB DRUMS'] and found['PB CLICK']) then return false end
+    self:setup()
+    self.message='Recording tracks created and saved. Check the X32 inputs, then select instruments to record.'
+    return true
   end
   function self:arm()
     local tracks=M.tracks();local count=0

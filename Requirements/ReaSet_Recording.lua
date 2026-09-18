@@ -38,8 +38,8 @@ local function tick()
   if now<next_tick then reaper.defer(tick);return end
   next_tick=now+.1
   reaper.SetExtState(SEC,'heartbeat',tostring(now),false)
-  local project=reaper.EnumProjects(-1,'')
-  if project~=owner then
+  local project,path=reaper.EnumProjects(-1,'')
+  if project~=owner or (controller and path~=controller.projectfile) then
     pcall(leave);controller=nil;owner=project;last_csc=-1
     reaper.SetExtState(SEC,'want','',false)
   end
@@ -51,6 +51,7 @@ local function tick()
   end
   local ok,why=xpcall(function()
     if not controller then controller=M.new()end
+    controller:auto_setup()
     if reaper.GetProjectStateChangeCount(0)~=last_csc and not controller.db.active then
       M.P.reconcile();last_csc=reaper.GetProjectStateChangeCount(0)
     end

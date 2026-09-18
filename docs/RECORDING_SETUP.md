@@ -1,8 +1,16 @@
 # Initial recording setup
 
-The Record tab creates the track template below. Run the updated
-`Requirements/ReaSet_Startup.lua` in REAPER first; it starts the recording/volume
-controller. REAPER 7 with SWS is required. Save the setlist project before setup.
+The recording controller automatically creates and saves the track template below
+once per saved Jam Room setlist. Run the updated `Requirements/ReaSet_Startup.lua`
+in REAPER (normally your startup action), open the setlist, and stop playback.
+There is no separate track-creation step. REAPER 7 with SWS is required.
+
+Automatic setup recognizes the existing `PB DRUMS` and `PB CLICK` buses, waits
+until the project is saved and recording/review is idle, and leaves other projects
+alone. If you save a new project after starting REAPER, setup picks it up then.
+It creates missing template tracks without changing existing recording routing or
+levels. Subsequent starts do not recreate tracks you intentionally removed;
+Record > Setup > Create missing tracks remains available for that.
 
 ## Confirmed live input list and default recording tracks
 
@@ -65,9 +73,12 @@ against the actual stagebox wiring before following the mapping below.
    and expose inputs 1–16 (or the larger required range). Retain the playback
    outputs already used by the jam-room project. Confirm the device and project
    sample-rate settings agree.
-5. In ReaSet Recording → Setup, use **Set up recording tracks**. The
-   default template creates `REC <instrument/mic>` tracks with named inputs
-   and mono/stereo assignments. Repeating setup does not duplicate tracks.
+5. Open the saved Jam Room setlist with the updated startup controller running,
+   and stop playback. The controller creates and saves the **Recording** folder
+   and all 14 named tracks automatically, with mono/stereo inputs assigned and
+   software monitoring off. Open Record and select the instruments to check.
+   If using a custom bus layout, **Set up recording tracks** is still available
+   manually; repeating it does not duplicate owned tracks.
 6. Play each instrument separately and check the matching X32 and ReaSet input
    meters. Adjust the source/preamp gain to avoid clipping. For stereo sources,
    check left and right separately. Use X32 monitoring, with REAPER software

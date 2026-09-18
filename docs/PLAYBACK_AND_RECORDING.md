@@ -64,8 +64,9 @@ takes. The result path and **Open in REAPER** button remain in Saved recordings.
    If Record reports the controller unavailable, run that file from the REAPER
    action list. A previously copied standalone startup file may need updating.
 2. Follow [Recording setup](RECORDING_SETUP.md) once to verify X32 inputs and
-   REAPER output returns. In Record, choose **Set up recording tracks**, then
-   select instruments. Setup can create missing tracks without duplicating them.
+   REAPER output returns. The controller automatically creates and saves the
+   recording template once the saved Jam Room project is stopped. Open Record
+   and select instruments. Setup can still create missing tracks manually.
 3. Cue a song, Record, and Stop. The take is already saved; export can wait.
    Use Done to move on, or Listen / Keep another / Discard & re-record.
 
@@ -201,7 +202,8 @@ in place (for example, "Keys input unavailable" or "Project could not be saved")
 
 1. Cue a song and open Recording. Show the song, tempo/key, input availability,
    remembered selections and any existing unfinished session. Save the setlist in its intended location; sessions and takes are named automatically.
-2. On first use, offer **Set up recording tracks** using the jam-room input
+2. On first use, automatically create the recording tracks in a saved, stopped
+   Jam Room project (with a manual setup fallback), using the jam-room input
    template and [initial X32 setup guide](RECORDING_SETUP.md). Create and name
    the dedicated recording tracks automatically, with their mono/stereo inputs
    already assigned. Reuse these tracks on subsequent visits. Show instrument
