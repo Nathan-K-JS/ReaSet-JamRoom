@@ -2,12 +2,47 @@
 import tempfile
 import unittest
 from pathlib import Path
-from unittest.mock import Mock, patch
+from unittest.mock import Mock, MagicMock, patch
 import jamroom_import as ji
 import jamroom_importer_server as server
 
 
 class AudioUploadTests(unittest.TestCase):
+    def test_download_resumes_after_restart_and_expired_url_then_reuses_completion(self):
+        with tempfile.TemporaryDirectory() as td:
+            dest = Path(td)/'bass.wav'
+            dest.with_name('bass.wav.part').write_bytes(b'first')
+            dest.with_name('bass.wav.part.asset').write_text('asset')
+            stale = MagicMock(status_code=403, headers={})
+            stale.__enter__.return_value = stale
+            fresh = MagicMock(status_code=206, headers={'Content-Length':'4', 'Content-Range':'bytes 5-8/9'})
+            fresh.__enter__.return_value = fresh
+            fresh.iter_content.return_value = [b'last']
+            fadr = ji.Fadr('test')
+            fadr.s = Mock()
+            fadr.s.get.return_value = Mock(status_code=200, json=lambda:{'url':'https://download.invalid'})
+            with patch.object(ji.requests, 'get', side_effect=[stale, fresh]) as download, patch.object(ji.time, 'sleep'):
+                fadr.download('asset', dest)
+                self.assertEqual(dest.read_bytes(), b'firstlast')
+                self.assertEqual(download.call_count, 2)
+                self.assertEqual(download.call_args.kwargs['headers'], {'Range':'bytes=5-'})
+                fadr.download('asset', dest)
+                self.assertEqual(download.call_count, 2)
+
+    def test_download_restarts_incomplete_file_when_range_is_ignored(self):
+        with tempfile.TemporaryDirectory() as td:
+            dest = Path(td)/'bass.wav'
+            dest.with_name('bass.wav.part').write_bytes(b'old')
+            dest.with_name('bass.wav.part.asset').write_text('asset')
+            response = MagicMock(status_code=200, headers={'Content-Length':'3'})
+            response.__enter__.return_value = response
+            response.iter_content.return_value = [b'new']
+            fadr = ji.Fadr('test'); fadr.s = Mock()
+            fadr.s.get.return_value = Mock(status_code=200, json=lambda:{'url':'https://download.invalid'})
+            with patch.object(ji.requests, 'get', return_value=response):
+                fadr.download('asset', dest)
+            self.assertEqual(dest.read_bytes(), b'new')
+
     def test_upload_metadata_matches_actual_extension(self):
         for extension,mime in [('m4a','audio/mp4'),('wav','audio/wav'),('mp3','audio/mpeg')]:
             with self.subTest(extension=extension),tempfile.TemporaryDirectory() as td:

@@ -6,7 +6,7 @@ LAN, so the tablet can use it too — same trust model as REAPER's own web
 interface). Flow: search YouTube -> pick match -> download + Fadr split +
 lyrics fetch -> REVIEW screen (listen to each stem in the browser, choose its
 Jam Room slot, confirm/adjust the lyric timing offset) -> apply to REAPER.
-All heavy lifting reuses jamroom_import.py's stages; one import at a time.
+Heavy lifting reuses jamroom_import.py's stages through durable queued workspaces.
 
 Part of ReaSet Jam Room. GPL v3, same as the repo.
 """
@@ -230,7 +230,7 @@ def build_review(job, job_dir, cfg):
                 "plain": bool(ly.get("plain")),
                 "first_time": first["time"] if first else None,
                 "first_text": first["text"] if first else "",
-                "suggested_offset": align.get("shift", 0.0) or 0.0,
+                "suggested_offset": ly.get("offset_override", align.get("shift", 0.0)) or 0.0,
                 "align_note": (
                     f"Audio analysis: best match at {align.get('offset', 0):+.2f}s"
                     if align else "Audio analysis unavailable"),
@@ -1181,7 +1181,10 @@ class Handler(BaseHTTPRequestHandler):
             if QUEUE is not None and self.path in ('/api/delete_song', '/api/rechord', '/api/relyric'):
                 QUEUE.protect([body.get('name')])
             if QUEUE is not None and self.path == '/api/updates/start':
-                chosen = {str(i) for i in body.get('ids', [])}
+                chosen = {str(i) for i in (body.get('ids') or [])}
+                if body.get('resume'):
+                    batch = UPDATES.listing().get('batch') or {}
+                    chosen.update(str(song['id']) for song in batch.get('songs', []))
                 QUEUE.protect([song['name'] for song in project_songs() if str(song['id']) in chosen])
             if self.path == "/api/updates/start":
                 self._send(200, {"id": UPDATES.start(body.get("ids"),

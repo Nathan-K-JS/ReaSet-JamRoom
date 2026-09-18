@@ -38,6 +38,7 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('song', type=Path)
     parser.add_argument('--candidate',type=Path,help='Audited proposed job; audio stays in the song cache')
+    parser.add_argument('--queue-guards', action='store_true', help='Check operation receipts, duplicate Apply and wrong-project rejection')
     parser.add_argument('--click-library-check', action='store_true',
                         help='Use the real importer UI to add clicks to the scratch library; requires an idle importer')
     parser.add_argument('--apply-script', type=Path, default=ROOT / 'tools/jamroom_import_apply.lua',
@@ -136,7 +137,9 @@ local function run()
       local f=io.open(folder..'/request.json','r')
       if f then
         local request=J.decode(f:read('*a'));f:close();os.remove(folder..'/request.json')
-        if request.inspect then
+        if request.counts then
+          write('response.json',{items=reaper.CountMediaItems(0),regions=reaper.CountProjectMarkers(0),tracks=reaper.CountTracks(0)})
+        elseif request.inspect then
           local items=J.array()
           for i=0,reaper.CountMediaItems(0)-1 do
             local it=reaper.GetMediaItem(0,i);local _,owned=reaper.GetSetMediaItemInfo_String(it,'P_EXT:ReaSetClick','',false)
@@ -183,12 +186,20 @@ if not ok then write('error.json',{error=tostring(why)})end
         pending=folder/'request.tmp';pending.write_text(json.dumps({'inspect':True}));pending.replace(folder/'request.json')
         return wait_file(folder/'response.json')['items']
 
+    def counts():
+        (folder/'response.json').unlink(missing_ok=True)
+        pending=folder/'request.tmp';pending.write_text(json.dumps({'counts':True}));pending.replace(folder/'request.json')
+        return wait_file(folder/'response.json')
+
     try:
         ready = wait_file(folder / 'ready.json')
         probe('native before import', ready['existing'])
         for n in (1, 2):
             job = copy.deepcopy(cached)
             job['region_name'] = 'Append playback check ' + str(n)
+            if args.queue_guards:
+                job['import_operation'] = 'playback-check-' + str(n)
+                job['target_project'] = web('GET/PROJEXTSTATE/ReaSet/projectId').strip().split('\t')[3]
             # First pass adds named buses; second pass reuses those buses.
             for slot in job.get('slots', []):
                 slot['label'] += ' playback check'
@@ -206,6 +217,23 @@ if not ok then write('error.json',{error=tostring(why)})end
             receipt = (folder / 'applied.txt').read_text(encoding='utf-8')
             position = float(re.search(r' pos=([\d.]+)', receipt)[1]) + 30
             assert 'stems=0' not in receipt and 'SKIPPED:' not in receipt, receipt
+            if args.queue_guards:
+                before_counts = counts()
+                (folder/'applied.txt').unlink()
+                (folder/'tools/jamroom_pending_job.txt').write_text(folder.as_posix())
+                web(ready['command'])
+                assert (folder/'applied.txt').exists(), web('GET/EXTSTATE/ReaSetJR/importer')
+                assert (folder/'applied.txt').read_text().startswith('Already applied:')
+                assert counts() == before_counts, 'Retry duplicated project content'
+                (folder/'applied.txt').unlink()
+                generated.write_text(content.replace(importer.lua_quote(job['target_project']), '"wrong-project"'), encoding='utf-8')
+                (folder/'tools/jamroom_pending_job.txt').write_text(folder.as_posix())
+                web(ready['command'])
+                assert not (folder/'applied.txt').exists(), 'Wrong project was accepted'
+                assert counts() == before_counts, 'Wrong target mutated the project'
+                generated.write_text(content, encoding='utf-8')
+                (folder/'applied.txt').write_text(receipt, encoding='utf-8')
+                checks.append({'check':'Queue duplicate Apply and wrong-project guards', 'pass':True})
             probe('native existing song after import ' + str(n), ready['existing'])
             probe('native appended song ' + str(n), position)
             if args.candidate:

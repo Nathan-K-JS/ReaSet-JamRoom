@@ -1,7 +1,58 @@
-# Import queue and restart recovery proposal
+# Import queue and restart recovery
 
-Status: investigated and proposed; not implemented. This is a separate change
-from the delivered playback/recording work.
+Status: implemented in importer **v3.6** (18 September 2026). The approved design
+and investigation are preserved below; this section describes the released controls.
+
+## Using the queue
+
+Run `JamRoom Update.bat`, close the old importer process, then launch
+`JamRoom Importer.bat` and reload its page. The badge should show **v3.6**.
+
+- **Your imports** lists unfinished songs. Select a song to open its progress or
+  review. **Add song** remains available while other songs are processing.
+- Stem routing, skipped stems, individual labels, lyric offset and chart/lyrics
+  search fields autosave. Wait for **Saved**. Chosen lyrics and charts are saved
+  too. Switching songs flushes pending edits first.
+- Closing the browser leaves processing running. After stopping the importer or
+  rebooting, reopen a saved review directly, or choose **Resume unfinished**.
+  Startup never submits new paid work automatically. Existing caches appear in
+  **Completed and cached songs**; they are not assumed to be unfinished imports.
+- **Pause / continue queue** stops at stage boundaries. Already accepted remote
+  tasks may continue. Queued songs also have **Move first** and **Pause** controls.
+  **Remove** hides the workspace but keeps its files; the Song library can reopen it.
+  A workspace with an unresolved Fadr task must be checked first, because hiding
+  it would leave a potentially running task blocking the remote processing budget.
+- Apply each reviewed song explicitly. Its target project is shown beside Apply;
+  **Use open REAPER project** deliberately changes that target before applying.
+  Finish recording/playback first. Save the REAPER project after a successful Apply.
+- An interrupted Apply uses **Check Apply** or **Check / retry Apply**. It keeps
+  the same operation ID and freezes its review until reconciled, so a retry cannot
+  overwrite audio or append the song twice. **Review / re-add** on a completed job
+  starts a fresh operation with explicit project selection.
+- If another browser changed the same review, the unsaved draft stays on screen
+  with an error. **Reload saved review** explicitly discards that browser's unsaved
+  changes; **Retry saving** is for transient connection failures.
+- A different recording of the same song needs a distinct title, such as
+  `Song (live)`. It gets separate cached files instead of overwriting the first version.
+
+Two preparation workers share four transfers, one Fadr task and one local
+analysis worker. This overlaps source downloads, stem work and review; it does
+not claim to make Fadr itself faster. Two simultaneous Fadr tasks remain disabled
+until account behavior is validated with deliberately queued songs.
+
+The local `imports/import-queue.json` journal includes a previous checkpoint;
+per-song `job.json` files also keep a previous copy. No API key is copied into the
+queue. Interrupted stem downloads retain their partial files, refresh signed
+URLs and reuse completed transfers. Upload and task intent are written before
+submission, and returned asset/task IDs before polling. If acceptance is unknown,
+the job stops with **needs checking** rather than repeating a possibly paid request.
+
+Validation: automated restart/draft/conflict/worker-isolation and provider recovery
+tests, a real Edge browser against the HTTP server, and native plus ReaSet playback
+in a scratch copy of the populated REAPER library. The live test also repeats Apply
+and requests the wrong target project, checks unchanged item/region/track counts,
+and verifies that the original library remains unchanged. No paid Fadr submissions
+were made for testing.
 
 ## Recommendation
 
@@ -161,5 +212,8 @@ REAPER recording, and one failed song while another succeeds. Tests must prove
 that review drafts survive, task IDs are reused, files/logs do not cross songs,
 and an uncertain Apply or Fadr submission cannot silently duplicate work.
 
-Approval of this proposal is the next step before the substantial importer
-refactor, following the repository's plan-before-build instruction.
+The proposal was approved before implementation. Implementation lives in
+`tools/jamroom_import_queue.py`, `tools/importer-queue.js`, and the existing
+importer/REAPER bridge. Run `python -m unittest discover -p "test_*.py"` from
+`tools`, plus `python tools/verify_import_playback.py "imports/Lenny Kravitz - Fly Away"
+--queue-guards` from the repository root for the scratch-project integration check.

@@ -70,7 +70,7 @@ window.ImportJobs = (function(){
     if(dirty) await flush();
   }
   function edited(){
-    if(!selected || !detail || detail.state !== 'review' || busy) return;
+    if(!selected || !detail || detail.state !== 'review' || detail.apply_started || busy) return;
     dirty = true; version++; saved.textContent = 'Saving...';
     clearTimeout(timer); timer = setTimeout(function(){flush().catch(failure);}, 400);
   }
@@ -87,6 +87,8 @@ window.ImportJobs = (function(){
       resetReviewPanel(); rendered = row.id + ':' + row.state;
     }
     $('applyBtn').disabled = row.state !== 'review' || busy;
+    $('applyBtn').textContent = row.apply_started ? 'Check / retry Apply' : 'Apply to REAPER';
+    document.querySelectorAll('#reviewCard input,#reviewCard select').forEach(function(node){node.disabled = !!row.apply_started;});
   }
   async function select(id){
     if(busy) throw new Error('Let the current review change finish first.');
@@ -137,6 +139,10 @@ window.ImportJobs = (function(){
           await request('/' + row.id + '/resume', {}); await refresh();
         }, line);
       }
+      if(row.state === 'queued'){
+        button('Move first', async function(){await request('/' + row.id + '/first', {}); await refresh();}, line);
+        button('Pause', async function(){await request('/' + row.id + '/pause', {}); await refresh();}, line);
+      }
       if(row.state === 'done') button('Review / re-add', async function(){
         await select(row.id); await request('/' + row.id + '/reopen', {revision:detail.revision});
         await refresh();
@@ -180,16 +186,20 @@ window.ImportJobs = (function(){
           allow_new_splits:g_libPicked.subsplits_done >= 2 || $('allowSplits').checked});
       } else { if(!picked) return; body.url = picked.url; }
       $('importBtn').disabled = true;
+      var previous = selected;
       var result = await request('', body);
       $('confirmCard').classList.add('hide');
-      await refresh(); await select(result.id);
+      await refresh();
+      if(!previous) await select(result.id);
+      else message.textContent = body.band + ' - ' + body.title + ' is in your import list. Your current review is still open.';
     } catch(error){failure(error);}
     finally {$('importBtn').disabled = false; setPipelineActive(false);}
   };
   api.cached = async function(name){
     try {
       var row = rows.find(function(r){return r.song === name;});
-      if(!row) throw new Error('Reopen the importer to discover this cached song.');
+      if(!row){var restored = await request('/control', {open_cached:name}); await refresh(); row = rows.find(function(r){return r.id === restored.id;});}
+      if(!row) throw new Error('Cached song is not available.');
       await select(row.id);
       if(row.state === 'cached') {await request('/' + row.id + '/resume', {}); await refresh();}
     } catch(error){failure(error);}
@@ -198,7 +208,7 @@ window.ImportJobs = (function(){
     try {
       if(busy || !selected) return;
       // Save the initial default choices too, even when no control was edited.
-      if(detail.state === 'review'){dirty = true; version++; await flush();}
+      if(detail.state === 'review' && !detail.apply_started){dirty = true; version++; await flush();}
       await request('/' + selected + '/apply', {revision:detail.revision});
       rendered = ''; await refresh();
     } catch(error){failure(error);}
@@ -243,6 +253,11 @@ window.ImportJobs = (function(){
       detail.revision = result.revision; detail.target = result.target; renderDetail(detail);
     }, bar);
     button('Retry saving', flush, bar);
+    button('Reload saved review', async function(){
+      if(saving) {try {await saving;} catch(error){/* Keep the local draft until the choice below. */}}
+      if(dirty && !confirm('Discard the unsaved edits in this browser and reload the saved review?')) return;
+      dirty = false; clearTimeout(timer); await select(selected);
+    }, bar);
     document.querySelectorAll('#reviewCard button').forEach(function(b){
       if(b.getAttribute('onclick') === 'doCancel()') b.textContent = 'Close review — keep for later';
     });

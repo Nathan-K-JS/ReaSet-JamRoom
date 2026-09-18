@@ -160,6 +160,27 @@ class QueueTests(unittest.TestCase):
             fadr.stem_task.assert_not_called()
         finally:ji.JOB_PAUSE.reset(token)
 
+    def test_unresolved_remote_task_keeps_budget_after_worker_exit(self):
+        first, second = self.add('One'), self.add('Two')
+        folder = self.queue.folder(first); job = ji.load_job(folder)
+        job['fadr_tasks'] = {'asset:main':{'id':'task', 'state':'waiting'}}
+        ji.save_job(folder, job)
+        self.queue.jobs[first]['state'] = 'failed'
+        with self.assertRaisesRegex(RuntimeError, 'may still be running'):
+            self.queue.check_remote_work(second)
+        with self.assertRaises(Conflict):self.queue.action(first, 'remove', {})
+        self.queue.check_remote_work(first)  # Its own task can be reconciled.
+
+    def test_apply_started_freezes_review_media_choices(self):
+        ident = self.add(); row = self.review(ident); row['apply_started'] = True
+        with self.assertRaises(Conflict):self.queue.draft(ident, {'revision':0, 'draft':{}})
+
+    def test_removed_workspace_can_be_reopened_from_library(self):
+        ident = self.add(); self.review(ident)
+        self.queue.action(ident, 'remove', {})
+        self.assertEqual(self.queue.control({'open_cached':'Band - Song'})['id'], ident)
+        self.assertEqual(self.queue.jobs[ident]['state'], 'review')
+
     def test_browser_switch_autosave_reload_and_conflicting_editor(self):
         from playwright.sync_api import sync_playwright
         from test_browser import EDGE

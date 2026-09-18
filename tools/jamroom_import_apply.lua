@@ -179,7 +179,8 @@ do
 end
 
 -- Refuse a duplicate import: a region with this exact name already exists.
-do
+-- Queued imports reconcile their operation receipt below before this decision.
+if not job.import_operation or job.import_operation == '' then
     local i = 0
     while true do
         local ok, isrgn, _, _, name = reaper.EnumProjectMarkers2(0, i)
@@ -231,7 +232,11 @@ if operation ~= '' then
         while rid do
             local ok, isrgn, _, _, name, id = reaper.EnumProjectMarkers2(0,i)
             if ok == 0 then break end
-            if isrgn and id == rid and name == job.region_name then found = true break end
+            if isrgn and id == rid and name == job.region_name then
+                local _, owner = reaper.GetProjExtState(0,'ReaSetSong','song:'..id..':import_operation')
+                found = owner == operation
+                break
+            end
             i = i + 1
         end
         if not found then return fail('Previous Apply is unresolved or its region was changed; inspect the project before continuing') end
@@ -365,7 +370,10 @@ reaper.PreventUIRefresh(-1)
 -- append import into an existing library (reproduced in REAPER 7.75).
 reaper.TrackList_AdjustWindows(false)
 reaper.UpdateArrange()
-if operation ~= '' then reaper.SetProjExtState(0,'ReaSetImport',operation,tostring(song_id)) end
+if operation ~= '' then
+    reaper.SetProjExtState(0,'ReaSetSong','song:'..song_id..':import_operation',operation)
+    reaper.SetProjExtState(0,'ReaSetImport',operation,tostring(song_id))
+end
 reaper.Undo_EndBlock("JR import: " .. job.region_name, -1)
 
 -- ─── Report (console + applied.txt + extstate; never modal) ──────────────────

@@ -132,8 +132,12 @@ class ImportQueue:
             if self.server.STATE['state'] in self.server.ACTIVE_STATES:
                 raise Conflict('Finish the import started by the previous interface first.')
             for row in self.jobs.values():
-                if row['song'] == name and row['state'] != 'removed':
+                if row['song'] == name:
                     if row.get('url') == url and row.get('asset') == asset:
+                        if row['state'] == 'removed':
+                            row['state'] = row.pop('removed_state', 'cached')
+                            self._save()
+                            self.schedule()
                         return {'ok': True, 'id': row['id']}
                     raise Conflict('A different recording already uses this title. Give this version a distinct song title.')
             try:
@@ -192,14 +196,17 @@ class ImportQueue:
         row = self.jobs[ident]
         token = ji.JOB_LOG.set(lambda msg: self.log(ident, msg))
         pause_token = ji.JOB_PAUSE.set(lambda: self.paused)
+        submit_token = ji.JOB_SUBMIT.set(lambda: self.check_remote_work(ident))
         try:
             folder = self.folder(ident)
             job, cfg = ji.load_job(folder), self.config(row)
             # Completed source/stem flags alone are not proof the files survived.
-            stems_valid = bool(job.get('stems')) and all((folder / stem['file']).is_file() for stem in job['stems'])
+            stems_valid = bool(job.get('stems')) and all(
+                (folder / stem['file']).is_file() and (folder / stem['file']).stat().st_size > 44
+                for stem in job['stems'])
             if not row.get('asset') and not stems_valid and not (folder / job.get('source', {}).get('audio_file', 'source.wav')).is_file():
                 job['stages'].pop('download', None)
-            if any(not (folder / stem['file']).is_file() for stem in job.get('stems', [])):
+            if not stems_valid:
                 job['stages'].pop('fadr', None)
             stages = [
                 ('Downloading source', lambda: ji.stage_download(job, folder, row['url'], False), ji.DOWNLOAD_BUDGET),
@@ -214,6 +221,7 @@ class ImportQueue:
                     return
                 if lock:
                     with lock:
+                        ji.check_import_pause()
                         action()
                 else:
                     action()
@@ -233,9 +241,22 @@ class ImportQueue:
         finally:
             ji.JOB_LOG.reset(token)
             ji.JOB_PAUSE.reset(pause_token)
+            ji.JOB_SUBMIT.reset(submit_token)
             with self.guard:
                 self.running.discard(ident)
                 self.schedule()
+
+    def check_remote_work(self, ident):
+        # A timed-out/local paused worker does not cancel its provider task.
+        # Keep the remote budget conservative even across process restarts.
+        with self.guard:
+            for other, row in self.jobs.items():
+                if other == ident or row['state'] in ('review', 'done', 'cached'):
+                    continue
+                job = ji.load_job(self.folder(other))
+                if any(task.get('state') != 'complete' for task in job.get('fadr_tasks', {}).values()):
+                    raise RuntimeError('Another saved Fadr task may still be running for ' + row['song'] +
+                                       '. Resume/check that song first, then retry this one. No new split was submitted.')
 
     def detail(self, ident):
         with self.guard:
@@ -258,7 +279,7 @@ class ImportQueue:
     def draft(self, ident, body):
         with self.guard:
             row = self.jobs[ident]
-            if row['state'] != 'review':
+            if row['state'] != 'review' or row.get('apply_started'):
                 raise Conflict('This job is not ready for review')
             if body.get('revision') != row['revision']:
                 raise Conflict('This review changed in another browser. Reopen it before editing.')
@@ -278,7 +299,7 @@ class ImportQueue:
     def choose(self, ident, action, body):
         with self.guard:
             row = self.jobs[ident]
-            if row['state'] != 'review' or body.get('revision') != row['revision']:
+            if row['state'] != 'review' or row.get('apply_started') or body.get('revision') != row['revision']:
                 raise Conflict('This review changed or is busy. Reopen it before continuing.')
             row['state'] = 'editing'
             self._save()
@@ -313,7 +334,21 @@ class ImportQueue:
     def action(self, ident, action, body):
         with self.guard:
             row = self.jobs[ident]
+            if action == 'pause':
+                if row['state'] != 'queued':
+                    raise Conflict('Only a queued song can be paused individually. Use Pause queue for active work.')
+                row['state'] = 'paused'
+                self._save()
+                return {'ok': True}
+            if action == 'first':
+                if row['state'] != 'queued':
+                    raise Conflict('This song is no longer queued')
+                self.jobs = {ident:row, **{k:v for k,v in self.jobs.items() if k != ident}}
+                self._save()
+                return {'ok': True}
             if action == 'resume':
+                if row['state'] == 'cached' and self.server.BUSY.locked():
+                    raise Conflict('Let the current library change finish before reopening cached work.')
                 if row.get('apply_started'):
                     raise Conflict('This Apply needs checking. Open its target project and use Check Apply.')
                 if row['state'] not in ('failed', 'interrupted', 'paused', 'cached'):
@@ -325,6 +360,11 @@ class ImportQueue:
             if action == 'remove':
                 if ident in self.running or row['state'] in ('applying', 'editing'):
                     raise Conflict('Pause the queue and let this stage finish before removing the song')
+                job = ji.load_job(self.folder(ident))
+                if row['state'] not in ('review', 'done', 'cached') and any(
+                        task.get('state') != 'complete' for task in job.get('fadr_tasks', {}).values()):
+                    raise Conflict('This song has an unresolved Fadr task. Resume/check it before removing its workspace.')
+                row['removed_state'] = row['state']
                 row['state'] = 'removed'
                 self._save()
                 return {'ok': True}
@@ -333,8 +373,10 @@ class ImportQueue:
             if action == 'reopen':
                 if row['state'] != 'done':
                     raise Conflict('Only completed imports can be reopened for another project')
+                if self.server.BUSY.locked():
+                    raise Conflict('Let the current library change finish before reopening this review.')
                 row.update(state='review', target='', operation=uuid.uuid4().hex,
-                           apply_started=False, summary='', revision=row['revision'] + 1)
+                           apply_started=False, apply_prepared=False, summary='', revision=row['revision'] + 1)
                 self._save()
                 return {'ok': True}
             if action == 'target':
@@ -347,15 +389,21 @@ class ImportQueue:
                 self._save()
                 return {'ok': True, 'revision': row['revision'], 'target': row['target']}
             if action == 'apply':
-                if row['state'] not in ('review', 'interrupted'):
+                if row['state'] != 'review' and not (row['state'] == 'interrupted' and row.get('apply_started')):
                     raise Conflict('This job is not ready to apply')
                 if not row['target'] or self.server.project_identity() != row['target']:
                     raise Conflict('Open the intended project, or explicitly select the current project as the target.')
                 if not self.server.BUSY.acquire(blocking=False):
                     raise Conflict('Another REAPER change is running. Try again when it finishes.')
-                row.update(state='applying', apply_started=True)
-                self._save()
-                threading.Thread(target=self.apply, args=(ident,), daemon=True).start()
+                old_state = row['state']
+                try:
+                    row.update(state='applying', apply_started=True)
+                    self._save()
+                    threading.Thread(target=self.apply, args=(ident,), daemon=True).start()
+                except Exception:
+                    row['state'] = old_state
+                    self.server.BUSY.release()
+                    raise
                 return {'ok': True}
             raise ValueError('Unknown job action')
 
@@ -382,9 +430,13 @@ class ImportQueue:
                 job.setdefault('lyrics', {})['offset_override'] = draft['lyrics_offset']
             job.update(import_operation=row['operation'], target_project=row['target'])
             ji.save_job(folder, job)
-            with self.analysis:
-                ji.stage_mixdown(job, folder, cfg, True)
-                ji.write_reaper_job(job, folder)
+            if not row.get('apply_prepared'):
+                with self.analysis:
+                    ji.stage_mixdown(job, folder, cfg, True)
+                    ji.write_reaper_job(job, folder)
+                with self.guard:
+                    row['apply_prepared'] = True
+                    self._save()
             ji.stage_apply(job, folder, cfg, True)
             if not (folder / 'applied.txt').is_file():
                 raise RuntimeError('REAPER did not confirm Apply. Open the intended project, stop playback/recording, then retry. The same operation ID prevents a duplicate append.')
@@ -401,10 +453,19 @@ class ImportQueue:
 
     def control(self, body):
         with self.guard:
-            self.paused = bool(body.get('pause'))
-            if body.get('resume'):
+            if body.get('open_cached'):
                 for row in self.jobs.values():
-                    if row['state'] in ('paused', 'interrupted', 'failed') and not row.get('apply_started'):
+                    if row['song'] == body['open_cached']:
+                        if row['state'] == 'removed':
+                            row['state'] = row.pop('removed_state', 'cached')
+                            self._save()
+                            self.schedule()
+                        return {'id':row['id']}
+                raise ValueError('Cached song not found. Restart the importer to discover new files.')
+            self.paused = bool(body.get('pause'))
+            if not self.paused:
+                for row in self.jobs.values():
+                    if (row['state'] == 'paused' or body.get('resume') and row['state'] in ('interrupted', 'failed')) and not row.get('apply_started'):
                         row['state'] = 'queued'
             self._save()
             self.schedule()

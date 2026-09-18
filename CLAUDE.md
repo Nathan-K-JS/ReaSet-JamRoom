@@ -38,6 +38,12 @@ ancestry first; never force-push or overwrite divergent changes. Pushing only
 `feature/timing-repair` does not deliver an update to standard installations.
 
 Current architecture:
+- v3.6 adds persistent import workspaces, autosaved review and restart recovery;
+  see `docs/IMPORT_QUEUE_AND_RESUME.md`. Queue state lives in
+  `tools/jamroom_import_queue.py`; its browser controller is `tools/importer-queue.js`.
+  One Fadr task at a time, two preparation workers. Never blindly retry an
+  ambiguous paid submission. Queued Apply uses project-side operation receipts;
+  include `--queue-guards` in the live append/playback check for these changes.
 - v3.5 replaces click detection and quality control; see `docs/CLICK_QUALITY.md`.
   Do not restore the Fadr fixed-grid fallback or call an automated timing check
   listening approval. Flagged click items install muted; whole-library click-only

@@ -47,6 +47,7 @@ BUILD_DATE = "2026-09-18"
 DOWNLOAD_WORKERS = 4
 JOB_LOG = contextvars.ContextVar('import_log', default=None)
 JOB_PAUSE = contextvars.ContextVar('import_pause', default=None)
+JOB_SUBMIT = contextvars.ContextVar('import_submit_guard', default=None)
 DOWNLOAD_BUDGET = threading.BoundedSemaphore(4)
 FADR_BUDGET = threading.BoundedSemaphore(1)
 
@@ -635,6 +636,9 @@ def resume_fadr_task(fadr, job, job_dir, asset_id, split_type=None):
         check_import_pause()
         asset = fadr.asset(asset_id)
         if asset.get('stems'):
+            if key in journal:
+                journal[key]['state'] = 'complete'
+                save_job(job_dir, job)
             return asset
         record = journal.get(key)
         if record and not record.get('id'):
@@ -642,6 +646,9 @@ def resume_fadr_task(fadr, job, job_dir, asset_id, split_type=None):
                                'may have been accepted. No replacement task was submitted. '
                                'Wait for its stems, then Resume, or check the Fadr library.')
         if not record:
+            guard = JOB_SUBMIT.get()
+            if guard:
+                guard()
             journal[key] = {'state': 'submitting', 'asset': asset_id, 'time': time.time()}
             save_job(job_dir, job)
             task = fadr.stem_task(asset_id, split_type) if split_type else fadr.stem_task(asset_id)
@@ -679,10 +686,14 @@ def stage_fadr(job, job_dir, cfg, force):
             if a.get("stems"):
                 log(f"Reusing existing Fadr asset {prev_id} (no re-upload).")
                 main_asset = a
+                record = job.get('fadr_tasks', {}).get(str(prev_id) + ':main')
+                if record:
+                    record['state'] = 'complete'
         except SystemExit:
             raise
     if main_asset is None:
         if not prev_id:
+            check_import_pause()
             if job.get('upload_pending'):
                 raise RuntimeError('Fadr upload acknowledgement was lost. Check the Fadr library '
                                    'and import that asset; the upload will not be repeated automatically.')
@@ -2220,7 +2231,12 @@ def stage_mixdown(job, job_dir, cfg, force):
             by_slot.setdefault(s["slot"], []).append(s["file"])
         else:
             log(f"NOTE: stem '{s['fadr_name']}' has no slot mapping — skipped.")
-    slots_dir = job_dir / "slots"
+    # A later review for another project must not overwrite media referenced
+    # by an earlier saved project.
+    slot_prefix = 'slots'
+    if job.get('import_operation'):
+        slot_prefix += '/' + sanitize_filename(job['import_operation'])
+    slots_dir = job_dir / slot_prefix
     labels = cfg["slot_labels"]
     # Musician-facing names chosen in the review UI beat the generic defaults;
     # they become the "[JR:SLOT] Label" bus name ReaSet's mute screen shows.
@@ -2230,8 +2246,8 @@ def stage_mixdown(job, job_dir, cfg, force):
         if len(files) == 1:
             out = files[0]
         else:
-            slots_dir.mkdir(exist_ok=True)
-            out = f"slots/{slot}.wav"
+            slots_dir.mkdir(parents=True, exist_ok=True)
+            out = f"{slot_prefix}/{slot}.wav"
             ffmpeg = shutil.which("ffmpeg") or die("ffmpeg not found on PATH")
             cmd = [ffmpeg, "-y"]
             for f in files:
