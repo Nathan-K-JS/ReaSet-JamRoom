@@ -3,23 +3,44 @@
 Recording is still being designed. This guide defines the setup to ship with
 the feature; no recording tracks have been created by this documentation update.
 
-## Input list needed
+## Confirmed live input list and default recording tracks
 
-The repository records the convention **X32 channels 1–16 = live inputs** and
-**17–32 = playback returns**, with a complete backing return map in
-[JAMROOM_DESIGN.md](JAMROOM_DESIGN.md). It does **not** contain the instrument/mic
-assignments for the live inputs. The playback map cannot supply that information.
+Nathan supplied this live channel list. Preserve these mixer labels and create
+the following **14 recording tracks: 12 mono and two stereo**, beneath a
+Recording folder. The USB input column is the intended one-to-one recording
+patch, to be established/verified during initial setup; it is not a reading of
+the mixer's current Card Output routing.
 
-Provide the current input list in this form, including unused inputs:
+| X32 live channel | Mixer label | REAPER USB input | Recording track | Format |
+| --- | --- | --- | --- | --- |
+| 01 | Vox 1 | 1 | `REC Vox 1` | Mono |
+| 02 | Vox 2 | 2 | `REC Vox 2` | Mono |
+| 03 | Vox 3 | 3 | `REC Vox 3` | Mono |
+| 04 | Vox 4 | 4 | `REC Vox 4` | Mono |
+| 05 | Bass | 5 | `REC Bass` | Mono |
+| 06 | Guitar 1 | 6 | `REC Guitar 1` | Mono |
+| 07 | Guitar 2 | 7 | `REC Guitar 2` | Mono |
+| 08 | Utility Mic | 8 | `REC Utility Mic` | Mono |
+| 09 / 10 | Drums EAD10 L / Drums EAD10 R | 9 / 10 | `REC Drums EAD10` | Stereo: 9 left, 10 right |
+| 11 / 12 | Keys L / Keys R | 11 / 12 | `REC Keys` | Stereo: 11 left, 12 right |
+| 13 | Spare 1 | 13 | `REC Spare 1` | Mono |
+| 14 | Spare 2 | 14 | `REC Spare 2` | Mono |
+| 15 | Spare 3 | 15 | `REC Spare 3` | Mono |
+| 16 | Spare 4 | 16 | `REC Spare 4` | Mono |
 
-| Physical socket/source | X32 live channel | Instrument/mic | Mono or stereo partner |
-| --- | --- | --- | --- |
-| Local or stagebox socket number | 1 | To be supplied | To be supplied |
-| … | 2–16 | To be supplied | To be supplied |
+Each stereo pair has one arm button and a two-channel meter. The EAD10 is a
+stereo drum source, not a set of separate drum-mic inputs. All four vocal tracks
+remain independent; the list does not designate a lead/backing vocal split.
+Create Utility Mic and Spare 1–4 as well, with those rows in an expandable
+Additional inputs group. Initial setup leaves every track disarmed; musicians
+select the instruments for a take and subsequent takes reuse that selection.
 
-Also identify the USB expansion card if it is not X-USB. The final default will
-list every source, USB input, recording track name and audition return bus. Stereo
-pairs and drum mic groups will follow the supplied list, not an assumed band setup.
+The channel list does not confirm the physical source sockets (local versus
+AES50 stagebox), expansion-card model or current USB patch. Use the local-input
+baseline below only when the physical wiring matches. Recorded audition return
+assignments are separate from these inputs and remain configurable; in particular,
+do not infer vocal roles or spare-instrument destinations from channel numbers.
+The existing backing return map is in [JAMROOM_DESIGN.md](JAMROOM_DESIGN.md).
 
 ## Initial X32 and REAPER setup
 
@@ -57,6 +78,6 @@ specify that before finalizing the template's direct-out/tap-point routing.
 Manufacturer reference: [X32 Rack user manual, recording setup and Card Output
 routing sections](https://warehousesound.com/r/behringerX32RACKmanual.pdf).
 
-The completed template will include an exact instrument-by-instrument table and
-the corresponding mixer labels. ReaSet creates REAPER tracks; it does not
-currently configure or rename the X32 remotely.
+The table above is the default track specification for implementation. ReaSet
+will create the REAPER tracks; it does not currently configure or rename the
+X32 remotely.

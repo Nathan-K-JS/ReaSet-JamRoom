@@ -30,9 +30,10 @@ non-trivial design. The following covers the volume and recording features;
 neither is implemented in this checkpoint.
 
 The recording proposal below incorporates the requested default input/track
-template and explicit post-stop retry/keep actions. The instrument-by-instrument
-live input list is still needed: existing design documents specify live channels
-1–16 and the playback return map, but do not assign instruments to live inputs.
+template and explicit post-stop retry/keep actions. Nathan's supplied live input
+list is now recorded in [RECORDING_SETUP.md](RECORDING_SETUP.md): 14 recording
+tracks covering inputs 1–16, with stereo EAD10 (9/10) and Keys (11/12).
+Physical local/stagebox sourcing and the current USB patch remain unverified.
 
 ### Per-song playback volume
 
@@ -80,7 +81,11 @@ live input list is still needed: existing design documents specify live channels
 
 ### Default instrument and track template
 
-- Build the shipped default from the actual jam-room input list, including
+- Use the confirmed track table in [RECORDING_SETUP.md](RECORDING_SETUP.md):
+  Vox 1–4, Bass, Guitar 1–2, Utility Mic, stereo Drums EAD10, stereo Keys and
+  Spare 1–4. Create all 14 tracks disarmed; Utility Mic and spares appear under
+  Additional inputs. Each stereo pair uses one track and one arm control.
+- Build the shipped default from that jam-room input list, including
   physical socket/stagebox, X32 channel, USB input, mono/stereo pairing and
   instrument name. Do not infer live inputs from the backing-return slot map.
 - Create one named recording track for each mono source or confirmed stereo
@@ -195,8 +200,8 @@ scratch-project proof before the feature is considered supported:
 
 ### Implementation checkpoints after approval
 
-1. Obtain the actual live input list and finalize the default tracks and initial
-   X32 setup guide. Prove the volume persistence/import interactions and recording count-in,
+1. Verify physical source/USB routing against the supplied live input list and
+   the initial X32 setup guide. Prove volume persistence/import interactions and recording count-in,
    pause/resume and export alignment in isolated REAPER projects.
 2. Implement and verify per-song gain, including native playback and song updates.
 3. Implement the session bridge and Recording screen with persistent recovery.
