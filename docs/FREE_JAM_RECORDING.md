@@ -61,4 +61,5 @@ Free-jam recordings now use time-based positioning, including recovered/exported
 items, so changing the export tempo grid preserves recorded audio alignment.
 
 Update with `JamRoom Update.bat`, restart REAPER and refresh ReaSet with Ctrl+F5.
-Suggested song-level loudness matching remains the next agreed upgrade.
+Song-level loudness matching was subsequently delivered in v3.9; see
+[volume matching](SONG_VOLUME_MATCHING.md).

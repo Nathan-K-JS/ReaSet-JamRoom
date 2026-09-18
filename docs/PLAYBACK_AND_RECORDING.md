@@ -482,5 +482,6 @@ scratch projects as described in the release verification above:
 **Delivered in ReaSet v3.8:** [Free-jam recording with optional click and count-in](FREE_JAM_RECORDING.md),
 using the existing input selection, take management, recovery and export workflow.
 
-**Next:** Suggested song-level matching: measure backing loudness and suggest a
-per-song playback trim for approval, preserving stem balance and click level.
+**Delivered in v3.9:** [Automatic song-level matching](SONG_VOLUME_MATCHING.md),
+at import and through the library updater, preserving manual playback levels,
+relative stem balance and independent click level.

@@ -38,10 +38,16 @@ ancestry first; never force-push or overwrite divergent changes. Pushing only
 `feature/timing-repair` does not deliver an update to standard installations.
 
 Current architecture:
+- v3.9 adds automatic song-volume matching at import and via full/volume-only
+  library updates; see `docs/SONG_VOLUME_MATCHING.md`. `jamroom_loudness.py`
+  measures final cached slots excluding click, stores a suggestion, and never
+  rewrites audio. `ReaSet_Playback.lua` tracks manual/automatic gain ownership;
+  library transactions snapshot and restore gain metadata with item levels.
+  Preserve manual levels unless explicit replacement is requested. Both agreed
+  upgrades (free jam and song-level matching) are now delivered.
 - ReaSet v3.8 adds free-jam recording; see `docs/FREE_JAM_RECORDING.md`.
   Reuses the recording journal/export; `ReaSet_FreeJam.lua` owns generated click
   and jam settings. Free-jam exports contain takes and tempo, not library stems.
-  Suggested song-level loudness matching is the remaining agreed next upgrade.
 - v3.7 fixes review findings 1-7; see `docs/RELIABILITY_AND_UI.md` for recovery,
   checkpointed updates, UI changes and first-upgrade instructions.
   Preserve the simple REAPER-controller scope.
