@@ -79,3 +79,13 @@ content and counter checks; no content differences were observed in either run.
 Run `JamRoom Update.bat`, restart REAPER and refresh ReaSet/importer with Ctrl+F5.
 Then run the volume-only whole-library update on the jam-room PC. Test-workstation
 measurements do not change that PC's library automatically.
+
+## v3.11.2: updates after backing timing changes
+
+Library updates no longer reject matching cached stems because an item has a
+position, length, start-offset or playback-rate difference. Matching uses the
+cached-source loudness suggestion and reports an estimate when timing differs;
+this is not a new measurement of edited REAPER playback. Tempo, pitch and item
+timing remain untouched. Source-file and take-count checks remain in place, as
+do manual-volume preservation and snapshot/restore. Retry failed songs from the
+library update chooser after updating and restarting the importer.

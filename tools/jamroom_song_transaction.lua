@@ -48,11 +48,13 @@ local function run()
       assert(reaper.CountTakes(r.item)==1,'Backing takes changed; volume matching needs the original imported stems')
       local tk=reaper.GetActiveTake(r.item)
       local source=reaper.GetMediaItemTake_Source(tk)
-      assert(math.abs(reaper.GetMediaItemInfo_Value(r.item,'D_POSITION')-level_song.start)<.001 and
+      -- Cached-source loudness remains a useful suggestion after timing edits.
+      -- Do not block chart/click updates or reset musical settings for this.
+      local original_timing=math.abs(reaper.GetMediaItemInfo_Value(r.item,'D_POSITION')-level_song.start)<.001 and
         math.abs(reaper.GetMediaItemTakeInfo_Value(tk,'D_STARTOFFS'))<.001 and
         math.abs(reaper.GetMediaItemTakeInfo_Value(tk,'D_PLAYRATE')-1)<.00001 and
-        math.abs(reaper.GetMediaItemInfo_Value(r.item,'D_LENGTH')-reaper.GetMediaSourceLength(source))<.02,
-        'Backing audio was trimmed or stretched; keep its level or restore the imported stems before matching')
+        math.abs(reaper.GetMediaItemInfo_Value(r.item,'D_LENGTH')-reaper.GetMediaSourceLength(source))<.02
+      if not original_timing then job.level.source_timing_changed=true end
       local file=reaper.GetMediaSourceFileName(reaper.GetMediaItemTake_Source(tk),''):gsub('\\','/'):lower()
       actual[file]=(actual[file] or 0)+1
     end
@@ -214,7 +216,12 @@ local function run()
           end
         end
       end
-      if job.level then level_message=P.match(level_song,job.level,job.level.replace)end
+      if job.level then
+        level_message=P.match(level_song,job.level,job.level.replace)
+        if job.level.source_timing_changed then
+          level_message=level_message..'; estimated from cached stems (backing timing differs)'
+        end
+      end
       if job.document then
         reaper.SetProjExtState(0,"ReaSetSong",prefix .. "document",job.document)
         reaper.SetProjExtState(0,"ReaSetSong",prefix .. "revision",job.revision or "")

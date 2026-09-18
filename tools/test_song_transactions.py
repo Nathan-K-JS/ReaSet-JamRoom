@@ -149,5 +149,59 @@ dofile=function(path)if path:match('jamroom_pending_rechord.lua$')then return jo
         self.lua.globals().payload=json.dumps(value)
         self.assertEqual(json.loads(self.lua.eval('J.encode(J.decode(payload))')),value)
 
+    def backing_fixture(self, position=0, length=60, rate=1, offset=0):
+        self.lua.execute('''
+table.insert(tracks,{name='[JR:BASS] Bass',items={{p=0,l=60,gain=1,guid='B',
+ take={file='bass.wav',rate=1,offset=0,pitch=3}}}})
+backing=tracks[3].items[1]
+reaper.GetSetProjectInfo_String=function()return true,'song-guid'end
+reaper.GetSetMediaTrackInfo_String=function()return true,''end
+reaper.GetMediaTrackInfo_Value=function()return 0 end
+reaper.GetActiveTake=function(it)return it.take end
+reaper.TakeIsMIDI=function()return false end
+reaper.CountTakes=function(it)return it.take and 1 or 0 end
+reaper.GetMediaItemTake_Source=function(tk)return tk end
+reaper.GetMediaSourceFileName=function(src)return src.file end
+reaper.GetMediaItemTakeInfo_Value=function(tk,key)
+ return key=='D_PLAYRATE' and tk.rate or key=='D_STARTOFFS' and tk.offset or tk.pitch end
+local get,set=reaper.GetMediaItemInfo_Value,reaper.SetMediaItemInfo_Value
+reaper.GetMediaItemInfo_Value=function(it,key)
+ if key=='D_VOL'then return it.gain end return get(it,key)end
+reaper.SetMediaItemInfo_Value=function(it,key,v)
+ if key=='D_VOL'then it.gain=v else set(it,key,v)end end
+reaper.GetSetMediaItemInfo_String=function(it,key,v,set)
+ if key=='GUID'then return true,it.guid end
+ it.tags=it.tags or {};if set then it.tags[key]=v end;return true,it.tags[key] or ''end
+''')
+        self.lua.execute(f'backing.p={position};backing.l={length};backing.take.rate={rate};backing.take.offset={offset}')
+        return {'status':'measured','revision':'level-one','gain':.4,'files':['bass.wav']}
+
+    def test_timing_differences_allow_update_without_reset_and_restore_level(self):
+        for args in ({}, {'length':59.9}, {'position':1,'length':59},
+                     {'rate':1.1,'length':54}, {'offset':.5,'length':59}):
+            with self.subTest(args=args):
+                # Each case gets a fresh project, receipt and owned backing item.
+                self.tearDown();self.setUp()
+                report=self.backing_fixture(**args)
+                timing=self.lua.eval('J.encode({backing.p,backing.l,backing.take})')
+                reply,folder=self.run_job(level=report)
+                self.assertEqual(reply['status'],'ok',reply)
+                self.assertEqual(self.lua.eval('tracks[1].items[1].note'),'new lyric')
+                self.assertAlmostEqual(self.lua.eval('backing.gain'),.4)
+                self.assertEqual(self.lua.eval('J.encode({backing.p,backing.l,backing.take})'),timing)
+                self.assertEqual('estimated from cached stems' in reply['message'],bool(args))
+                reply,_=self.run_job('restore',restore=str(folder/'before.json'),expected=str(folder/'after.json'))
+                self.assertEqual(reply['status'],'ok',reply)
+                self.assertAlmostEqual(self.lua.eval('backing.gain'),1)
+
+    def test_changed_backing_file_still_blocks_matching_before_mutation(self):
+        report=self.backing_fixture(length=59)
+        report['files']=['different.wav']
+        reply,_=self.run_job(level=report)
+        self.assertEqual(reply['status'],'error')
+        self.assertIn('Backing files changed',reply['message'])
+        self.assertEqual(self.lua.eval('tracks[1].items[1].note'),'old lyric')
+        self.assertEqual(self.lua.eval('backing.gain'),1)
+
 
 if __name__=='__main__':unittest.main()
