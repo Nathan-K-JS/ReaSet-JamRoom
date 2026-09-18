@@ -1,4 +1,4 @@
-"""Durable local listening copies. REAPER mixes; this service verifies and shares.
+"""Durable local recording exports. REAPER mixes; this service verifies and shares.
 
 Only REAPER-published recording roots are discovered. HTTP callers cannot supply
 filesystem paths. Originals are never deleted by this module. GPL-3.0.
@@ -38,7 +38,7 @@ def atomic(path, value):
 def probe(path, expected):
     ffprobe = shutil.which('ffprobe')
     if not ffprobe:
-        raise ValueError('Install ffmpeg with JamRoom Setup before making listening copies')
+        raise ValueError('Install ffmpeg with JamRoom Setup before making recording exports')
     result = subprocess.run([ffprobe, '-v', 'error', '-select_streams', 'a:0',
                              '-show_entries', 'stream=channels,sample_rate,bits_per_sample:format=duration',
                              '-of', 'json', str(path)], capture_output=True, text=True, timeout=60)
@@ -128,7 +128,7 @@ class Listening:
         for job in self.data['jobs'].values():
             job['files'].pop('wav', None)  # Older copies keep their existing MP3 share token.
             if job['state'] == 'failed' and 'WAV' in job.get('error', ''):
-                job['error'] = 'MP3 encoding did not finish. Retry to make the listening copy.'
+                job['error'] = 'MP3 encoding did not finish. Retry to make the recording export.'
             if job['state'] not in TERMINAL:
                 job['state'] = 'queued'
         self._save()
@@ -372,5 +372,5 @@ def handle_get(handler, service, lan, head=False):
         else:
             handler._send(200, public_page(row, base + '/listen/' + row['token']).encode('utf-8'), 'text/html')
     except (ValueError, OSError):
-        handler._send(404, {'error': 'Listening copy unavailable. Ask the host for a current link.'})
+        handler._send(404, {'error': 'Recording export unavailable. Ask the host for a current link.'})
     return True

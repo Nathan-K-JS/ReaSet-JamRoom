@@ -299,6 +299,12 @@ local function run()
     stage=27;started=reaper.time_precise()
   elseif stage==27 and reaper.time_precise()-started>1 then
     core:command({project=core.id,op='stop'})
+    local s=core:session(core.selected);local t=s.takes[#s.takes];local count=#t.items
+    core:command({project=core.id,revision=core.revision,op='discard',session=s.id,take=t.id})
+    check(core.mode=='idle' and reaper.GetPlayState()==0 and t.status=='discarded','Discard returns to setup without recording')
+    check(#t.items==count and count>0,'Discard retains recorded audio for recovery')
+    core:command({project=core.id,revision=core.revision,op='restoreTake',session=s.id,take=t.id})
+    check(t.status=='kept','Discarded take can be restored')
     cleanup(true);return
   end
   reaper.defer(function()local ok,err=xpcall(run,debug.traceback);if not ok then cleanup(false,err)end end)

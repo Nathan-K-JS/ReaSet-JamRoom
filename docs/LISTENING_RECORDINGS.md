@@ -5,8 +5,8 @@ Status: delivered in v3.11; simplified to MP3-only sharing in v3.11.1.
 ## Using it
 
 Keep **JamRoom Importer.bat** open on the room PC. In ReaSet's Record tab,
-stop a take, choose instrument mutes, then **Make listening copy**. Confirm
-whether to include backing. **Listening copies** shows queued work and completed
+stop a take, choose instrument mutes, then **Export recording**. Confirm
+whether to include backing. **Exported recordings** shows queued work and completed
 copies; open a ready copy to listen, download the MP3, or show its room-Wi-Fi QR.
 Saved and exported takes have the same action. Making a copy does not clear the
 setlist, discard takes, or replace multitrack export.
@@ -56,7 +56,7 @@ the local link requires the same Wi-Fi and a running room PC/service.
   encodes it without repeating the render. A copy becomes available only when its
   MP3 is ready. Existing MP3 share links survive the upgrade; old WAV endpoints
   are unavailable. Each new copy has its own link. Replace share
-  link revokes the old token; Remove listening copy removes its published audio
+  link revokes the old token; Remove recording export removes its published audio
   and indexed private media copies, leaving original multitracks and audit metadata.
 - Share endpoints serve only indexed outputs, with Safari/Chrome byte-range and
   HEAD support, audio MIME types, UTF-8 filenames, and attachment downloads.
@@ -95,9 +95,9 @@ The sections below preserve the approved design and acceptance criteria.
 
 1. Stop a take. It is already saved, as today.
 2. Listen and choose the existing recording/backing instrument mutes. Press
-   **Make listening copy** on this take (also available beside saved takes).
+   **Export recording** on this take (also available beside saved takes).
 3. A small confirmation card shows the take name, **Include backing** (Song
-   recordings only), and **Make copy**. Click and count-in are excluded by default.
+   recordings only), and **Export recording**. Click and count-in are excluded by default.
    Use the audition mutes as the starting choice; do not stack all kept takes.
 4. The card progresses through Queued / Making copy / Ready, then offers an
    audio player, **Download MP3**, and **Share in room**.
@@ -210,7 +210,7 @@ app restores queued work and ready downloads without another export ritual.
 2. **Durable backend:** snapshot builder, operation journal, native render driver,
    verification/encoding, restart recovery and cleanup coordination. Test both
    unexported takes and archived recording projects.
-3. **Small UI:** Make listening copy, mix summary, progress, preview and downloads.
+3. **Small UI:** Export recording, mix summary, progress, preview and downloads.
    Persist audition choices at submission. Test four-mic a cappella, stereo band
    jam, song backing, multiple kept takes, muted instruments and quiet inputs.
 4. **Share:** local QR page, ranged playback, safe download endpoints and revocation.

@@ -110,3 +110,22 @@ Takes save automatically under `<setlist.RPP>.recordings/`. Stop is enough to ke
 a take. Export creates a verified independent project; Delete and Discard remain
 recoverable and retain raw audio. See [Playback and recording](PLAYBACK_AND_RECORDING.md)
 for everyday operation, recovery and current limits.
+
+## After stopping a take (v3.14)
+
+The review screen separates **Playback**, **Next take**, and **Export**:
+
+- **Listen** auditions the take. Switch recorded instruments and original backing
+  on or off; expand **Instrument playback** for individual instruments.
+- **Keep & record another** saves the current take and starts another pass.
+- **Discard & re-record** discards the latest take and starts another pass.
+- **Discard take** discards only that take and returns to setup without recording.
+  Recover an accidental discard using **Saved recordings > Restore take**.
+- **Export recording** creates an MP3 to play, download and share. Find existing
+  exports under **Exported recordings**. The importer must be running to process
+  exports and serve downloads; queued exports resume when it starts again.
+- **Done** finishes review. Takes remain saved for later.
+
+For further editing, use **Saved recordings > Export multitrack & clear from
+setlist**. This exports the session's kept takes with the original stems to a
+REAPER project and clears the recordings only after export verification.

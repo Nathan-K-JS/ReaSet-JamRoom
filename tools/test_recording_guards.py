@@ -9,6 +9,34 @@ ROOT = Path(__file__).resolve().parent.parent
 
 
 class RecordingGuards(unittest.TestCase):
+    def test_discard_stops_at_setup_preserves_audio_and_can_restore(self):
+        source=(ROOT/'Requirements/ReaSet_RecordingCore.lua').read_text(encoding='utf-8')
+        command=source[source.index('  function self:command(c)'):source.index('  function self:tick()')]
+        lua=LuaRuntime(unpack_returned_tuples=True)
+        lua.execute("""
+reaper={GetPlayState=function()return transport end};transport=0
+session={id='s',song={key='song'},takes={{id='old',status='kept',items={{guid='audio'}}},{id='new',status='kept'}}}
+self={id='project',revision=1,mode='review',db={}}
+function self:session()return session end
+function self:park()parked=true end
+function self:save(full)saved=full end
+function self:begin()error('Discard must not start recording')end
+""")
+        lua.execute(command)
+        lua.execute("self:command({op='discard',project='project',revision=1,session='s',take='old'})")
+        self.assertEqual(lua.eval('self.mode'),'idle')
+        self.assertTrue(lua.eval('parked and saved'))
+        self.assertEqual(lua.eval('session.takes[1].status'),'discarded')
+        self.assertEqual(lua.eval('session.takes[1].items[1].guid'),'audio')
+        self.assertEqual(lua.eval('session.takes[2].status'),'kept')
+        lua.execute("self:command({op='restoreTake',project='project',revision=1,session='s',take='old'})")
+        self.assertEqual(lua.eval('session.takes[1].status'),'kept')
+        for mode,transport in [('audition',1),('countin',0),('recording',5)]:
+            lua.globals().transport=transport;lua.globals().self.mode=mode
+            ok,_=lua.eval("pcall(function()self:command({op='discard',project='project',revision=1,session='s',take='old'})end)")
+            self.assertFalse(ok)
+            self.assertEqual(lua.eval('session.takes[1].status'),'kept')
+
     def test_empty_capture_returns_to_setup_but_never_drops_uncertain_media(self):
         source=(ROOT/'Requirements/ReaSet_RecordingCore.lua').read_text(encoding='utf-8')
         functions=source[source.index('  function self:drop_empty_take('):source.index('  function self:review(')]

@@ -5,7 +5,7 @@ return function(M)
 local dir=debug.getinfo(1,'S').source:match('@?(.*[\\/])') or ''
 local guard=dofile(dir..'ReaSet_ListeningSafety.lua')
 function M.make_listening(self,c)
-  assert(reaper.GetPlayState()==0,'Stop listening or playback before making a copy')
+  assert(reaper.GetPlayState()==0,'Stop listening or playback before exporting')
   local s=self:session(c.session);local take
   for _,t in ipairs(s.takes)do if t.id==c.take then take=t end end
   assert(not s.deleted and take and take.status~='discarded' and not take.unresolved and #take.items>0,'Choose a saved, recovered take')
@@ -62,6 +62,6 @@ function M.make_listening(self,c)
   M.write(folder..'/request.json',M.J.encode(request))
   reaper.SetProjExtState(0,'ReaSetRec','listeningRoot',self.root..'/Listening')
   self:save(false)
-  self.message='Listening copy queued. Open Listening copies to follow progress and share.'
+  self.message='Recording export queued. Open Exported recordings to follow progress and share.'
 end
 end

@@ -38,6 +38,12 @@ ancestry first; never force-push or overwrite divergent changes. Pushing only
 `feature/timing-repair` does not deliver an update to standard installations.
 
 Current architecture:
+- v3.14 groups post-record review into Playback, Next take and Export. Discard
+  take returns to setup without recording; Restore take remains available under
+  Saved recordings. Use "Export recording" for the MP3 action and "Exported
+  recordings" for the sharing manager; the user dislikes "listening copy".
+  Internal listening routes and file names remain stable. Multitrack export is
+  a separate session action under Saved recordings.
 - v3.13 reopens removed/prepared imports by saved Fadr identity across YouTube
   and Fadr entry points. Open is explicit; removal lives under More. Playback
   sorting defaults to artist, with title/custom order remembered per setlist.

@@ -577,7 +577,7 @@ function M.new()
       if c.op=='delete' then assert(c.confirm==s.id,'Confirm this session');s.deleted=true;self:save(false);self:remove_session(s)
       elseif c.op=='restore' then self:restore_session(s)
       else self:park();M.export(self,s)end
-    elseif c.op=='retry' or c.op=='keep' or c.op=='restoreTake' or c.op=='favourite' or c.op=='rename' then
+    elseif c.op=='discard' or c.op=='retry' or c.op=='keep' or c.op=='restoreTake' or c.op=='favourite' or c.op=='rename' then
       assert(reaper.GetPlayState()==0,'Stop playback first')
       local s=self:session(c.session);local t
       for _,v in ipairs(s.takes)do if v.id==c.take then t=v end end
@@ -585,8 +585,10 @@ function M.new()
       if c.op=='rename' then assert(type(c.name)=='string' and #c.name<=100,'Name must be at most 100 characters');t.name=c.name
       elseif c.op=='favourite' then t.favourite=not t.favourite
       elseif c.op=='restoreTake' then t.status='kept'
+      elseif c.op=='discard' then t.status='discarded'
       elseif c.op=='retry' then assert(t==s.takes[#s.takes],'Only retry the latest take');t.status='discarded' end
       self:park();self:save(true)
+      if c.op=='discard' then self.mode='idle';self.selected=nil;self.take=nil;self.message='Take discarded. Restore it from Saved recordings if needed.' end
       if c.op=='keep' or c.op=='retry' then self.mode='idle';self:begin(s.song.key)end
     else error('Unknown recording command')end
   end

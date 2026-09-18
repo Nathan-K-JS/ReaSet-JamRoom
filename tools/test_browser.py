@@ -76,6 +76,27 @@ class BrowserTests(unittest.TestCase):
           document.getElementById('recording-panel').classList.add('open');recRender();
         }''')
 
+    def test_review_groups_switches_discard_and_phone_layout(self):
+        self.recording_state()
+        self.page.evaluate("""g_recState.mode='review';g_recState.selected='s';g_recState.take='t';
+          g_recState.recordingOn=true;g_recState.backingOn=false;
+          g_recState.sessions=[{id:'s',song:{name:'Evening jam'},takes:[{id:'t',number:1,inputs:['1'],status:'kept',duration:60}]}];recRender()""")
+        for width in (320,390,768,1280):
+            self.page.set_viewport_size({'width':width,'height':800})
+            self.assertTrue(self.page.evaluate('document.documentElement.scrollWidth<=innerWidth'))
+            self.assertEqual(self.page.locator('.rec-review-section').count(),3)
+        switch=self.page.get_by_role('switch',name='Recorded instruments',exact=True)
+        self.assertEqual(switch.get_attribute('aria-checked'),'true')
+        switch.click()
+        command=json.loads(self.page.evaluate("decodeURIComponent(sent.at(-1)).split('/want/')[1]"))
+        self.assertEqual((command['op'],command['group'],command['value']),('mix','recording',False))
+        self.page.evaluate("g_recPending=null;g_recState.mode='audition';recRender()")
+        self.assertTrue(self.page.get_by_role('button',name='Discard take',exact=True).is_disabled())
+        self.page.evaluate("g_recState.mode='review';recRender()")
+        self.page.get_by_role('button',name='Discard take',exact=True).click()
+        command=json.loads(self.page.evaluate("decodeURIComponent(sent.at(-1)).split('/want/')[1]"))
+        self.assertEqual((command['op'],command['session'],command['take']),('discard','s','t'))
+
     def test_listening_copy_confirmation_and_exported_take_access(self):
         self.recording_state()
         self.page.set_viewport_size({'width':320,'height':568})
@@ -84,16 +105,16 @@ class BrowserTests(unittest.TestCase):
           g_recState.sessions=[{id:'session',song:{name:'A long evening song',free:false},created:'Today',takes:[{id:'take',number:1,duration:5,status:'kept',inputs:['1']}]}];
           g_recState.selected='session';g_recState.take='take';g_recState.mode='review';g_recState.backingOn=false;recRender();
         }''')
-        self.page.get_by_role('button',name='Make listening copy',exact=True).first.click()
+        self.page.get_by_role('button',name='Export recording',exact=True).first.click()
         self.assertFalse(self.page.locator('#rec-copy-backing').is_checked())
         self.assertTrue(self.page.evaluate('document.documentElement.scrollWidth<=innerWidth'))
-        self.page.get_by_role('button',name='Make copy',exact=True).click()
+        self.page.locator('#rec-copy-go').click()
         command=json.loads(self.page.evaluate("decodeURIComponent(sent.at(-1)).split('/want/')[1]"))
         self.assertEqual((command['op'],command['session'],command['take'],command['backing']),('listening','session','take',False))
         self.assertIn('job='+command['nonce'],self.page.evaluate('openedCopy'))
         self.assertNotIn('1007',self.page.evaluate('sent.at(-1)'))
         self.page.evaluate("g_recPending=null;g_recState.mode='idle';g_recState.sessions[0].exported='Recording.RPP';recRender();document.getElementById('rec-takes').open=true" )
-        self.assertEqual(self.page.get_by_role('button',name='Make listening copy',exact=True).count(),1)
+        self.assertEqual(self.page.get_by_role('button',name='Export recording',exact=True).count(),1)
 
     def test_free_jam_records_without_song_and_preserves_setup_during_input_selection(self):
         self.recording_state()
@@ -116,7 +137,7 @@ class BrowserTests(unittest.TestCase):
         self.assertEqual(self.page.get_by_role('button', name='Backing on', exact=True).count(), 0)
         self.assertEqual(self.page.get_by_role('button', name='Drums backing', exact=True).count(), 0)
         self.page.get_by_text('Instrument playback', exact=True).click()
-        self.assertTrue(self.page.get_by_role('button', name='Vox 1', exact=True).is_visible())
+        self.assertTrue(self.page.get_by_role('switch', name='Vox 1', exact=True).is_visible())
 
     def test_recording_waits_for_confirmation_and_stop_bypasses_pending(self):
         self.recording_state()
