@@ -990,6 +990,8 @@ class Handler(BaseHTTPRequestHandler):
                        "text/html")
         elif self.path == '/importer-queue.js':
             self._send(200, (TOOLDIR / 'importer-queue.js').read_bytes(), 'text/javascript')
+        elif self.path == '/importer-activity.js':
+            self._send(200, (TOOLDIR / 'importer-activity.js').read_bytes(), 'text/javascript')
         elif self.path == '/api/jobs' or self.path.startswith('/api/jobs/'):
             try:
                 queue = import_queue()
@@ -1005,6 +1007,13 @@ class Handler(BaseHTTPRequestHandler):
             self._send(200, drain_status())
         elif self.path == "/api/status":
             self._send(200, STATE)
+        elif self.path == "/api/updates/status":
+            try:
+                self._send(200, UPDATES.status())
+            except ConnectionError:
+                return  # Browser left while a read-only progress request was running.
+            except Exception as e:
+                self._send(500, {"error": str(e)})
         elif self.path == "/api/updates":
             try:
                 self._send(200, UPDATES.listing())

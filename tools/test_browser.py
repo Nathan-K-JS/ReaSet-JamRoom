@@ -35,7 +35,7 @@ class BrowserTests(unittest.TestCase):
 
     def load_reaset(self):
         def route(req):
-            if req.request.url.endswith('/importer-queue.js'):
+            if req.request.url.endswith(('/importer-queue.js','/importer-activity.js')):
                 return req.fulfill(body='', content_type='text/javascript')
             name = req.request.url.rsplit('/', 1)[-1]
             if name == 'main.js':
@@ -498,7 +498,7 @@ class BrowserTests(unittest.TestCase):
         songs=[{'id':i,'name':'Song '+str(i),'eligible':i!=2,'level_eligible':True,'protected':i==2,'update_status':'Update available'} for i in (1,2,3)]
         posts=[]
         def route(req):
-            if req.request.url.endswith('/importer-queue.js'):
+            if req.request.url.endswith(('/importer-queue.js','/importer-activity.js')):
                 return req.fulfill(body='', content_type='text/javascript')
             url=req.request.url
             if '/api/updates/start' in url:
@@ -621,7 +621,7 @@ class BrowserTests(unittest.TestCase):
     def test_importer_version_warning_matches_running_server(self):
         running = {'build': importer.BUILD, 'key': True, 'reaper': True}
         def route(req):
-            if req.request.url.endswith('/importer-queue.js'):
+            if req.request.url.endswith(('/importer-queue.js','/importer-activity.js')):
                 return req.fulfill(body='', content_type='text/javascript')
             if '/api/checks' in req.request.url:
                 req.fulfill(json=running)
@@ -651,7 +651,7 @@ class BrowserTests(unittest.TestCase):
 
     def test_importer_review_does_not_treat_a_perfect_match_as_quality_approval(self):
         def route(req):
-            if req.request.url.endswith('/importer-queue.js'):
+            if req.request.url.endswith(('/importer-queue.js','/importer-activity.js')):
                 return req.fulfill(body='', content_type='text/javascript')
             if '/api/' in req.request.url:req.fulfill(json={'songs':[],'state':'idle'})
             else:req.fulfill(path=str(ROOT/'tools/importer.html'))
@@ -671,7 +671,7 @@ class BrowserTests(unittest.TestCase):
               'key':'G#:maj','tempo':173,'created':'2026-08-23'}
         posts=[]
         def route(req):
-            if req.request.url.endswith('/importer-queue.js'):
+            if req.request.url.endswith(('/importer-queue.js','/importer-activity.js')):
                 return req.fulfill(path=str(ROOT/'tools/importer-queue.js'), content_type='text/javascript')
             url=req.request.url
             if url.endswith('/api/jobs') and req.request.method == 'POST':
@@ -698,7 +698,7 @@ class BrowserTests(unittest.TestCase):
         songs=[{'id':i,'name':'Song '+str(i),'eligible':i==1,'protected':i==2,'update_status':'Update available'} for i in (1,2,3)]
         posts=[]
         def route(req):
-            if req.request.url.endswith('/importer-queue.js'):
+            if req.request.url.endswith(('/importer-queue.js','/importer-activity.js')):
                 return req.fulfill(body='', content_type='text/javascript')
             url=req.request.url
             if '/api/updates/start' in url:
@@ -712,8 +712,7 @@ class BrowserTests(unittest.TestCase):
         self.page.goto('http://importer.test/#updates=1,2')
         self.page.wait_for_function('updateSongs.length===3')
         self.page.evaluate('startUpdates(false,false)')
-        self.page.wait_for_function("document.getElementById('updateStart').disabled")
-        self.page.wait_for_timeout(100)
+        self.assertFalse(self.page.evaluate('updateStarting'))
         self.assertEqual(posts[0]['ids'],[1])
 
 

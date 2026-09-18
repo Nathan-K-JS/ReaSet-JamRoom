@@ -55,6 +55,31 @@ class UpdateTests(unittest.TestCase):
 
     def batch(self):return self.up.listing()['batch']
 
+    def test_progress_poll_reads_journal_without_scanning_library(self):
+        write(self.root/'latest.json', {'id':'saved'})
+        write(self.root/'saved.json', {'id':'saved','status':'running','songs':[]})
+        self.up.songs=Mock(side_effect=AssertionError('Progress scanned the library'))
+        self.up.song_state=Mock(side_effect=AssertionError('Progress fetched all song metadata'))
+        self.assertEqual(self.up.status()['batch']['status'],'interrupted')
+        self.up.active='saved'
+        self.assertEqual(self.up.status()['batch']['status'],'running')
+        self.assertEqual(self.up.status()['project'],'P')
+
+    def test_song_progress_is_saved_and_log_context_is_restored(self):
+        def update(*args):
+            sink=ji.JOB_LOG.get()
+            sink('Measuring backing volume')
+            status=self.up.status()
+            self.assertEqual(status['batch']['songs'][0]['stage'],'Measuring backing volume')
+            raise ValueError('Measurement failed')
+        previous=ji.JOB_LOG.get()
+        with patch.object(self.up,'update_one',side_effect=update):
+            self.up.start([1])
+        row=self.up.status()['batch']['songs'][0]
+        self.assertEqual(row['status'],'failed')
+        self.assertIn('Measuring backing volume',row['log'])
+        self.assertIs(ji.JOB_LOG.get(),previous)
+
     def test_volume_only_updates_protected_song_without_chart_or_click_generation(self):
         folder=Path(self.songs[0]['folder']);job=ji.load_job(folder)
         self.fake_click(job,folder)

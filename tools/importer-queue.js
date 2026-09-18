@@ -12,15 +12,20 @@ window.ImportJobs = (function(){
   }
   function button(text, action, parent){
     var node = el('button', text, parent); node.className = 'small';
-    node.onclick = function(){ Promise.resolve().then(action).catch(failure); };
+    node.onclick = function(){
+      if(node.disabled)return;
+      node.disabled=true;node.textContent='Working…';
+      Promise.resolve().then(action).catch(failure).finally(function(){node.disabled=false;node.textContent=text;});
+    };
     return node;
   }
   function failure(error){
+    if(window.ImporterActivity)ImporterActivity.notice('Import needs attention',error.message||String(error),true);
     message.textContent = error.message || String(error);
     message.style.color = '#ffb3a7';
   }
   async function request(path, body){
-    var response = await fetch('/api/jobs' + path, body === undefined ? {} : {
+    var response = await fetch('/api/jobs' + path, body === undefined ? {signal:AbortSignal.timeout(20000)} : {
       method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(body)});
     var data = await response.json();
     if(!response.ok || data.error) throw new Error(data.error || 'Importer request failed');
@@ -75,6 +80,7 @@ window.ImportJobs = (function(){
     clearTimeout(timer); timer = setTimeout(function(){flush().catch(failure);}, 400);
   }
   function renderDetail(row){
+    if(window.ImporterActivity)ImporterActivity.jobDetail(row);
     $('progressCard').classList.remove('hide');
     $('log').textContent = (row.log || []).join('\n');
     $('progTitle').textContent = row.song + ' — ' + (row.stage || row.state);
@@ -95,9 +101,10 @@ window.ImportJobs = (function(){
     await flush();
     var generation = ++selection;
     busy = true; $('reviewCard').inert = true;
+    if(window.ImporterActivity)ImporterActivity.put('opening-review',{title:'Opening saved import',detail:'Loading review…',state:'sending',foreground:true});
     var row;
     try {row = await request('/' + id);}
-    finally {busy = false; $('reviewCard').inert = false;}
+    finally {busy = false; $('reviewCard').inert = false;if(window.ImporterActivity)ImporterActivity.remove('opening-review');}
     if(generation !== selection) return;
     dismissReceipt(); resetReviewPanel();
     selected = id; detail = row; rendered = ''; dirty = false;
@@ -169,6 +176,7 @@ window.ImportJobs = (function(){
       var result = await request('');
       if(result.schema !== 1) return;
       rows = result.jobs; paused = result.paused; renderList();
+      if(window.ImporterActivity)ImporterActivity.jobs(result);
       if(selected && !busy && !dirty && !saving){
         var id = selected, generation = selection, row = await request('/' + selected);
         if(id !== selected || generation !== selection || dirty || saving || busy) return;
@@ -191,7 +199,7 @@ window.ImportJobs = (function(){
       var result = await request('', body);
       $('confirmCard').classList.add('hide');
       await refresh();
-      if(!previous) await select(result.id);
+      if(!previous){await select(result.id);if(window.ImporterActivity)ImporterActivity.open();}
       else message.textContent = body.band + ' - ' + body.title + ' is in your import list. Your current review is still open.';
     } catch(error){failure(error);}
     finally {$('importBtn').disabled = false; setPipelineActive(false);}
@@ -206,13 +214,15 @@ window.ImportJobs = (function(){
     } catch(error){failure(error);}
   };
   api.apply = async function(){
+    if(busy || !selected) return;
+    busy=true; $('applyBtn').disabled=true;
     try {
-      if(busy || !selected) return;
       // Save the initial default choices too, even when no control was edited.
       if(detail.state === 'review' && !detail.apply_started){dirty = true; version++; await flush();}
       await request('/' + selected + '/apply', {revision:detail.revision});
-      rendered = ''; await refresh();
+      rendered = ''; busy=false; await refresh();
     } catch(error){failure(error);}
+    finally{busy=false; $('applyBtn').disabled=!detail||detail.state!=='review';}
   };
   api.choose = async function(action, body, btn){
     try {
@@ -225,6 +235,7 @@ window.ImportJobs = (function(){
     } catch(error){failure(error);}
     finally {busy = false; btn.disabled = false;}
   };
+  api.open = select;
   api.close = function(){return close().catch(failure);};
   async function provider(id, body){
     var result=await request('/'+id+'/provider',body||{});
@@ -286,9 +297,10 @@ window.ImportJobs = (function(){
     $('reviewCard').addEventListener('input', edited); $('reviewCard').addEventListener('change', edited);
     window.addEventListener('beforeunload', function(event){if(dirty || saving){event.preventDefault(); event.returnValue = '';}});
     rows = result.jobs; paused = result.paused; renderList();
+    if(window.ImporterActivity)ImporterActivity.jobs(result);
     var prior = localStorage.getItem('jamroom-import-job');
     if(prior && rows.some(function(r){return r.id === prior;})) await select(prior);
-    setInterval(function(){refresh().catch(failure);}, 1500);
+    setInterval(function(){refresh().catch(function(e){if(window.ImporterActivity)ImporterActivity.notice('Import status unavailable','Connection lost; work may still be running. Reconnecting…',true);else failure(e);});}, 1500);
   }
   init().catch(function(error){
     var warning = $('staleWarn');

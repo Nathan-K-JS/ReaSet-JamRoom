@@ -90,11 +90,19 @@ class Updates:
                             level_status=('Volume checked' if level_current else 'Volume matching available' if has_backing else 'Backing sources unavailable'),
                             manual_edits=manual_edits, update_status=status,
                             eligible=bool(job) and not protected and (not current or not click_current or level_eligible)))
+        return {"project": project, "songs": out, "batch": self._batch(root)}
+
+    def _batch(self, root):
         latest = read(root / "latest.json", {})
         batch = read(root / (latest.get("id", "none") + ".json"), None)
         if batch and batch["status"] == "running" and self.active != batch["id"]:
             batch["status"] = "interrupted"
-        return {"project": project, "songs": out, "batch": batch}
+        return batch
+
+    def status(self):
+        # Progress polling must not scan source folders or rebuild the chooser.
+        _, project, root = self.context()
+        return {"project": project, "batch": self._batch(root)}
 
     def protect(self, song_id, name, keep, target_project=None):
         _, project, root = self.context()
@@ -138,6 +146,7 @@ class Updates:
                          "songs": [dict(s, status="pending", message="") for s in chosen]}
                 if not batch["songs"]: raise ValueError("Selected songs are protected, already current, or unavailable")
             batch["status"] = "running"
+            batch.pop('error', None)
             write(root / (batch["id"] + ".json"), batch)
             write(root / "latest.json", {"id": batch["id"]})
             self.active = batch["id"]; self.stop.clear()
@@ -153,19 +162,25 @@ class Updates:
             for item in batch["songs"]:
                 if item["status"] != "pending": continue
                 if self.stop.is_set():
-                    batch["status"] = "paused"; break
+                    batch.update(status="paused", error="Paused after the current song"); break
                 if self.identity(cfg) != batch["project"]:
-                    batch["status"] = "paused"; break
+                    batch.update(status="paused", error="REAPER project changed; return to the original project to resume"); break
                 # Never apply while a rehearsal is playing. Resume after stop.
                 transport = requests.get(ji_url(cfg) + "/_/TRANSPORT", timeout=5)
                 transport.raise_for_status()
                 if int(transport.text.split("\t")[1]) != 0:
-                    batch["status"] = "paused"; break
+                    batch.update(status="paused", error="Stop REAPER playback or recording, then resume"); break
                 settings = read(root / "settings.json", {})
                 if not batch["restore"] and not batch.get('clicks_only') and not batch.get('levels_only') and settings.get(str(item["id"])) == item["name"]:
                     item.update(status="skipped", message="Keep this version"); write(path,batch); continue
                 item["status"] = "working"; write(path,batch)
+                def progress(message):
+                    item['stage'] = str(message)
+                    item['log'] = (item.get('log', []) + [str(message)])[-100:]
+                    write(path, batch)
+                token = ji.JOB_LOG.set(progress)
                 try:
+                    progress('Preparing song update')
                     message = self.update_one(cfg, root, batch, item)
                     item.update(status="done", message=message or ("Restored" if batch["restore"] else "Updated"))
                     installed = ji.load_job(Path(item['folder'])).get('click') or {}
@@ -173,6 +188,8 @@ class Updates:
                         item['message'] += ' — '+installed['review']+(' (click muted)' if installed.get('muted') else '')
                 except Exception as e:
                     item.update(status="failed", message=str(e))
+                finally:
+                    ji.JOB_LOG.reset(token)
                 write(path,batch)
             else:
                 batch["status"] = "complete"
@@ -196,6 +213,7 @@ class Updates:
         installed_path = root / ("song-" + str(item["id"]) + ".json")
         installed = read(installed_path, {})
         if batch["restore"]:
+            ji.log('Restoring saved song version')
             # Freeze the target before applying: a retry after saving the job or
             # installation manifest must restore the same revision again.
             target_path = op / "restore-target.json"
@@ -249,6 +267,7 @@ class Updates:
             write(candidate_path,candidate)
         level = None
         if not batch.get('clicks_only'):
+            ji.log('Checking playback volume')
             ji.level_model.analyse(candidate, folder, ji.log)
             level = ji.level_model.request(candidate, folder, batch.get('replace_levels'))
             write(candidate_path,candidate)
@@ -259,6 +278,7 @@ class Updates:
             candidate['slots']=[s for s in candidate.get('slots',[]) if s.get('slot')!='CLICK']
             candidate['slots'].append({'slot':'CLICK','label':'Click','file':click['file']})
             click_request={'file':str(folder/click['file']),'revision':click['generator']+':'+click['file'],'muted':bool(click.get('muted'))}
+        ji.log('Applying update to REAPER')
         result = self.push(cfg, item["name"], item, chords=None if preserve_chart else candidate["chords"],
                   lyric_lines=None if preserve_chart else ji.chart_model.lyric_items(candidate),
                   document=None if preserve_chart else candidate["chart_document"],
