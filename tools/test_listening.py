@@ -70,16 +70,27 @@ class ListeningTests(ListeningFixture):
         self.assertEqual(requests.head(url, timeout=3).content, b'')
 
     def test_page_qr_escape_title_and_lan_link(self):
+        # Upgrade an existing two-format copy without breaking its MP3 link.
+        self.row['files']['wav'] = 12
+        (self.folder/'mix.wav').write_bytes(b'internal wav')
+        self.service._save()
+        self.service = listen.Listening(lambda: {}, self.home/'service')
+        self.assertEqual(self.service.ready(self.token)['files'], {'mp3':16})
         url = self.http() + '/listen/' + self.token
         with patch.object(server, 'lan_url', return_value='http://192.168.1.99:8765'):
             r = requests.get(url, timeout=3)
             self.assertIn('&lt;take&gt;', r.text); self.assertNotIn('<take>', r.text)
             self.assertIn('value="http://192.168.1.99:8765/listen/' + self.token, r.text)
             self.assertIn('Files → Downloads', r.text)
+            self.assertNotIn('WAV', r.text)
+            self.assertNotIn('.wav', r.text)
             qr = requests.get(url + '/qr.svg', timeout=3)
             self.assertEqual(qr.status_code, 200); self.assertIn('<svg', qr.text)
             self.assertNotIn('https://', qr.text)
         self.assertEqual(requests.get(url + '/../../source.RPP', timeout=3).status_code, 404)
+        for endpoint in ('audio.wav','download.wav'):
+            self.assertEqual(requests.get(url+'/'+endpoint,timeout=3).status_code,404)
+            self.assertEqual(requests.head(url+'/'+endpoint,timeout=3).status_code,404)
 
     def test_revocation_and_remove_never_touch_multitracks(self):
         original = self.folder / 'original.wav'; original.write_bytes(b'keep')
@@ -118,14 +129,28 @@ class ListeningTests(ListeningFixture):
         listen.atomic(self.folder/'request.json', {'duration':5,'rate':1})
         with patch.object(listen, 'probe'), patch.object(listen, 'render') as render, \
                 patch.object(listen.shutil, 'which', return_value=None):
-            with self.assertRaisesRegex(ValueError, 'WAV is ready'):
+            with self.assertRaisesRegex(ValueError, 'rendered audio is saved'):
                 self.service.process(self.row['key'])
             render.assert_not_called()
         self.service.change(self.row['key'], state='failed')
-        self.assertEqual(self.service.ready(self.token)['files'], {'wav':12})
+        with self.assertRaises(ValueError): self.service.ready(self.token)
+        self.assertEqual(self.row['files'], {})
         self.service.action(self.row['key'], 'retry')
         self.assertEqual(self.row['state'], 'queued')
         self.assertEqual((self.folder/'mix.wav').read_bytes(), b'verified wav')
+        original=self.folder/'original.wav';original.write_bytes(b'original recording')
+        def encode(*args, **kwargs):
+            (self.folder/'mp3-pending.mp3').write_bytes(b'encoded mp3')
+            return subprocess.CompletedProcess(args[0],0,stderr='')
+        with patch.object(listen,'probe'), patch.object(listen,'render') as render, \
+                patch.object(listen.shutil,'which',return_value='ffmpeg'), \
+                patch.object(listen.subprocess,'run',side_effect=encode), patch.object(listen,'scan',return_value=(-16,-1)):
+            self.service.process(self.row['key'])
+            self.service.process(self.row['key'])  # Resume after final publication/cleanup.
+            render.assert_not_called()
+        self.assertEqual(self.service.ready(self.token)['files'], {'mp3':11})
+        self.assertFalse((self.folder/'mix.wav').exists())
+        self.assertEqual(original.read_bytes(),b'original recording')
 
     def test_render_failure_does_not_publish_output(self):
         (self.folder / 'mix.mp3').unlink(); self.row['files'] = {}
@@ -176,12 +201,12 @@ class ListeningPhones(ListeningFixture):
                         page.wait_for_function('document.querySelector("audio").currentTime>.1')
                         page.locator('audio').evaluate('(a)=>{a.pause();a.currentTime=2;}')
                         page.wait_for_function('Math.abs(document.querySelector("audio").currentTime-2)<.1')
-                        for ext in ('MP3','WAV'):
-                            with page.expect_download() as pending:
-                                page.get_by_role('link', name='Download '+ext, exact=False).click()
-                            download = pending.value
-                            self.assertTrue(download.suggested_filename.endswith('.'+ext.lower()))
-                            self.assertIsNone(download.failure())
+                        self.assertEqual(page.get_by_role('link',name='Download WAV',exact=False).count(),0)
+                        with page.expect_download() as pending:
+                            page.get_by_role('link', name='Download MP3', exact=False).click()
+                        download = pending.value
+                        self.assertTrue(download.suggested_filename.endswith('.mp3'))
+                        self.assertIsNone(download.failure())
                         for width,height in [(320,568),(390,844),(844,390)]:
                             page.set_viewport_size({'width':width,'height':height})
                             page.locator('#sharing').evaluate('(e)=>e.open=true')

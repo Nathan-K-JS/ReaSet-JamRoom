@@ -97,7 +97,8 @@ M.write(folder..'/setup-result.json',M.J.encode({ok=ok and unchanged,error=tostr
         service.process(key)
         row = service.data['jobs'][key]
         assert row['state'] == 'ready', row
-        rendered = Path(row['folder']) / 'mix.wav'
+        rendered = Path(row['folder']) / 'mix.mp3'
+        assert set(row['files']) == {'mp3'} and not (Path(row['folder']) / 'mix.wav').exists()
         raw = subprocess.run(['ffmpeg', '-v', 'error', '-i', str(rendered), '-f', 'f32le', '-'], capture_output=True, check=True).stdout
         audio = np.frombuffer(raw, dtype='<f4').reshape(-1, 2)
         # Original stems keep pitch; recorded inputs compensate master playrate.

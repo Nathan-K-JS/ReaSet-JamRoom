@@ -1,17 +1,17 @@
 # Leave with a listening recording
 
-Status: delivered in v3.11.
+Status: delivered in v3.11; simplified to MP3-only sharing in v3.11.1.
 
 ## Using it
 
 Keep **JamRoom Importer.bat** open on the room PC. In ReaSet's Record tab,
 stop a take, choose instrument mutes, then **Make listening copy**. Confirm
 whether to include backing. **Listening copies** shows queued work and completed
-copies; open a ready copy to listen, download MP3/WAV, or show its room-Wi-Fi QR.
+copies; open a ready copy to listen, download the MP3, or show its room-Wi-Fi QR.
 Saved and exported takes have the same action. Making a copy does not clear the
 setlist, discard takes, or replace multitrack export.
 
-For phones, use **Download MP3** for a smaller file or **Download WAV** for editing.
+Use **Download MP3** to save the recording on your phone.
 Safari downloads are in the iPhone/iPad Files app's Downloads folder; Chrome on
 Android has a Downloads screen. The page includes saving instructions and a
 copy-link fallback that works on local HTTP without requiring the native Share
@@ -50,9 +50,12 @@ the local link requires the same Wi-Fi and a running room PC/service.
   WAV, targeting -16 LUFS and a -1 dBTP ceiling, with at most 18 dB of gain increase.
   The service verifies duration, channels, decodability and peaks, then encodes
   256 kbps MP3 from that WAV. Musical pauses are kept. No artificial effects tail
-  is added to this dry-file template.
-- Jobs resume after restart. A verified WAV survives an MP3 failure; Retry encodes
-  it without repeating the render. Each new copy has its own link. Replace share
+  is added to this dry-file template. WAV is an internal intermediate, never a
+  sharing option, and is removed after the MP3 is verified and published.
+- Jobs resume after restart. The internal render survives an MP3 failure; Retry
+  encodes it without repeating the render. A copy becomes available only when its
+  MP3 is ready. Existing MP3 share links survive the upgrade; old WAV endpoints
+  are unavailable. Each new copy has its own link. Replace share
   link revokes the old token; Remove listening copy removes its published audio
   and indexed private media copies, leaving original multitracks and audit metadata.
 - Share endpoints serve only indexed outputs, with Safari/Chrome byte-range and
@@ -82,7 +85,7 @@ Visual captures: `imports/.visual/listening-v311/`. Test tools:
 `python tools/verify_listening_live.py`, `python tools/verify_recording_live.py`.
 
 On-site check: use an actual iPhone and Android on room Wi-Fi, scan the QR, play
-and seek, download MP3 and WAV, then turn Wi-Fi off and play the saved MP3. Verify
+and seek, download the MP3, then turn Wi-Fi off and play the saved recording. Verify
 that guest Wi-Fi can reach the PC; try a real four-mic and band take to assess mix
 balance. Browser emulation does not verify camera apps or the room's router.
 
@@ -97,7 +100,7 @@ The sections below preserve the approved design and acceptance criteria.
    recordings only), and **Make copy**. Click and count-in are excluded by default.
    Use the audition mutes as the starting choice; do not stack all kept takes.
 4. The card progresses through Queued / Making copy / Ready, then offers an
-   audio player, **Download MP3**, **Download WAV**, and **Share in room**.
+   audio player, **Download MP3**, and **Share in room**.
 5. Share shows a QR code and copyable local link. Friends on the room Wi-Fi open
    a simple listening/download page. Once downloaded, the file plays elsewhere.
 
@@ -132,8 +135,8 @@ balance four microphones against drums. If adjustment is needed, first expose
 **Voices/instruments versus backing** balance, with preview and rerender. Avoid
 adding a full mixer, effects editor or timeline to the web UI.
 
-Proposed output defaults: stereo 48 kHz / 24-bit WAV plus a 256 kbps MP3 made
-from that same WAV. Aim for -16 LUFS integrated, with a -1 dBTP ceiling. Avoid
+Output: a stereo 256 kbps MP3, made from a private 48 kHz / 24-bit render.
+Aim for -16 LUFS integrated, with a -1 dBTP ceiling. Avoid
 aggressive gain on near-silent recordings; report no usable audio instead. These
 are listening-copy defaults to validate by listening, independent of the existing
 -23 LUFS song-library matching. Retain musical pauses; trim only known capture
@@ -181,7 +184,7 @@ failed. Poll confirmed state; a timeout is not a signal to render again. One ren
 worker at a time, with idempotent requests and resumable jobs after restart.
 
 Write to temporary paths, validate duration/channels/decodability and peak/loudness,
-then atomically publish the final files and receipt. A completed WAV can survive
+then atomically publish the MP3 and receipt. An internal render survives
 an MP3 encoder failure; retry just encoding. Low disk, missing media, interrupted
 render or verification failures leave the source recordings intact and explain
 the next action. An empty take never becomes a render job.

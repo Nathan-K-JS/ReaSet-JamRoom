@@ -1,6 +1,6 @@
 # Playback and recording
 
-Listening copies are available from saved takes: stereo MP3/WAV downloads and
+Listening copies are available from saved takes: stereo MP3 downloads and
 room-Wi-Fi QR sharing for Android and iPhone. See
 [Listening recordings](LISTENING_RECORDINGS.md) for workflow and setup.
 
@@ -484,7 +484,7 @@ scratch projects as described in the release verification above:
 ## Agreed upgrades
 
 The next proposed upgrade is [a listening recording to take home](LISTENING_RECORDINGS.md):
-one selected take rendered by REAPER to a stereo WAV/MP3, with preview and local
+one selected take rendered by REAPER to a stereo MP3, with preview and local
 QR download. It is planned, not implemented. The approved launch UX fixes are
 tracked in [LAUNCH_UX_FIXES.md](LAUNCH_UX_FIXES.md).
 

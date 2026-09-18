@@ -126,6 +126,9 @@ class Listening:
         self.index = self.home / 'index.json'
         self.data = json.loads(self.index.read_text(encoding='utf-8')) if self.index.exists() else {'roots': {}, 'jobs': {}}
         for job in self.data['jobs'].values():
+            job['files'].pop('wav', None)  # Older copies keep their existing MP3 share token.
+            if job['state'] == 'failed' and 'WAV' in job.get('error', ''):
+                job['error'] = 'MP3 encoding did not finish. Retry to make the listening copy.'
             if job['state'] not in TERMINAL:
                 job['state'] = 'queued'
         self._save()
@@ -211,7 +214,7 @@ class Listening:
     def ready(self, token):
         with self.guard:
             for row in self.data['jobs'].values():
-                if secrets.compare_digest(row['token'], token) and row['state'] in ('ready', 'failed') and row['files']:
+                if secrets.compare_digest(row['token'], token) and row['state'] in ('ready', 'failed') and 'mp3' in row['files']:
                     return copy.deepcopy(row)
         raise ValueError('This listening link is unavailable or has been revoked')
 
@@ -242,7 +245,7 @@ class Listening:
         expected = req['duration'] / req['rate']
         wav, mp3 = folder / 'mix.wav', folder / 'mix.mp3'
         cfg = self.config()
-        if not wav.is_file():
+        if not mp3.is_file() and not wav.is_file():
             self.change(key, state='preparing', error='')
             # Simple, saved flat stereo template, independent of room/IEM faders.
             template = self.home / 'mix-template.json'
@@ -261,30 +264,35 @@ class Listening:
             probe(pending, expected)
             loud, peak = scan([pending])
             if not math.isfinite(loud) or loud <= -60 or not math.isfinite(peak) or peak > -.8:
-                raise ValueError('Listening WAV failed loudness/peak verification; originals retained')
+                raise ValueError('Rendered audio failed loudness/peak verification; originals retained')
             os.replace(pending, wav)
             self.change(key, loudness=loud, peak=peak)
-        probe(wav, expected)
-        self.change(key, files={'wav': wav.stat().st_size}, state='encoding')
         if not mp3.is_file():
+            probe(wav, expected)
+            self.change(key, files={}, state='encoding')
             ff = shutil.which('ffmpeg')
             if not ff:
-                raise ValueError('WAV is ready. Install ffmpeg, then Retry to create the MP3.')
+                raise ValueError('Install ffmpeg, then Retry to create the MP3. The rendered audio is saved.')
             pending = folder / 'mp3-pending.mp3'
             result = subprocess.run([ff, '-y', '-nostdin', '-v', 'error', '-i', str(wav),
                 '-map_metadata', '-1', '-codec:a', 'libmp3lame', '-b:a', '256k', str(pending)],
                 capture_output=True, text=True, timeout=14400)
             if result.returncode:
-                raise ValueError('WAV is ready; MP3 encoding failed: ' + result.stderr[-400:])
+                raise ValueError('MP3 encoding failed; rendered audio is saved for Retry: ' + result.stderr[-400:])
             probe(pending, expected)
             _, peak = scan([pending])
             if not math.isfinite(peak) or peak > 0:
-                raise ValueError('WAV is ready; encoded MP3 peaks exceeded headroom. Mix this take in REAPER.')
+                raise ValueError('Encoded MP3 peaks exceeded headroom. Mix this take in REAPER.')
             os.replace(pending, mp3)
         probe(mp3, expected)
-        files = {'wav': wav.stat().st_size, 'mp3': mp3.stat().st_size}
+        files = {'mp3': mp3.stat().st_size}
         atomic(folder / 'receipt.json', {'files': files, 'duration': expected, 'ready': True})
         self.change(key, state='ready', files=files, duration=expected, error='')
+        # Only this job's intermediate stereo render; never the recorded inputs.
+        try:
+            wav.unlink(missing_ok=True)
+        except OSError:
+            pass  # A locked intermediate must not turn a completed MP3 into a failure.
 
 
 def serve_audio(handler, path, filename, download=False, head=False):
@@ -305,7 +313,7 @@ def serve_audio(handler, path, filename, download=False, head=False):
             handler.send_response(416); handler.send_header('Content-Range', f'bytes */{size}')
             handler.send_header('Content-Length', '0'); handler.end_headers(); return
     handler.send_response(206 if value else 200)
-    handler.send_header('Content-Type', 'audio/mpeg' if path.suffix == '.mp3' else 'audio/wav')
+    handler.send_header('Content-Type', 'audio/mpeg')
     handler.send_header('Content-Length', str(end - start + 1))
     handler.send_header('Accept-Ranges', 'bytes')
     handler.send_header('Cache-Control', 'no-store')
@@ -328,9 +336,9 @@ def serve_audio(handler, path, filename, download=False, head=False):
 
 def public_page(row, link):
     title = html.escape(row['title']); token = row['token']
-    kind = 'mp3' if 'mp3' in row['files'] else 'wav'
-    downloads = ''.join(f'<a class="button {"primary" if ext == "mp3" else ""}" download href="/listen/{token}/download.{ext}">Download {ext.upper()} <small>{size/1048576:.1f} MB</small></a>' for ext, size in sorted(row['files'].items()))
-    return (ROOT / 'tools' / 'listening.html').read_text(encoding='utf-8').replace('%%LINK%%', html.escape(link, quote=True)).replace('%%TITLE%%', title).replace('%%TOKEN%%', token).replace('%%KIND%%', kind).replace('%%DOWNLOADS%%', downloads).replace('%%DATE%%', html.escape(row['created']))
+    size = row['files']['mp3']
+    download = f'<a class="button primary" download href="/listen/{token}/download.mp3">Download MP3 <small>{size/1048576:.1f} MB</small></a>'
+    return (ROOT / 'tools' / 'listening.html').read_text(encoding='utf-8').replace('%%LINK%%', html.escape(link, quote=True)).replace('%%TITLE%%', title).replace('%%TOKEN%%', token).replace('%%DOWNLOADS%%', download).replace('%%DATE%%', html.escape(row['created']))
 
 
 def handle_get(handler, service, lan, head=False):
@@ -339,7 +347,7 @@ def handle_get(handler, service, lan, head=False):
         handler._send(200, (ROOT / 'tools' / 'listening-copies.html').read_bytes(), 'text/html'); return True
     if path == '/api/listening':
         handler._send(200, service.listing()); return True
-    match = re.fullmatch(r'/listen/([A-Za-z0-9_-]{20,64})(?:/(audio\.(?:wav|mp3)|download\.(?:wav|mp3)|qr.svg))?', path)
+    match = re.fullmatch(r'/listen/([A-Za-z0-9_-]{20,64})(?:/(audio\.mp3|download\.mp3|qr.svg))?', path)
     if not match: return False
     try:
         row = service.ready(match[1]); part = match[2]

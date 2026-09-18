@@ -38,6 +38,9 @@ ancestry first; never force-push or overwrite divergent changes. Pushing only
 `feature/timing-repair` does not deliver an update to standard installations.
 
 Current architecture:
+- v3.11.1 makes listening copies MP3-only at the user's request. WAV is a private
+  render intermediate, retained for encoding retries and removed after MP3
+  publication. Never reintroduce a WAV download or fallback player in sharing.
 - v3.11 adds listening copies; see `docs/LISTENING_RECORDINGS.md`. REAPER snapshots
   one take, and the existing importer service discovers/queues private stereo
   renders in a separate Dummy Audio REAPER instance. Preserve that isolation:
