@@ -168,6 +168,7 @@ class Listening:
                             continue
                         self.data['jobs'][key] = {'key': key, 'id': req['id'], 'project': project,
                             'folder': str(path.parent), 'title': req['title'], 'created': req['created'],
+                            'summary': 'With backing' if req.get('backing') else 'Recording only',
                             'state': 'queued', 'token': secrets.token_urlsafe(24), 'files': {}}
                         self._save()
                     except (OSError, ValueError, KeyError):
@@ -190,10 +191,18 @@ class Listening:
             elif action == 'revoke' and row['state'] in ('ready', 'failed'):
                 row['token'] = secrets.token_urlsafe(24)
             elif action == 'remove' and row['state'] in TERMINAL:
+                folder = Path(row['folder']); owned = []
+                manifest = folder / 'media.json'
+                if manifest.exists():
+                    for item in json.loads(manifest.read_text(encoding='utf-8')):
+                        path = folder / item
+                        if not re.fullmatch(r'Media/[0-9]+\.[A-Za-z0-9]+', item) or path.resolve().parent != (folder/'Media').resolve():
+                            raise ValueError('Listening media index needs attention; no files were removed')
+                        owned.extend([path, path.with_name(path.name + '.new')])
                 row.update(state='removed', token=secrets.token_urlsafe(24), files={})
-                self._save()  # Revoke access before unlinking only these two known outputs.
-                for name in ('mix.wav', 'mix.mp3'):
-                    (Path(row['folder']) / name).unlink(missing_ok=True)
+                self._save()  # Revoke first, then unlink only verified private copy assets.
+                for path in owned + [folder / name for name in ('mix.wav', 'mix.mp3', 'mix-pending.wav', 'mp3-pending.mp3')]:
+                    path.unlink(missing_ok=True)
             else:
                 raise ValueError('This copy is busy or the action is unavailable')
             self._save()

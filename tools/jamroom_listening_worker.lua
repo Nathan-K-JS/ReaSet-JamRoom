@@ -71,15 +71,19 @@ local ok,why=xpcall(function()
     end
     assert(#rows>0,'All inputs are muted. Choose something to include.')
     reaper.RecursiveCreateDirectory(folder..'/Media',0)
-    local copies={}
+    local copies={};local media=J.array()
     for i,r in ipairs(rows)do
       if not copies[r.file] then
         local ext=r.file:match('(%.[%w]+)$') or '.wav'
         local dest=folder..'/Media/'..i..ext
-        -- Only unpublished worker media is replaced when recovering a partial preparation.
-        os.remove(dest);copy(r.file,dest);copies[r.file]=dest
+        copies[r.file]=dest;media[#media+1]='Media/'..i..ext
       end
       r.file=copies[r.file]
+    end
+    write(folder..'/media.json',media)
+    for source,dest in pairs(copies)do
+      -- Only unpublished worker media is replaced when recovering a partial preparation.
+      os.remove(dest);copy(source,dest)
     end
     -- All source reads and routing checks complete before replacing the worker project.
     for i=reaper.CountTracks(0)-1,0,-1 do reaper.DeleteTrack(reaper.GetTrack(0,i))end

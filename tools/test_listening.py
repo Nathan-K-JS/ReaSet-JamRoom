@@ -8,6 +8,7 @@ from pathlib import Path
 import shutil
 import struct
 import subprocess
+import sys
 import tempfile
 import threading
 import unittest
@@ -44,6 +45,12 @@ class ListeningFixture(unittest.TestCase):
 
 
 class ListeningTests(ListeningFixture):
+    @unittest.skipUnless(os.name == 'nt', 'Windows worker isolation')
+    def test_worker_lifetime_closes_its_owned_child(self):
+        child=subprocess.Popen([sys.executable,'-c','import time; time.sleep(60)'], creationflags=subprocess.CREATE_NO_WINDOW)
+        close=listen.bind_worker_lifetime(child)
+        close()
+        self.assertIsNotNone(child.wait(timeout=5))
     def test_safari_ranges_head_and_unicode_downloads(self):
         url = self.http() + '/listen/' + self.token
         for byte_range, code, expected in [(None, 200, b'0123456789abcdef'), ('bytes=0-1', 206, b'01'),
@@ -76,12 +83,15 @@ class ListeningTests(ListeningFixture):
 
     def test_revocation_and_remove_never_touch_multitracks(self):
         original = self.folder / 'original.wav'; original.write_bytes(b'keep')
+        media=self.folder/'Media';media.mkdir();(media/'1.wav').write_bytes(b'private copy')
+        listen.atomic(self.folder/'media.json', ['Media/1.wav'])
         self.service.action(self.row['key'], 'revoke')
         with self.assertRaises(ValueError): self.service.ready(self.token)
         current = self.row['token']; self.assertEqual(self.service.ready(current)['state'], 'ready')
         self.service.action(self.row['key'], 'remove')
         with self.assertRaises(ValueError): self.service.ready(current)
         self.assertEqual(original.read_bytes(), b'keep'); self.assertFalse((self.folder/'mix.mp3').exists())
+        self.assertFalse((media/'1.wav').exists())
         self.assertEqual(self.service.listing()['jobs'], [])
 
     def test_restart_resumes_interrupted_jobs_and_keeps_ready_copies(self):
@@ -125,6 +135,14 @@ class ListeningTests(ListeningFixture):
         with self.assertRaises(ValueError): self.service.ready(self.token)
         self.assertFalse((self.folder/'mix.wav').exists())
 
+    def test_remove_rejects_media_outside_its_copy(self):
+        original=self.home/'original.wav';original.write_bytes(b'original')
+        listen.atomic(self.folder/'media.json', ['../original.wav'])
+        with self.assertRaisesRegex(ValueError,'no files were removed'):
+            self.service.action(self.row['key'],'remove')
+        self.assertEqual(original.read_bytes(),b'original')
+        self.assertEqual(self.service.ready(self.token)['state'],'ready')
+
 
 EDGE = Path(os.environ.get('PROGRAMFILES(X86)', 'C:/Program Files (x86)')) / 'Microsoft/Edge/Application/msedge.exe'
 
@@ -147,8 +165,12 @@ class ListeningPhones(ListeningFixture):
                     browser = engine.launch(headless=True, **args)
                     try:
                         context = browser.new_context(**pw.devices[device], accept_downloads=True)
+                        # LAN HTTP does not expose secure-context sharing/clipboard APIs.
+                        context.add_init_script("Object.defineProperty(navigator,'share',{value:undefined});Object.defineProperty(navigator,'clipboard',{value:undefined});")
                         page = context.new_page(); errors=[]; page.on('pageerror', lambda e:errors.append(str(e)))
                         page.goto(base+'/listen/'+self.token)
+                        self.assertFalse(page.locator('#share').is_visible())
+                        page.wait_for_function('document.querySelector(".qr").complete&&document.querySelector(".qr").naturalWidth>0')
                         page.wait_for_function('document.querySelector("audio").readyState>=1')
                         page.locator('audio').evaluate('(a)=>a.play()')
                         page.wait_for_function('document.querySelector("audio").currentTime>.1')
@@ -167,6 +189,9 @@ class ListeningPhones(ListeningFixture):
                             self.assertGreaterEqual(page.locator('#copy').bounding_box()['height'],44)
                         page.get_by_role('button', name='Copy link', exact=True).click()
                         page.wait_for_function('document.getElementById("copy-status").textContent.length>0')
+                        page.goto(base+'/recordings?project=project')
+                        page.get_by_role('link',name='Listen, download & share',exact=True).wait_for()
+                        self.assertTrue(page.evaluate('document.documentElement.scrollWidth<=innerWidth'))
                         self.assertFalse(errors)
                         context.close()
                     finally: browser.close()

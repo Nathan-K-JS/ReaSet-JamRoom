@@ -38,12 +38,19 @@ ancestry first; never force-push or overwrite divergent changes. Pushing only
 `feature/timing-repair` does not deliver an update to standard installations.
 
 Current architecture:
+- v3.11 adds listening copies; see `docs/LISTENING_RECORDINGS.md`. REAPER snapshots
+  one take, and the existing importer service discovers/queues private stereo
+  renders in a separate Dummy Audio REAPER instance. Preserve that isolation:
+  never render in the performance process. `imports/.listening/` contains the
+  durable share registry and worker configuration; do not treat it as disposable
+  importer cache. Source recordings remain independent of share-copy cleanup.
+  Phone playback/download/QR pages have Chromium/Android and WebKit/iPhone
+  emulation coverage; physical room Wi-Fi/phone acceptance still needs checking.
 - v3.10 addresses launch UX review findings 1–10 and replaces transport SYNC with
   connection status/Reconnect; see `docs/LAUNCH_UX_FIXES.md`. Song titles select
   silently; explicit Play and queue mode remain. Empty recording cleanup must
   preserve unknown files and recovery entries. `docs/LISTENING_RECORDINGS.md`
-  is the requested next-feature plan only: native REAPER stereo render and local
-  listening/download/QR sharing, not implemented by this release.
+  describes the subsequent v3.11 listening/download/QR implementation.
 - v3.9 adds automatic song-volume matching at import and via full/volume-only
   library updates; see `docs/SONG_VOLUME_MATCHING.md`. `jamroom_loudness.py`
   measures final cached slots excluding click, stores a suggestion, and never

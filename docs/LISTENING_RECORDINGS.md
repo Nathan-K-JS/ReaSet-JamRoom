@@ -1,6 +1,6 @@
 # Leave with a listening recording
 
-Status: implemented for v3.11, undergoing final release verification.
+Status: delivered in v3.11.
 
 ## Using it
 
@@ -53,8 +53,8 @@ the local link requires the same Wi-Fi and a running room PC/service.
   is added to this dry-file template.
 - Jobs resume after restart. A verified WAV survives an MP3 failure; Retry encodes
   it without repeating the render. Each new copy has its own link. Replace share
-  link revokes the old token; Remove listening copy removes only that copy's two
-  published audio files, leaving source multitracks and preparation snapshots.
+  link revokes the old token; Remove listening copy removes its published audio
+  and indexed private media copies, leaving original multitracks and audit metadata.
 - Share endpoints serve only indexed outputs, with Safari/Chrome byte-range and
   HEAD support, audio MIME types, UTF-8 filenames, and attachment downloads.
   QR codes are generated locally. Opening from localhost uses the detected LAN
@@ -69,6 +69,22 @@ iPhone emulation. Native checks use synthetic mono/stereo signals to verify
 chosen mutes, backing inclusion, no click, tempo/pitch handling, post-export
 copies and unchanged performance transport. **Physical Android/iPhone camera
 scanning and saving on the actual room Wi-Fi remain an on-site acceptance check.**
+
+Update with **JamRoom Update.bat**, restart REAPER and JamRoom Importer, then
+refresh ReaSet with Ctrl+F5. The normal dependency check installs the local QR
+library. No song-library rebuild is needed.
+
+Release verification: 192 automated tests; native recording/recovery/export and
+import/playback checks; four native listening mixes (with backing, without it,
+one instrument muted, and after export), all preserving the original project.
+Visual captures: `imports/.visual/listening-v311/`. Test tools:
+`python -m unittest discover -s tools -p 'test_*.py' -q`,
+`python tools/verify_listening_live.py`, `python tools/verify_recording_live.py`.
+
+On-site check: use an actual iPhone and Android on room Wi-Fi, scan the QR, play
+and seek, download MP3 and WAV, then turn Wi-Fi off and play the saved MP3. Verify
+that guest Wi-Fi can reach the PC; try a real four-mic and band take to assess mix
+balance. Browser emulation does not verify camera apps or the room's router.
 
 The sections below preserve the approved design and acceptance criteria.
 

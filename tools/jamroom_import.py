@@ -40,7 +40,7 @@ import jamroom_loudness as level_model
 # what is on disk — the importer server holds its modules in memory, so this is
 # how you tell "did the update take effect?" from "is the old process still up?"
 # BUMP THIS whenever the importer changes, and quote it when handing over.
-BUILD = "v3.10"
+BUILD = "v3.11"
 BUILD_DATE = "2026-09-18"
 
 # Fadr's S3 throttles each connection independently, so several transfers at

@@ -15,7 +15,7 @@ function M.make_listening(self,c)
   local same=self.selected==s.id and self.take==take.id and self.mode=='review'
   local request={version=1,id=c.nonce,project=self.id,session=s.id,take=take.id,
     title=s.song.name..' - '..(take.name and take.name~='' and take.name or 'Take '..take.number),
-    created=os.date('%Y-%m-%d %H:%M'),song=s.song,rate=s.rate,items=take.items,
+    created=os.date('%Y-%m-%d %H:%M:%S'),song=s.song,rate=s.rate,items=take.items,
     duration=take.duration,inputs=self.db.inputs,pitches=s.pitches or {},
     backing=c.backing==true and not s.song.free,recording=not same or self.recordingOn~=false,
     recMutes=same and self.recMutes or {},stemMutes=same and self.stemMutes or {},
