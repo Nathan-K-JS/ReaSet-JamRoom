@@ -38,6 +38,11 @@ ancestry first; never force-push or overwrite divergent changes. Pushing only
 `feature/timing-repair` does not deliver an update to standard installations.
 
 Current architecture:
+- v3.15 checks resumed import targets in the Apply flow and lets users explicitly
+  select the current project, with a second identity check against tab changes.
+  Unresolved Apply operations cannot be retargeted. A matching running importer
+  is reopened by the launcher; Stop importer safely drains active work before
+  shutdown. Closing browser tabs intentionally leaves the service running.
 - v3.14 groups post-record review into Playback, Next take and Export. Discard
   take returns to setup without recording; Restore take remains available under
   Saved recordings. Use "Export recording" for the MP3 action and "Exported

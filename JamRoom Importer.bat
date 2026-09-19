@@ -20,5 +20,7 @@ set "PYEXE=python"
 "%PYEXE%" tools\jamroom_importer_server.py
 :stopped
 echo.
-echo The importer stopped. Press any key to close.
+echo Launcher finished. An existing importer may still be running.
+echo Use Stop importer safely on its page to shut it down.
+echo Press any key to close this window.
 pause >nul

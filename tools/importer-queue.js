@@ -232,6 +232,13 @@ window.ImportJobs = (function(){
     try {
       // Save the initial default choices too, even when no control was edited.
       if(detail.state === 'review' && !detail.apply_started){dirty = true; version++; await flush();}
+      var checked = await request('/' + selected + '/check-target', {revision:detail.revision});
+      if(!checked.matches){
+        if(!checked.can_select)throw new Error('This import may already have been added. Open its original target project and use Check Apply; it cannot safely be redirected.');
+        if(!confirm('This saved review has no matching project target. Add this song to the project currently active in REAPER? Check the selected REAPER project tab before continuing.'))return;
+        var rebound = await request('/' + selected + '/target', {revision:detail.revision,expected_project:checked.current});
+        detail.revision=rebound.revision;detail.target=rebound.target;renderDetail(detail);
+      }
       await request('/' + selected + '/apply', {revision:detail.revision});
       rendered = ''; busy=false; await refresh();
     } catch(error){failure(error);}
@@ -283,6 +290,13 @@ window.ImportJobs = (function(){
     var controls = el('div', undefined, card);
     controls.style.cssText = 'display:flex;flex-wrap:wrap;gap:8px;margin:12px 0';
     button('Add song', async function(){await close(); setSource('yt', true); $('searchCard').scrollIntoView({behavior:'smooth'});}, controls);
+    button('Stop importer safely', async function(){
+      if(!confirm('Stop the importer after current work reaches a saved checkpoint? Imports will be kept for later. Recording downloads will be unavailable until you restart it.'))return;
+      await flush();
+      var response=await fetch('/api/stop',{method:'POST',headers:{'Content-Type':'application/json'},body:'{}'});
+      var result=await response.json();if(!response.ok)throw new Error(result.error||'Could not stop importer');
+      location.replace(URL.createObjectURL(new Blob(['<!doctype html><meta name="viewport" content="width=device-width,initial-scale=1"><title>Importer stopping</title><body style="background:#161b22;color:#eef2f7;font:18px system-ui;padding:24px;max-width:640px;margin:auto"><h1>Importer is stopping safely</h1><p>Current work will finish its saved checkpoint before the service stops. You can close this page.</p><p>Run JamRoom Importer.bat to return, then use Resume unfinished for queued songs.</p>'],{type:'text/html'})));
+    }, controls);
     button('Resume unfinished', async function(){await request('/control', {resume:true}); await refresh();}, controls);
     button('Pause / continue queue', async function(){await request('/control', {pause:!paused}); await refresh();}, controls);
     list = el('div', undefined, card);

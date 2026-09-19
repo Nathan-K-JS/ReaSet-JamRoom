@@ -217,3 +217,20 @@ The proposal was approved before implementation. Implementation lives in
 importer/REAPER bridge. Run `python -m unittest discover -p "test_*.py"` from
 `tools`, plus `python tools/verify_import_playback.py "imports/Lenny Kravitz - Fly Away"
 --queue-guards` from the repository root for the scratch-project integration check.
+
+## Reopening and stopping (v3.15)
+
+Run JamRoom Importer.bat to reopen a running importer from the same installation
+and version. Closing a browser tab leaves imports and MP3 downloads running.
+Use **Stop importer safely** to pause new work and stop after active work reaches
+a saved checkpoint. Restart with the launcher; use **Resume unfinished** when ready.
+
+A resumed review may retain an old project ID, or have none if prepared offline.
+**Apply to REAPER** now offers to select the currently active REAPER project when
+that target does not match. Check the active project tab before confirming. Drafts
+and downloaded stems are retained. Save the REAPER project to preserve its identity.
+An unresolved previous Apply must be checked in its original project to avoid
+adding the same song twice; it cannot be redirected.
+
+An older running version is not silently replaced. Run JamRoom Update.bat to
+checkpoint and restart it through the existing update recovery process.

@@ -28,6 +28,35 @@ class StartupTests(unittest.TestCase):
                 live.shutdown()
                 thread.join(3)
 
+    def test_matching_process_is_reopened_but_other_versions_are_not(self):
+        reply=Mock();reply.json.return_value=server.runtime()
+        with patch.object(server.requests,'Session') as factory, patch.object(server.webbrowser,'open') as browser:
+            factory.return_value.__enter__.return_value.get.return_value=reply
+            self.assertTrue(server.reopen_existing())
+            browser.assert_called_once()
+            reply.json.return_value={**server.runtime(),'build':'old'}
+            self.assertFalse(server.reopen_existing())
+            reply.json.return_value={**server.runtime(),'source':'C:/another-installation'}
+            self.assertFalse(server.reopen_existing())
+            self.assertEqual(browser.call_count,1)
+
+    def test_safe_stop_waits_for_checkpoint_and_exits_http_loop(self):
+        server.DRAIN.clear()
+        live=server.ImporterServer(('127.0.0.1',0),server.Handler)
+        thread=threading.Thread(target=live.serve_forever,daemon=True);thread.start()
+        queue=Mock();queue.guard=threading.RLock();queue.running={'worker'};queue.jobs={}
+        try:
+            with patch.object(server,'QUEUE',queue), patch.object(server,'LISTENING',None), patch.object(server,'UPDATES',Mock()):
+                reply=requests.post(f'http://127.0.0.1:{live.server_port}/api/stop',json={},timeout=3)
+                self.assertEqual(reply.status_code,200)
+                self.assertTrue(server.DRAIN.is_set())
+                queue.control.assert_called_once_with({'pause':True})
+                self.assertTrue(thread.is_alive())
+                queue.running.clear();thread.join(3)
+                self.assertFalse(thread.is_alive())
+        finally:
+            live.shutdown();live.server_close();server.DRAIN.clear()
+
     def diagnostic(self, replies):
         client = Mock()
         client.get.side_effect = replies
@@ -53,7 +82,7 @@ class StartupTests(unittest.TestCase):
 
     def test_bind_failure_returns_failure_without_opening_browser(self):
         with patch.object(server, 'ImporterServer', side_effect=OSError('occupied')), \
-                patch.object(server, 'startup_error'), patch.object(server.webbrowser, 'open') as browser:
+                patch.object(server, 'startup_error'), patch.object(server, 'reopen_existing', return_value=False), patch.object(server.webbrowser, 'open') as browser:
             self.assertEqual(server.main(), 1)
             browser.assert_not_called()
 

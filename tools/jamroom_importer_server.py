@@ -1047,12 +1047,25 @@ class Handler(BaseHTTPRequestHandler):
         tracked = False
         try:
             with REQUEST_GUARD:
-                if self.path != '/api/drain':
+                if self.path not in ('/api/drain', '/api/stop'):
                     if DRAIN.is_set():
                         return self._send(503, {'error':'Importer is checkpointing for an update. Wait for the update to finish.'})
                     ACTIVE_REQUESTS += 1
                     tracked = True
             body = self._body()
+            if self.path == '/api/stop':
+                DRAIN.set()
+                UPDATES.stop.set()
+                if QUEUE is not None: QUEUE.control({'pause':True})
+                with REQUEST_GUARD:
+                    if not getattr(self.server, 'stop_requested', False):
+                        self.server.stop_requested = True
+                        def finish_stop():
+                            while not drain_status()['ready']:
+                                threading.Event().wait(.5)
+                            self.server.shutdown()
+                        threading.Thread(target=finish_stop, daemon=True).start()
+                return self._send(200, {'ok':True, 'message':'Stopping after work reaches a saved checkpoint'})
             if self.path == '/api/drain':
                 if body.get('resume'):
                     DRAIN.clear()
@@ -1245,7 +1258,7 @@ def startup_error(exc):
                 if endpoint == "runtime":
                     print(f"Process ID: {info.get('pid')}; folder: {info.get('source')}")
                 print(f"Open http://localhost:{PORT} and let any import/update finish.")
-                print("Then close the old importer process and run JamRoom Importer.bat again.")
+                print("Run JamRoom Update.bat to checkpoint and restart the old importer safely.")
                 break
             except (requests.RequestException, ValueError):
                 continue
@@ -1255,16 +1268,37 @@ def startup_error(exc):
     print(f"  Get-NetTCPConnection -LocalPort {PORT} -State Listen | Select-Object LocalAddress,OwningProcess")
 
 
+def reopen_existing():
+    """Reuse only this installation/version; never kill a port owner."""
+    try:
+        with requests.Session() as session:
+            session.trust_env = False
+            response = session.get(f'http://127.0.0.1:{PORT}/api/runtime', timeout=3)
+            response.raise_for_status()
+            info = response.json()
+        if (info.get('app') != 'jamroom-importer' or info.get('build') != ji.BUILD
+                or os.path.normcase(os.path.abspath(info.get('source', ''))) != os.path.normcase(str(TOOLDIR.parent))):
+            return False
+        print('Importer is already running. Opening your saved work; no restart is needed.')
+        try: webbrowser.open(f'http://localhost:{PORT}')
+        except Exception: pass
+        return True
+    except (requests.RequestException, ValueError, AttributeError, TypeError):
+        return False
+
+
 def main():
     try:
         srv = ImporterServer(("0.0.0.0", PORT), Handler)
     except OSError as exc:
+        if reopen_existing(): return 0
         startup_error(exc)
         return 1
     listening_service()
     url = f"http://localhost:{PORT}"
     print(f"Jam Room Importer {getattr(ji, 'BUILD', '?')} running at {url}")
     print(f"Process ID: {os.getpid()}; folder: {TOOLDIR.parent}")
+    print("Closing the browser keeps work running. Use Stop importer safely on the page to shut down.")
     if lan_url():
         print(f"  (from the tablet: {lan_url()})")
     try:

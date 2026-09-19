@@ -136,6 +136,23 @@ class QueueTests(unittest.TestCase):
         restored = ImportQueue(self.bridge, self.cfg)
         self.assertEqual(restored.listing()['jobs'], [])
 
+    def test_resumed_review_can_confirm_target_without_losing_draft(self):
+        ident=self.add();row=self.review(ident)
+        row['draft']={'slots':{'stems/bass.wav':'BASS'}}
+        self.queue._save()
+        resumed=ImportQueue(self.bridge,self.cfg)
+        self.bridge.project_identity.return_value='project-B'
+        result=resumed.action(ident,'check-target',{'revision':0})
+        self.assertFalse(result['matches']);self.assertTrue(result['can_select'])
+        self.bridge.project_identity.return_value='project-C'
+        with self.assertRaises(Conflict):
+            resumed.action(ident,'target',{'revision':0,'expected_project':'project-B'})
+        self.assertEqual(resumed.jobs[ident]['target'],'project-A')
+        resumed.action(ident,'target',{'revision':0,'expected_project':'project-C'})
+        self.assertEqual(resumed.jobs[ident]['target'],'project-C')
+        self.assertEqual(resumed.jobs[ident]['draft'],row['draft'])
+        self.assertEqual(resumed.jobs[ident]['operation'],row['operation'])
+
     def test_project_change_refuses_apply_before_mutation(self):
         ident = self.add(); self.review(ident)
         self.bridge.project_identity.return_value = 'project-B'

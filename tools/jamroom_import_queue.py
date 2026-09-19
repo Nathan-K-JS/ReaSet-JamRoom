@@ -458,12 +458,19 @@ class ImportQueue:
                            apply_started=False, apply_prepared=False, summary='', revision=row['revision'] + 1)
                 self._save()
                 return {'ok': True}
+            if action == 'check-target':
+                current = self.server.project_identity()
+                return {'ok': True, 'current': current, 'matches': current == row['target'],
+                        'can_select': row['state'] == 'review' and not row.get('apply_started')}
             if action == 'target':
                 if row['state'] != 'review':
                     raise Conflict('Wait until review is ready')
                 if row.get('apply_started'):
                     raise Conflict('An Apply is unresolved. Reopen the original target project and retry there.')
-                row['target'] = self.server.project_identity()
+                current = self.server.project_identity()
+                if body.get('expected_project') and body['expected_project'] != current:
+                    raise Conflict('The open project changed during confirmation. Try Add to REAPER again.')
+                row['target'] = current
                 row['apply_prepared'] = False
                 row['revision'] += 1
                 self._save()

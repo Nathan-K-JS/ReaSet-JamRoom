@@ -692,6 +692,43 @@ class BrowserTests(unittest.TestCase):
         self.assertNotIn('50 of 50',text)
         self.assertEqual(self.page.locator('#chartNow example').count(),0)
 
+    def test_resumed_import_target_confirmation_and_safe_stop(self):
+        row={'id':'saved','song':'Band - Song','state':'review','revision':0,'target':'old-project',
+             'review':{'stems':[],'lyrics':{},'chords':[]},'draft':{}}
+        posts=[]
+        def route(req):
+            url=req.request.url
+            if url.endswith('/importer-queue.js'):return req.fulfill(path=str(ROOT/'tools/importer-queue.js'),content_type='text/javascript')
+            if url.endswith('/importer-activity.js'):return req.fulfill(body='',content_type='text/javascript')
+            if url.endswith('/api/jobs'):return req.fulfill(json={'schema':1,'jobs':[row],'paused':False})
+            if url.endswith('/api/jobs/saved'):return req.fulfill(json=row)
+            if '/api/jobs/saved/' in url:
+                action=url.rsplit('/',1)[-1];posts.append((action,req.request.post_data_json))
+                if action=='check-target':return req.fulfill(json={'current':'new-project','matches':False,'can_select':True})
+                if action=='target':row['target']='new-project'
+                if action in ('draft','target'):row['revision']+=1
+                if action=='apply':row['state']='applying'
+                return req.fulfill(json={'ok':True,'revision':row['revision'],'target':row['target']})
+            if url.endswith('/api/stop'):return req.fulfill(json={'ok':True})
+            if '/api/' in url:return req.fulfill(json={'songs':[],'state':'idle'})
+            req.fulfill(path=str(ROOT/'tools/importer.html'))
+        self.page.route('**/*',route)
+        self.page.goto('http://importer.test/')
+        self.page.get_by_role('button',name='Open Band - Song',exact=True).click()
+        self.page.once('dialog',lambda d:d.dismiss())
+        self.page.locator('#applyBtn').click()
+        self.page.wait_for_timeout(200)
+        self.assertNotIn('apply',[a for a,b in posts])
+        self.page.once('dialog',lambda d:d.accept())
+        self.page.locator('#applyBtn').click()
+        self.page.wait_for_timeout(200)
+        self.assertEqual([a for a,b in posts][-3:],['check-target','target','apply'])
+        self.assertEqual(next(b for a,b in posts if a=='target')['expected_project'],'new-project')
+        self.page.once('dialog',lambda d:d.accept())
+        self.page.get_by_role('button',name='Stop importer safely',exact=True).click()
+        self.page.wait_for_url('blob:**')
+        self.assertIn('Importer is stopping safely',self.page.inner_text('body'))
+
     def test_fadr_picker_starts_default_import_through_visible_buttons(self):
         song={'id':'split-song','name':'Paramore - Misery Business','duration':199.3,
               'subsplits_done':2,'named_locally':True,'has_chords':True,'stems':5,
