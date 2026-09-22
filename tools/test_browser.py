@@ -12,6 +12,14 @@ ROOT = Path(__file__).resolve().parent.parent
 EDGE = Path(os.environ.get('PROGRAMFILES(X86)', 'C:/Program Files (x86)')) / 'Microsoft/Edge/Application/msedge.exe'
 
 
+def serve_workspace(req):
+    name=req.request.url.rsplit('/',1)[-1]
+    if name in ('importer-workspace.js','importer-workspace.css'):
+        req.fulfill(path=str(ROOT/'tools'/name),content_type='text/javascript' if name.endswith('.js') else 'text/css')
+        return True
+    return False
+
+
 @unittest.skipUnless(EDGE.exists(), 'Microsoft Edge is required for these browser tests')
 class BrowserTests(unittest.TestCase):
     @classmethod
@@ -35,6 +43,7 @@ class BrowserTests(unittest.TestCase):
 
     def load_reaset(self):
         def route(req):
+            if serve_workspace(req): return
             if req.request.url.endswith(('/importer-queue.js','/importer-activity.js')):
                 return req.fulfill(body='', content_type='text/javascript')
             name = req.request.url.rsplit('/', 1)[-1]
@@ -91,8 +100,8 @@ class BrowserTests(unittest.TestCase):
         self.assertEqual((command['op'],command['part']),('partMix','harmony'))
         self.assertAlmostEqual(command['gain'],.501187,places=5)
         self.page.evaluate('g_recPending=null;recRender()')
-        self.page.get_by_role('button',name='Keep & add another part',exact=True).click()
-        self.assertEqual(self.page.evaluate('g_recPending.op'),'overdub')
+        self.page.get_by_role('button',name='Add part',exact=True).click()
+        self.assertEqual(self.page.evaluate('g_recPending.op'),'prepareTake')
         self.page.evaluate("g_recPending=null;g_recState.overdub={session:'s',take:'t'};recRender()")
         self.assertTrue(self.page.get_by_role('button',name='Record part',exact=True).is_visible())
         self.page.locator('#rec-part-stop').uncheck()
@@ -108,7 +117,7 @@ class BrowserTests(unittest.TestCase):
         for width in (320,390,768,1280):
             self.page.set_viewport_size({'width':width,'height':800})
             self.assertTrue(self.page.evaluate('document.documentElement.scrollWidth<=innerWidth'))
-            self.assertEqual(self.page.locator('.rec-review-section').count(),3)
+            self.assertEqual(self.page.locator('.rec-work-foot button').count(),4)
         switch=self.page.get_by_role('switch',name='Recorded instruments',exact=True)
         self.assertEqual(switch.get_attribute('aria-checked'),'true')
         switch.click()
@@ -132,12 +141,12 @@ class BrowserTests(unittest.TestCase):
         self.page.get_by_role('button',name='Export recording',exact=True).first.click()
         self.assertFalse(self.page.locator('#rec-copy-backing').is_checked())
         self.assertTrue(self.page.evaluate('document.documentElement.scrollWidth<=innerWidth'))
-        self.page.locator('#rec-copy-go').click()
+        self.page.get_by_role('button',name='Create MP3',exact=True).click()
         command=json.loads(self.page.evaluate("decodeURIComponent(sent.at(-1)).split('/want/')[1]"))
         self.assertEqual((command['op'],command['session'],command['take'],command['backing']),('listening','session','take',False))
         self.assertIn('job='+command['nonce'],self.page.evaluate('openedCopy'))
         self.assertNotIn('1007',self.page.evaluate('sent.at(-1)'))
-        self.page.evaluate("g_recPending=null;g_recState.mode='idle';g_recState.sessions[0].exported='Recording.RPP';recRender();document.getElementById('rec-takes').open=true" )
+        self.page.evaluate("g_recPending=null;g_recState.mode='idle';g_recState.sessions[0].exported='Recording.RPP';recRender();recNavigate('sessions')" )
         self.assertEqual(self.page.get_by_role('button',name='Export recording',exact=True).count(),1)
 
     def test_free_jam_records_without_song_and_preserves_setup_during_input_selection(self):
@@ -160,8 +169,8 @@ class BrowserTests(unittest.TestCase):
           g_recState.sessions=[{id:'jam',song:{free:true,name:'Free jam',bpm:100,beats:4,click:true},takes:[{id:'t',number:1,inputs:['1','2'],status:'kept',duration:4}]}];recRender()""")
         self.assertEqual(self.page.get_by_role('button', name='Backing on', exact=True).count(), 0)
         self.assertEqual(self.page.get_by_role('button', name='Drums backing', exact=True).count(), 0)
-        self.page.get_by_text('Instrument playback', exact=True).click()
-        self.assertTrue(self.page.get_by_role('switch', name='Vox 1', exact=True).is_visible())
+        self.assertTrue(self.page.get_by_role('switch', name='Recorded instruments', exact=True).is_visible())
+        self.assertEqual(self.page.locator('.rec-backing').count(),0)
 
     def test_recording_waits_for_confirmation_and_stop_bypasses_pending(self):
         self.recording_state()
@@ -180,7 +189,7 @@ class BrowserTests(unittest.TestCase):
         self.page.evaluate("g_recState.mode='recording';recRender()")
         self.assertTrue(self.page.get_by_role('button', name='Stop', exact=True).is_visible())
         self.assertEqual(self.page.get_by_role('button', name='Record', exact=True).count(), 0)
-        self.page.evaluate("g_recState.mode='idle';recRender();document.getElementById('rec-setup').open=true")
+        self.page.evaluate("g_recState.mode='idle';recRender();recNavigate('settings')")
         self.page.locator('#rec-in-1').fill('12')
         self.page.evaluate("g_recState.message='New confirmed state';recRender()")
         self.assertEqual(self.page.locator('#rec-in-1').input_value(), '12')
@@ -236,6 +245,7 @@ class BrowserTests(unittest.TestCase):
         self.recording_state()
         self.page.evaluate("g_recState.songs[0].level={status:'measured',gain:.35,manual:true};document.body.insertAdjacentHTML('beforeend','<div id=volume-test>'+recGainHtml()+'</div>')")
         self.assertIn('matched suggestion 35%',self.page.locator('#volume-test').inner_text())
+        self.page.evaluate("document.getElementById('recording-panel').classList.remove('open');updateMainTransport()")
         self.page.get_by_role('button',name='Use matched level',exact=True).click()
         command=json.loads(self.page.evaluate("decodeURIComponent(sent.at(-1)).split('/want/')[1]"))
         self.assertEqual(command['op'],'matchGain')
@@ -268,7 +278,8 @@ class BrowserTests(unittest.TestCase):
               return {bottom:panel.getBoundingClientRect().bottom,bar:bar.getBoundingClientRect().top,
                 width:panel.clientWidth,scrollWidth:panel.scrollWidth};
             }''')
-            self.assertLessEqual(geometry['bottom'],geometry['bar']+1)
+            self.assertLessEqual(geometry['bottom'],height+1)
+            self.assertFalse(self.page.locator('#perfBar').is_visible())
             self.assertLessEqual(geometry['scrollWidth'],geometry['width']+1)
 
     def test_performance_drawer_reserves_scroll_space(self):
@@ -369,13 +380,13 @@ class BrowserTests(unittest.TestCase):
         self.recording_state()
         self.page.evaluate("g_recState.recordMode='freejam';g_recState.jam={bpm:100,beats:4,click:true};recRender();sent=[]")
         self.page.locator('#rec-jam-bpm').fill('132')
-        self.page.locator('#main-play-btn').click()
+        self.page.get_by_role('button',name='Record',exact=True).click()
         self.assertNotIn(1007,self.page.evaluate('sent'))
         command=json.loads(self.page.evaluate("decodeURIComponent(sent.at(-1)).split('/want/')[1]"))
         self.assertEqual((command['op'],command['jam']['bpm']),('record',132))
-        self.assertTrue(self.page.locator('#main-play-btn').is_disabled())
+        self.assertTrue(self.page.get_by_role('button',name='Record',exact=True).is_disabled())
         self.page.evaluate("g_recPending=null;g_recState.mode='recording';g_recState.paused=true;recRender()")
-        self.assertIn('RESUME',self.page.locator('#main-play-btn').inner_text())
+        self.assertTrue(self.page.get_by_role('button',name='Resume',exact=True).is_visible())
         self.page.evaluate("g_recState.mode='idle';g_recHb.at=0;recRender()")
         self.assertTrue(self.page.locator('#main-play-btn').is_disabled())
         self.page.evaluate('showMainView()')
@@ -549,6 +560,7 @@ class BrowserTests(unittest.TestCase):
         songs=[{'id':i,'name':'Song '+str(i),'eligible':i!=2,'level_eligible':True,'protected':i==2,'update_status':'Update available'} for i in (1,2,3)]
         posts=[]
         def route(req):
+            if serve_workspace(req): return
             if req.request.url.endswith(('/importer-queue.js','/importer-activity.js')):
                 return req.fulfill(body='', content_type='text/javascript')
             url=req.request.url
@@ -561,6 +573,7 @@ class BrowserTests(unittest.TestCase):
             else:req.fulfill(body='')
         self.page.route('**/*',route)
         self.page.goto('http://importer.test/#updates=1')
+        self.page.locator('#workspaceUpdateOptions').evaluate('(e)=>e.open=true')
         self.page.get_by_role('button',name='Update whole library',exact=True).click()
         self.page.wait_for_timeout(300)
         self.assertEqual(posts[0]['ids'],[1,3])
@@ -571,6 +584,7 @@ class BrowserTests(unittest.TestCase):
 
         self.page.locator('#updateMode').select_option('levels')
         self.page.locator('#replaceLevels').check()
+        self.page.locator('#workspaceUpdateOptions').evaluate('(e)=>e.open=true')
         self.page.get_by_role('button',name='Update whole library',exact=True).click()
         self.page.wait_for_timeout(300)
         self.assertEqual(posts[-1]['ids'],[1,2,3])
@@ -672,6 +686,7 @@ class BrowserTests(unittest.TestCase):
     def test_importer_version_warning_matches_running_server(self):
         running = {'build': importer.BUILD, 'key': True, 'reaper': True}
         def route(req):
+            if serve_workspace(req): return
             if req.request.url.endswith(('/importer-queue.js','/importer-activity.js')):
                 return req.fulfill(body='', content_type='text/javascript')
             if '/api/checks' in req.request.url:
@@ -702,6 +717,7 @@ class BrowserTests(unittest.TestCase):
 
     def test_importer_review_does_not_treat_a_perfect_match_as_quality_approval(self):
         def route(req):
+            if serve_workspace(req): return
             if req.request.url.endswith(('/importer-queue.js','/importer-activity.js')):
                 return req.fulfill(body='', content_type='text/javascript')
             if '/api/' in req.request.url:req.fulfill(json={'songs':[],'state':'idle'})
@@ -721,6 +737,7 @@ class BrowserTests(unittest.TestCase):
              'review':{'stems':[],'lyrics':{},'chords':[]},'draft':{}}
         posts=[]
         def route(req):
+            if serve_workspace(req): return
             url=req.request.url
             if url.endswith('/importer-queue.js'):return req.fulfill(path=str(ROOT/'tools/importer-queue.js'),content_type='text/javascript')
             if url.endswith('/importer-activity.js'):return req.fulfill(body='',content_type='text/javascript')
@@ -749,6 +766,7 @@ class BrowserTests(unittest.TestCase):
         self.assertEqual([a for a,b in posts][-3:],['check-target','target','apply'])
         self.assertEqual(next(b for a,b in posts if a=='target')['expected_project'],'new-project')
         self.page.once('dialog',lambda d:d.accept())
+        self.page.get_by_role('button',name='Settings',exact=True).click()
         self.page.get_by_role('button',name='Stop importer safely',exact=True).click()
         self.page.wait_for_url('blob:**')
         self.assertIn('Importer is stopping safely',self.page.inner_text('body'))
@@ -759,6 +777,7 @@ class BrowserTests(unittest.TestCase):
               'key':'G#:maj','tempo':173,'created':'2026-08-23'}
         posts=[]
         def route(req):
+            if serve_workspace(req): return
             if req.request.url.endswith(('/importer-queue.js','/importer-activity.js')):
                 return req.fulfill(path=str(ROOT/'tools/importer-queue.js'), content_type='text/javascript')
             url=req.request.url
@@ -786,6 +805,7 @@ class BrowserTests(unittest.TestCase):
         songs=[{'id':i,'name':'Song '+str(i),'eligible':i==1,'protected':i==2,'update_status':'Update available'} for i in (1,2,3)]
         posts=[]
         def route(req):
+            if serve_workspace(req): return
             if req.request.url.endswith(('/importer-queue.js','/importer-activity.js')):
                 return req.fulfill(body='', content_type='text/javascript')
             url=req.request.url

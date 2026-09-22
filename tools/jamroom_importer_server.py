@@ -988,6 +988,8 @@ class Handler(BaseHTTPRequestHandler):
         if self.path in ("/", "/index.html"):
             self._send(200, (TOOLDIR / "importer.html").read_bytes(),
                        "text/html")
+        elif self.path in ('/importer-workspace.js', '/importer-workspace.css'):
+            self._send(200, (TOOLDIR / self.path[1:]).read_bytes(), 'text/javascript' if self.path.endswith('.js') else 'text/css')
         elif self.path == '/importer-queue.js':
             self._send(200, (TOOLDIR / 'importer-queue.js').read_bytes(), 'text/javascript')
         elif self.path == '/importer-activity.js':

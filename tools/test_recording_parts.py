@@ -13,6 +13,34 @@ class RecordingPartsTests(unittest.TestCase):
         lua.execute("M={J=dofile(root..'/Requirements/ReaSet_JSON.lua')}")
         return lua
 
+    def test_prepared_redo_keeps_original_on_failure_and_passes_backing_choice(self):
+        lua=self.runtime()
+        lua.execute('''reaper={GetPlayState=function()return 0 end}
+session={id='s',song={key='song',start=10},takes={{id='old',status='kept'}}}
+self={preparation={session='s',take='old',kind='redo'},backingOn=false,stemMutes={BASS=true}}
+function self:session()return session end
+function self:song()return session.song end
+function self:save()end
+function self:begin(key,parent,sid,mix)
+  received=mix
+  assert(not fail,'Input unavailable')
+  new={id='new'};session.takes[2]=new
+end
+M.mix_take=function()return session,new end
+dofile(root..'/Requirements/ReaSet_RecordingPrepare.lua')(self,M)
+fail=true;ok=pcall(function()self:record_prepared({})end)
+''')
+        self.assertFalse(lua.eval('ok'))
+        self.assertEqual(lua.eval('session.takes[1].status'),'kept')
+        self.assertEqual(lua.eval('#session.takes'),1)
+        self.assertTrue(lua.eval('self.preparation~=nil'))
+        lua.execute('fail=false;self:record_prepared({stopAtEnd=false})')
+        self.assertFalse(lua.eval('received.backingOn'))
+        self.assertTrue(lua.eval('received.stemMutes.BASS'))
+        self.assertEqual(lua.eval('session.takes[1].status'),'discarded')
+        self.assertFalse(lua.eval('new.stopAtEnd'))
+        self.assertTrue(lua.eval('self.preparation==nil'))
+
     def test_device_opens_before_channels_are_available_and_restores_preferences(self):
         lua=self.runtime()
         lua.execute('''clock=0;channels=0;settings={audiocloseinactive=11,audioclosestop=1}

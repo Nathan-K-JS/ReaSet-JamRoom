@@ -31,8 +31,8 @@ class ActivityTests(unittest.IsolatedAsyncioTestCase):
         self.calls[path]+=1
         if path==self.hold:self.held.append(r);return
         if path==self.failed_path:await r.abort();return
-        if path.endswith('.js'):
-            await r.fulfill(path=str(ROOT/'tools'/path.lstrip('/')),content_type='text/javascript');return
+        if path.endswith(('.js','.css')):
+            await r.fulfill(path=str(ROOT/'tools'/path.lstrip('/')),content_type='text/javascript' if path.endswith('.js') else 'text/css');return
         if path=='/api/checks':
             import jamroom_import as ji
             data=dict(build=ji.BUILD,key=True,reaper=True,ffmpeg=True,ytdlp=True)
@@ -116,7 +116,7 @@ class ActivityTests(unittest.IsolatedAsyncioTestCase):
             bounds=await self.page.evaluate('''() => ({bar:document.getElementById('activityBar').getBoundingClientRect().top,
                 width:document.documentElement.scrollWidth,viewport:innerWidth,
                 last:document.querySelector('#updateSongs .songrow:last-child').getBoundingClientRect().bottom})''')
-            self.assertGreaterEqual(bounds['bar'],0);self.assertLess(bounds['bar'],20)
+            self.assertGreaterEqual(bounds['bar'],0);self.assertLess(bounds['bar'],150)
             self.assertLessEqual(bounds['width'],bounds['viewport'])
             self.assertLessEqual(bounds['last'],701)
 

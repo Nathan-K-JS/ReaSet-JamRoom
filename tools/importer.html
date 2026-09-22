@@ -122,6 +122,7 @@
   #rechordBox input{min-width:0;flex:1;font:inherit;padding:10px;border:1px solid #3a3f47;border-radius:8px;background:#12141a;color:#e8eaed}
   @media(max-width:500px){body{padding:10px}.srctabs{flex-wrap:wrap}.srctab{flex-basis:40%}}
 </style>
+<link rel="stylesheet" href="/importer-workspace.css">
 </head>
 <body>
   <header id="activityBar"><span id="activitySignal" aria-hidden="true"></span><div id="activitySummary" role="status" aria-live="polite" aria-atomic="true">Ready</div><button id="activityToggle" type="button">View activity</button></header>
@@ -353,7 +354,7 @@
 <script>
 // Version of THIS page (served fresh from disk). Compared against the version
 // of the running server. Either side may be older.
-var UI_BUILD = "v3.16";
+var UI_BUILD = "v3.17";
 
 function importerVersionWarning(serverBuild) {
   if (serverBuild === UI_BUILD) return '';
@@ -496,6 +497,7 @@ function refreshChecks(){
    })
    .then(function(c){
     clearTimeout(timer);
+    if(window.ImportWorkspace)ImportWorkspace.checks(c);
     var rows = [
       [c.ytdlp,  'yt-dlp installed', 'yt-dlp missing — run JamRoom Setup.bat'],
       [c.ffmpeg, 'ffmpeg installed', 'ffmpeg missing — run JamRoom Setup.bat'],
@@ -526,6 +528,7 @@ function refreshChecks(){
   })
    .catch(function(err){
     clearTimeout(timer);
+    if(window.ImportWorkspace)ImportWorkspace.checks(null);
     var why = timedOut
       ? 'It did not answer within 15 seconds.'
       : 'The browser could not reach it (' + (err && err.message || err) + ').';
@@ -623,6 +626,7 @@ function setSource(s, queueReady){
   document.querySelectorAll('.result.sel').forEach(function(x){ x.classList.remove('sel'); });
   if(s === 'lib' && !g_library) loadLibrary();
   if(s === 'man') loadSongs();
+  if(window.ImportWorkspace)ImportWorkspace.source(s);
 }
 
 // ── Manage / delete songs in the project ──────────────────────────────────
@@ -633,9 +637,10 @@ var updateScopeIds=location.hash.indexOf('#updates=')===0?decodeURIComponent(loc
 function updateEsc(x){return String(x==null?'':x).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');}
 function updateApi(path,body){return fetch('/api/updates'+path,body===undefined?{}:{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)}).then(function(r){return r.json();}).then(function(d){if(d.error)throw Error(d.error);return d;});}
 function openUpdates(){
+  if(window.ImportWorkspace)ImportWorkspace.updated();
   $('updatesBox').classList.remove('hide');
   if(!updateScopeIds){$('updateScope').value='all';$('updateScope').options[0].disabled=true;}
-  loadUpdates();
+  if(!updateProject||!updateSongs.length)loadUpdates();
 }
 function clickUpdatesOnly(){return $('updateMode').value==='clicks';}
 function levelUpdatesOnly(){return $('updateMode').value==='levels';}
@@ -647,15 +652,20 @@ function renderUpdateSongs(){
     shown.forEach(function(s){
       if(updateSelection[s.id]===undefined)updateSelection[s.id]=updateEligible(s);
       if(s.protected&&!clickUpdatesOnly()&&!levelUpdatesOnly())updateSelection[s.id]=false;
+      var query=$('workspaceUpdateSearch'),filter=$('workspaceUpdateFilter');
+      if(query&&query.value&&!s.name.toLowerCase().includes(query.value.toLowerCase()))return;
+      if(filter&&filter.value==='eligible'&&!updateEligible(s))return;
+      if(filter&&filter.value==='attention'&&!/fail|missing|unavailable|error|review/i.test([s.update_status,s.click_status,s.level_status].join(' ')))return;
       var row=document.createElement('div');row.className='songrow';
       var box=document.createElement('input');box.type='checkbox';box.checked=!!updateSelection[s.id];box.disabled=s.protected&&!clickUpdatesOnly()&&!levelUpdatesOnly();
-      box.setAttribute('aria-label','Select '+s.name);box.onchange=function(){updateSelection[s.id]=box.checked;};row.appendChild(box);
+      box.setAttribute('aria-label','Select '+s.name);box.onchange=function(){updateSelection[s.id]=box.checked;if(window.ImportWorkspace)ImportWorkspace.selection();};row.appendChild(box);
       var text=document.createElement('div');text.className='sname';text.textContent=s.name+' · '+s.update_status+' · '+(levelUpdatesOnly()?s.level_status||'':(s.click_status||'')+' / '+(s.level_status||''));row.appendChild(text);
       if(s.click_report){var review=document.createElement('a');review.textContent='Review click';review.href='/api/click-review?id='+encodeURIComponent(s.id);review.target='_blank';review.rel='noopener';row.appendChild(review);}
       var keep=document.createElement('label');keep.className='note';var protect=document.createElement('input');protect.type='checkbox';protect.checked=s.protected;
       protect.onchange=function(){updateApi('/protect',{id:s.id,name:s.name,keep:protect.checked,project:updateProject}).then(loadUpdates).catch(updateError);};
       keep.appendChild(protect);keep.appendChild(document.createTextNode('Keep this version'));row.appendChild(keep);$('updateSongs').appendChild(row);
     });
+    if(window.ImportWorkspace)ImportWorkspace.selection();
 }
 function updateControls(){
   var blocked=updateLoading||updateStarting||!!(updateBatch&&updateBatch.status==='running');
@@ -664,6 +674,7 @@ function updateControls(){
   });
   document.querySelectorAll('#updateMode,#updateScope,#replaceTiming,#replaceLevels').forEach(function(n){n.disabled=blocked;});
   $('updateStart').textContent=updateLoading?'Checking library…':updateStarting?'Sending update request…':'Update selected';
+  if(window.ImportWorkspace)ImportWorkspace.selection();
 }
 async function loadUpdates(){
   if(updateLoading)return;
@@ -1148,6 +1159,7 @@ function showReview(rv){
       document.querySelectorAll('audio').forEach(function(b){ if(b!==a) b.pause(); });
     });
   });
+  if(window.ImportWorkspace)ImportWorkspace.compactStems();
 }
 
 // ── Manual lyric picker (when the automatic match is wrong or missing) ─────
@@ -1299,6 +1311,7 @@ refreshChecks();
 if(updateScopeIds){setSource('man');openUpdates();}
 setInterval(refreshChecks, 10000);
 </script>
+<script src="/importer-workspace.js"></script>
 <script src="/importer-queue.js"></script>
 </body>
 </html>

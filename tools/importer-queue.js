@@ -3,6 +3,7 @@ window.ImportJobs = (function(){
   'use strict';
   var api = {enabled:false}, selected = null, detail = null, rows = [], paused = false;
   var dirty = false, timer = null, saving = null, version = 0, selection = 0, busy = false, polling = false;
+  var filterText='',filterState='all',conflict=false;
   var rendered = '', listSignature = '', card, list, message, saved, target, recovery;
   function el(tag, text, parent){
     var node = document.createElement(tag);
@@ -85,7 +86,7 @@ window.ImportJobs = (function(){
     $('log').textContent = (row.log || []).join('\n');
     $('progTitle').textContent = row.song + ' — ' + (row.stage || row.state);
     target.textContent = 'Apply target: ' + (row.target || 'Choose the open REAPER project before applying');
-    if(row.summary) message.textContent = row.summary;
+    message.textContent = row.summary||'';
     if(row.state === 'review' && row.review && rendered !== row.id + ':review'){
       showReview(row.review); restoreDraft(row.draft);
       rendered = row.id + ':review'; saved.textContent = 'Saved';
@@ -93,8 +94,10 @@ window.ImportJobs = (function(){
       resetReviewPanel(); rendered = row.id + ':' + row.state;
     }
     $('applyBtn').disabled = row.state !== 'review' || busy;
-    $('applyBtn').textContent = row.apply_started ? 'Check / retry Apply' : 'Apply to REAPER';
+    $('applyBtn').textContent = row.apply_started ? 'Check / retry Apply' : 'Add to REAPER';
     document.querySelectorAll('#reviewCard input,#reviewCard select').forEach(function(node){node.disabled = !!row.apply_started;});
+    if(window.ImportWorkspace)ImportWorkspace.job(row,false);
+    renderJobActions(row);
   }
   async function select(id){
     if(busy) throw new Error('Let the current review change finish first.');
@@ -107,9 +110,10 @@ window.ImportJobs = (function(){
     finally {busy = false; $('reviewCard').inert = false;if(window.ImporterActivity)ImporterActivity.remove('opening-review');}
     if(generation !== selection) return;
     dismissReceipt(); resetReviewPanel();
-    selected = id; detail = row; rendered = ''; dirty = false;
+    selected = id; detail = row; rendered = ''; dirty = false; conflict=false;
     localStorage.setItem('jamroom-import-job', id);
     message.textContent = ''; renderDetail(row); renderList();
+    if(window.ImportWorkspace)ImportWorkspace.job(row,true);
     if(row.state === 'cached') message.textContent = 'Cached song: press Resume / open to prepare its review. Existing completed stages are reused.';
   }
   async function close(){
@@ -119,65 +123,62 @@ window.ImportJobs = (function(){
     resetReadyState(); target.textContent = ''; saved.textContent = '';
     message.textContent = 'Work is kept in the song list. Add another song whenever you like.';
     setPipelineActive(false); renderList();
+    if(window.ImportWorkspace)ImportWorkspace.clearJob();
   }
   var names = {queued:'Queued', preparing:'Processing', review:'Ready to review',
     applying:'Adding to REAPER', done:'Added — save REAPER', failed:'Needs attention',
     interrupted:'Resume available', paused:'Paused', cached:'Cached song', editing:'Updating review', checking:'Checking Fadr'};
-  function renderList(){
-    var signature = JSON.stringify([rows, selected, paused]);
-    if(signature === listSignature) return;
-    listSignature = signature;
-    var completed = list.querySelector('details[data-completed]');
-    var expanded = completed && completed.open;
-    var openMenus = new Set(Array.from(list.querySelectorAll('details[data-song]')).filter(function(n){return n.open;}).map(function(n){return n.dataset.song;}));
-    list.replaceChildren();
-    var active = rows.filter(function(r){return r.state !== 'done' && r.state !== 'cached';});
-    var ready = active.filter(function(r){return r.state === 'review';}).length;
-    $('queueCounts').textContent = active.length + ' unfinished · ' + ready + ' ready to review' + (paused ? ' · Queue paused' : '');
-    function draw(row, parent){
-      var line = el('div', undefined, parent);
-      line.style.cssText = 'display:flex;gap:8px;align-items:center;flex-wrap:wrap;padding:8px 0;border-bottom:1px solid #ffffff18';
-      var name=el('strong',row.song,line);name.style.cssText='flex:1;min-width:140px;overflow-wrap:anywhere';
-      var open = button('Open', async function(){await select(row.id);if(row.state==='review')$('reviewCard').scrollIntoView({block:'start'});}, line);
-      open.setAttribute('aria-label','Open '+row.song);
-      open.style.background='#207d59';
-      if(selected === row.id) open.style.outline = '2px solid #70cbbb';
-      el('span', names[row.state] || row.state, line).className = 'note';
-      if(['failed','paused','interrupted','cached'].includes(row.state)){
-        button(row.apply_started ? 'Check Apply' : 'Resume / open', async function(){
-          await select(row.id);
-          if(row.apply_started){ await api.apply(); return; }
-          await request('/' + row.id + '/resume', {}); await refresh();
-        }, line);
-        if(row.state!=='cached' && !row.apply_started)button('Check Fadr / recover', function(){return provider(row.id);}, line);
-      }
-      if(row.state === 'queued'){
-        button('Move first', async function(){await request('/' + row.id + '/first', {}); await refresh();}, line);
-        button('Pause', async function(){await request('/' + row.id + '/pause', {}); await refresh();}, line);
-      }
-      if(row.state === 'done') button('Review / re-add', async function(){
-        await select(row.id); await request('/' + row.id + '/reopen', {revision:detail.revision});
-        await refresh();
-      }, line);
-      if(!['preparing','applying','editing','checking'].includes(row.state)) {
-        var more=el('details',undefined,line);more.dataset.song=row.id;more.open=openMenus.has(row.id);el('summary','More',more).style.cssText='cursor:pointer;padding:12px';
-        button('Remove from queue', async function(){
-        if(!confirm('Remove '+row.song+' from the queue? Downloaded files and saved review choices are kept. You can reopen it later.'))return;
-        if(row.id === selected) await close();
-        await request('/' + row.id + '/remove', {}); await refresh();
-      }, more);
-      }
+  var actionSignature='';
+  function renderJobActions(row){
+    var host=$('workspaceJobActions');if(!host)return;
+    var sig=JSON.stringify([row.id,row.state,row.apply_started]);if(sig===actionSignature)return;
+    actionSignature=sig;host.replaceChildren();
+    if(['failed','paused','interrupted','cached'].includes(row.state)){
+      button(row.apply_started?'Check Apply':'Resume import',async function(){
+        if(row.apply_started){await api.apply();return;}
+        await request('/'+row.id+'/resume',{});await refresh();
+      },host);
+      if(row.state!=='cached'&&!row.apply_started)button('Check Fadr / recover',function(){return provider(row.id);},host);
     }
-    active.forEach(function(row){draw(row, list);});
-    var rest = rows.filter(function(r){return r.state === 'done' || r.state === 'cached';});
-    if(rest.length){
-      var other = el('details', undefined, list);
-      other.dataset.completed='1';
-      other.open = !!expanded;
-      el('summary', 'Completed and cached songs (' + rest.length + ')', other);
-      rest.forEach(function(row){draw(row, other);});
-    }
+    if(row.state==='done')button('Review / re-add',async function(){await request('/'+row.id+'/reopen',{revision:detail.revision});rendered='';await refresh();},host);
   }
+  function renderList(){
+    var signature=JSON.stringify([rows,selected,paused,filterText,filterState]);if(signature===listSignature)return;listSignature=signature;
+    var menus=new Set(Array.from(list.querySelectorAll('details[open]')).map(function(n){return n.dataset.song;}));
+    var focus=document.activeElement,focusJob=focus&&focus.closest('[data-job]'),focusLabel=focus&&focus.textContent;
+    var top=$('workspaceQueue')&&$('workspaceQueue').scrollTop;
+    list.replaceChildren();
+    var active=rows.filter(function(r){return !['done','cached'].includes(r.state);});
+    $('queueCounts').textContent=active.length+' unfinished / '+active.filter(function(r){return r.state==='review';}).length+' ready'+(paused?' / Queue paused':'');
+    var shown=rows.filter(function(r){
+      if(filterText&&!r.song.toLowerCase().includes(filterText.toLowerCase()))return false;
+      if(filterState==='completed')return ['done','cached'].includes(r.state);
+      if(filterState==='attention')return ['failed','interrupted','paused'].includes(r.state);
+      if(filterState==='review')return r.state==='review';
+      if(filterState==='progress')return ['queued','preparing','applying','checking','editing'].includes(r.state);
+      return !['done','cached'].includes(r.state);
+    });
+    shown.forEach(function(row){
+      var line=el('div',undefined,list);line.className='queue-row'+(selected===row.id?' selected':'');line.dataset.job=row.id;
+      el('strong',row.song,line);el('span',names[row.state]||row.state,line).className='note';
+      var open=button('Open',function(){return select(row.id);},line);open.setAttribute('aria-label','Open '+row.song);
+      if(!['preparing','applying','editing','checking'].includes(row.state)){
+        var more=el('details',undefined,line);more.dataset.song=row.id;more.open=menus.has(row.id);el('summary','More',more);var actions=el('div',undefined,more);
+        if(row.state==='queued'){
+          button('Move first',async function(){await request('/'+row.id+'/first',{});await refresh();},actions);
+          button('Pause',async function(){await request('/'+row.id+'/pause',{});await refresh();},actions);
+        }
+        button('Remove from queue',async function(){
+          if(!confirm('Remove '+row.song+' from the queue? Downloaded files and saved review choices are kept. You can reopen it later.'))return;
+          if(selected===row.id)await close();await request('/'+row.id+'/remove',{});await refresh();
+        },actions);
+      }
+    });
+    if(!shown.length)el('p',rows.length?'No imports match this filter.':'Add a song to begin. Saved work will appear here.',list).className='note';
+    if($('workspaceQueue'))$('workspaceQueue').scrollTop=top||0;
+    if(focusJob){var row=Array.from(list.children).find(function(n){return n.dataset.job===focusJob.dataset.job;});var replacement=row&&Array.from(row.querySelectorAll('button,summary')).find(function(n){return n.textContent===focusLabel;});if(replacement)replacement.focus({preventScroll:true});}
+  }
+
   async function refresh(){
     if(polling) return;
     polling = true;
@@ -189,6 +190,11 @@ window.ImportJobs = (function(){
       if(selected && !busy && !dirty && !saving){
         var id = selected, generation = selection, row = await request('/' + selected);
         if(id !== selected || generation !== selection || dirty || saving || busy) return;
+        if(conflict||detail&&row.state==='review'&&row.revision!==detail.revision&&$('reviewCard').contains(document.activeElement)){
+          conflict=true;$('workspaceReviewTools').open=true;
+          saved.textContent='This review changed elsewhere. Reload the saved review before continuing.';
+          $('applyBtn').disabled=true;return;
+        }
         if(detail && row.revision !== detail.revision) rendered = '';
         detail = row; renderDetail(row);
       }
@@ -210,10 +216,10 @@ window.ImportJobs = (function(){
       await refresh();
       if(!previous){
         await select(result.id);
-        if(detail.state==='review')$('reviewCard').scrollIntoView({block:'start'});
+        if(detail.state==='review'){if(window.ImportWorkspace)ImportWorkspace.job(detail,true);else $('reviewCard').scrollIntoView({block:'start'});}
         else if(window.ImporterActivity)ImporterActivity.open();
       }
-      else message.textContent = body.band + ' - ' + body.title + ' is in your import list. Your current review is still open.';
+      else message.textContent = body.band + ' - ' + body.title + ' is in your import list. Your earlier review is saved.';
     } catch(error){failure(error);}
     finally {$('importBtn').disabled = false; setPipelineActive(false);}
   };
@@ -256,6 +262,7 @@ window.ImportJobs = (function(){
     finally {busy = false; btn.disabled = false;}
   };
   api.open = select;
+  api.nextReady=async function(){var next=rows.find(function(r){return r.state==='review'&&r.id!==selected;});if(next)await select(next.id);else if(window.ImportWorkspace)ImportWorkspace.showQueue();};
   api.close = function(){return close().catch(failure);};
   async function provider(id, body){
     var result=await request('/'+id+'/provider',body||{});
@@ -278,7 +285,7 @@ window.ImportJobs = (function(){
     },recovery);
   }
   api.source = async function(source){
-    try {await close(); setSource(source, true);} catch(error){failure(error);}
+    try {await flush(); setSource(source, true);} catch(error){failure(error);}
   };
   async function init(){
     var result = await request('');
@@ -286,10 +293,15 @@ window.ImportJobs = (function(){
     api.enabled = true; setPipelineActive(false);
     card = document.createElement('div'); card.className = 'card'; card.id = 'importQueue';
     $('checksCard').after(card);
-    el('h2', 'Your imports', card); el('div', '', card).id = 'queueCounts';
-    var controls = el('div', undefined, card);
+    var top=el('div',undefined,card);top.className='queue-top';el('h2','Your imports',top);
+    button('Add songs',async function(){await flush();setSource('yt',true);},top);
+    el('div','',card).id='queueCounts';
+    var search=el('input',undefined,card);search.type='search';search.id='queueSearch';search.placeholder='Find an import';search.setAttribute('aria-label','Find an import');search.oninput=function(){filterText=search.value;renderList();};
+    var filter=el('select',undefined,card);filter.className='queue-filter';filter.setAttribute('aria-label','Filter imports');
+    [['all','All unfinished'],['attention','Needs attention'],['review','Ready to review'],['progress','In progress'],['completed','Completed and cached']].forEach(function(v){var o=el('option',v[1],filter);o.value=v[0];});filter.onchange=function(){filterState=filter.value;renderList();};
+    var controls = el('div', undefined, card);controls.id='queueControls';
     controls.style.cssText = 'display:flex;flex-wrap:wrap;gap:8px;margin:12px 0';
-    button('Add song', async function(){await close(); setSource('yt', true); $('searchCard').scrollIntoView({behavior:'smooth'});}, controls);
+
     button('Stop importer safely', async function(){
       if(!confirm('Stop the importer after current work reaches a saved checkpoint? Imports will be kept for later. Recording downloads will be unavailable until you restart it.'))return;
       await flush();
@@ -299,7 +311,7 @@ window.ImportJobs = (function(){
     }, controls);
     button('Resume unfinished', async function(){await request('/control', {resume:true}); await refresh();}, controls);
     button('Pause / continue queue', async function(){await request('/control', {pause:!paused}); await refresh();}, controls);
-    list = el('div', undefined, card);
+    list = el('div', undefined, card);list.id='queueList';
     message = el('div', '', card); message.id = 'queueMessage'; message.setAttribute('role','status');
     recovery = el('div', '', card);recovery.id='queueRecovery';
     el('p', 'You can close this page while work continues. After restarting the importer, use Resume unfinished. Pause lets the current stage finish; files are kept when a song is removed.', card).className = 'note';
@@ -319,8 +331,9 @@ window.ImportJobs = (function(){
       dirty = false; clearTimeout(timer); await select(selected);
     }, bar);
     document.querySelectorAll('#reviewCard button').forEach(function(b){
-      if(b.getAttribute('onclick') === 'doCancel()') b.textContent = 'Close review — keep for later';
+      if(b.getAttribute('onclick') === 'doCancel()') b.textContent = 'Keep for later';
     });
+    if(window.ImportWorkspace){ImportWorkspace.mountQueue(card);ImportWorkspace.tools(bar);}
     $('reviewCard').addEventListener('input', edited); $('reviewCard').addEventListener('change', edited);
     window.addEventListener('beforeunload', function(event){if(dirty || saving){event.preventDefault(); event.returnValue = '';}});
     rows = result.jobs; paused = result.paused; renderList();

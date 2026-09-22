@@ -307,6 +307,7 @@ class QueueTests(unittest.TestCase):
                 page = browser.new_page(); errors = []
                 page.on('pageerror', lambda e: errors.append(str(e)))
                 page.route('**/api/checks', lambda r:r.fulfill(json={'build':ji.BUILD, 'key':True, 'reaper':True}))
+                page.route('**/api/updates/status', lambda r:r.fulfill(json={'project':'test','batch':None}))
                 page.goto('http://127.0.0.1:' + str(http.server_port))
                 page.get_by_role('button', name='Open Band - One', exact=True).wait_for()
                 self.assertFalse(page.get_by_role('button',name='Remove from queue',exact=True).first.is_visible())
@@ -315,8 +316,10 @@ class QueueTests(unittest.TestCase):
                 page.get_by_role('button',name='Remove from queue',exact=True).first.click()
                 self.assertEqual(self.queue.jobs[first]['state'],'review')
                 page.get_by_role('button', name='Open Band - One', exact=True).click()
+                page.get_by_role('button',name='Preview',exact=True).click()
                 page.locator('#stemList input.lbl').fill('My custom bass')
                 page.locator('#stemList select').select_option('SKIP')
+                page.evaluate("ImportWorkspace.tab('lyrics')")
                 page.locator('#lyrOffset').fill('1.25')
                 page.get_by_role('button', name='Open Band - Two', exact=True).click()
                 page.wait_for_function("document.getElementById('progTitle').textContent.includes('Band - Two')")
@@ -328,7 +331,9 @@ class QueueTests(unittest.TestCase):
                 page.wait_for_function("document.querySelector('#stemList select')?.value === 'SKIP'")
                 self.assertEqual(page.locator('#lyrOffset').input_value(), '1.25')
                 # Browser A holds an edit while browser B saves the same revision.
+                page.evaluate("ImportWorkspace.tab('stems')")
                 page.locator('#stemList select').select_option('BASS')
+                page.get_by_role('button',name='Preview',exact=True).click()
                 page.locator('#stemList input.lbl').fill('Unsaved browser A')
                 revision = self.queue.jobs[first]['revision']
                 self.queue.draft(first, {'revision':revision, 'draft':{'labels':{'stems/bass.wav':'Browser B'}}})

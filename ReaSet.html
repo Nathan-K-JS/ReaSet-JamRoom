@@ -3403,16 +3403,10 @@
         .rec-btn.primary{background:#b22c46;border-color:#e64a64;font-weight:700}.rec-btn:disabled{opacity:.4;cursor:default}
         .rec-part{border-top:1px solid #343b44;padding:10px 0}.rec-part-head,.rec-part-level{display:flex;align-items:center;gap:8px}.rec-part-head label{flex:1;min-width:0;font-weight:650;overflow-wrap:anywhere}.rec-part small{color:#70dba6}.rec-part .rec-btn{padding:6px 8px;font-size:12px}.rec-part-level input[type=range]{flex:1;width:0;min-width:60px;min-height:44px;accent-color:#70dba6}.rec-part output{min-width:60px;font-size:12px;color:#aeb8c5}
 
-        .rec-review h3{overflow-wrap:anywhere}
-        .rec-review-section{border-top:1px solid #343b44;padding:16px 0 8px}
-        .rec-review-section .rec-btn.primary{background:#70dba6;border-color:#70dba6;color:#132b22}
-        .rec-review-section h4{margin:0;font-size:14px;color:#dce5ef}
         .rec-switch{display:inline-flex;align-items:center;gap:10px;text-align:left;background:transparent}
         .rec-switch::before{content:"";width:30px;height:18px;flex-shrink:0;border-radius:12px;background:radial-gradient(circle at 9px 9px,#cad3df 0 6px,transparent 7px),#485464}
         .rec-switch[aria-checked=true]::before{background:radial-gradient(circle at 21px 9px,#132b22 0 6px,transparent 7px),#70dba6}
         .rec-switch[aria-checked=true]{border-color:#579a7b}
-        .rec-discard .rec-btn{color:#ffadb7;border-color:#79505a;background:transparent}
-        @media(max-width:480px){.rec-review .rec-actions>.rec-btn{flex:1 1 100%;white-space:normal}}
         .rec-input{display:flex;align-items:center;gap:12px;padding:12px 0;border-bottom:1px solid #30363f}.rec-input input{width:22px;height:22px}.rec-input span{flex:1}
         .rec-meter{width:80px;height:6px;overflow:hidden;background:#15191e;border-radius:6px}.rec-meter i{display:block;height:100%;background:#63d5a5;width:0}.rec-meter.clip i{background:#ff6176}
         .rec-meter.stereo{height:14px;display:flex;flex-direction:column;gap:2px}.rec-meter.stereo i{height:6px}
@@ -3421,7 +3415,6 @@
         .rec-setup-row{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin:12px 0}.rec-setup-row span{min-width:125px}.rec-setup-row input,.rec-jam input[type=number],.rec-jam select{width:65px;color:#eef2f7;background:#252c35;border:1px solid #485464;padding:8px;border-radius:6px}
         #tab-btn-recording.capturing{color:#ff6176}.rec-card summary{cursor:pointer;padding:6px 0;min-height:32px}
         .app-topbar{overflow-x:auto;scrollbar-width:thin}.app-menu-btn,.vtab{flex-shrink:0}
-        .rec-start{position:sticky;top:0;background:var(--bg-app);padding:8px 0;z-index:1}
         .rec-jam label{display:flex;align-items:center;gap:6px;min-height:44px}.rec-jam input[type=checkbox]{width:22px;height:22px;accent-color:#70cbbb}
         .rec-input-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:0 24px}
         .rec-input-grid .rec-input{padding:9px 0;min-height:48px}
@@ -3437,6 +3430,48 @@
         @media(max-width:620px){.rec-input-grid{grid-template-columns:1fr}}
         @media(max-width:900px){.app-topbar-info{display:none}.vtab{padding:0 9px}}
 
+
+        /* Task workspace, with a reserved action area instead of stacked screens. */
+        body.rec-workspace .app-transport,body.rec-workspace #perfBar{display:none!important}
+        body.rec-workspace #recording-panel{bottom:0;padding:0;overflow:hidden}
+        #recording-panel>.panel-header{display:none}
+        #recording-body{max-width:1400px;height:100%;margin:auto;display:flex;flex-direction:column;min-height:0}
+        .rec-work-head{display:flex;align-items:center;justify-content:space-between;gap:16px;padding:18px 26px;border-bottom:1px solid #303b44;flex-shrink:0}
+        .rec-work-head h2{margin:4px 0;font-size:clamp(20px,2vw,28px);line-height:1.2;overflow-wrap:anywhere}
+        .rec-work-head p{margin:5px 0 0;color:#a9bac7;font-size:13px}.rec-work-head>div{min-width:0;flex:1}
+        .rec-work-head nav{display:flex;gap:6px;flex-wrap:wrap;justify-content:flex-end}.rec-work-head nav .rec-btn{padding:8px 12px;font-size:13px}
+        .rec-eyebrow{font-size:10px;letter-spacing:.14em;color:#77dbb0;font-weight:700}
+        .rec-scroll{min-height:0;flex:1;overflow:auto;padding:20px 26px;overscroll-behavior:contain;scroll-padding:12px}
+        .rec-work-foot{display:flex;align-items:center;justify-content:flex-end;gap:10px;padding:12px 26px max(12px,env(safe-area-inset-bottom));border-top:1px solid #34414a;background:#19242c;flex-shrink:0}
+        .rec-work-foot .rec-btn{min-width:120px;font-weight:650}.rec-work-foot .primary{background:#74ddb0;color:#10291f;border-color:#74ddb0}
+        .rec-capture-foot .rec-btn.primary{background:#b22c46;border-color:#e64a64;color:#fff}
+        .rec-foot-note{flex:1;min-width:0;font-size:13px;color:#bfd0dc;max-height:44px;overflow:auto}
+        .rec-review-foot{display:grid;grid-template-columns:repeat(4,minmax(0,1fr))}.rec-review-foot .rec-btn{min-width:0}
+        .rec-options,.rec-jam{display:flex;align-items:center;flex-wrap:wrap;gap:12px}.rec-options{padding:12px 14px;background:#202b33;border-radius:12px;margin-bottom:16px}
+        .rec-options label{display:flex;gap:8px;align-items:center;min-height:44px;font-size:14px}.rec-options input[type=checkbox]{width:22px;height:22px;accent-color:#74ddb0}
+        .rec-segments{display:flex;gap:6px;margin:0 0 14px}.rec-options .rec-segments{margin:0}.rec-segments .rec-btn:disabled{opacity:1;border-color:#74ddb0;color:#74ddb0}
+        .rec-input-grid{grid-template-columns:repeat(2,minmax(0,1fr));gap:10px 16px}
+        .rec-input-grid .rec-input{padding:12px;background:#202a32;border:1px solid #34414a;border-radius:10px;min-height:60px;margin:0}
+        .rec-input input{accent-color:#74ddb0;flex-shrink:0}.rec-input:has(input:checked){background:#203c31;border-color:#467d64}.rec-input small,.rec-take-row small{display:block;color:#a9bac7;font-size:12px;margin-top:3px}
+        .rec-section-title{font-size:15px;margin:8px 0 14px}.rec-scroll details>summary{cursor:pointer;min-height:44px;padding:12px 0;color:#b9c9d5}
+        .rec-split{display:grid;grid-template-columns:1fr 1fr;gap:20px;margin-bottom:16px}.rec-pane{min-width:0;padding:18px;background:#1b252d;border:1px solid #303d47;border-radius:12px}
+        .rec-pane h3{margin:0 0 14px;font-size:17px}.rec-pane .rec-input-grid{grid-template-columns:1fr}.rec-prep-tabs{display:none}
+        .rec-part{padding:12px 0}.rec-part-head label{font-size:15px}.rec-part-head .rec-switch{min-height:44px}.rec-part-level{margin-top:4px}
+        .rec-more{position:relative;flex-shrink:0}.rec-more>summary{font-size:12px;padding:12px 8px!important}.rec-more>div{display:flex;gap:6px;flex-wrap:wrap;padding:8px;background:#202e37;border-radius:8px}
+        .rec-part:has(details[open]) .rec-part-head{flex-wrap:wrap}.rec-part:has(details[open]) details{flex-basis:100%}
+        .rec-review-context{display:flex;justify-content:space-between;align-items:center;gap:12px;margin-bottom:16px}.rec-review-context .rec-actions{margin:0}.rec-review-context .rec-btn{font-size:13px;padding:8px 12px}.rec-saved{font-size:12px;color:#7ce3b7}
+        .rec-backing{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px;margin-top:14px}.rec-take-row{padding:14px 0;border-top:1px solid #34414a;display:flex;justify-content:space-between;align-items:center;gap:12px}.rec-take-row>div{min-width:0}.rec-take-row .rec-actions{margin:0}.rec-card h3{overflow-wrap:anywhere}
+        .rec-feedback{padding:10px 26px;background:#23352e;color:#bdeed8;font-size:13px;flex-shrink:0;max-height:100px;overflow:auto}.rec-feedback:empty{display:none}.rec-feedback.error{background:#39272c;color:#ffbbc7}.rec-feedback .rec-btn{min-height:36px;padding:6px 10px}
+        .rec-empty{max-width:600px;margin:40px auto;text-align:center;color:#b4c6d4}.rec-export-summary{max-width:680px;margin:20px auto;line-height:1.6}.rec-export-summary h3{font-size:24px;overflow-wrap:anywhere}
+        .rec-capture{text-align:center;padding:26px}.rec-capture-state{color:#ff829c;font-weight:650;letter-spacing:.08em}.rec-clock{font-size:clamp(42px,8vw,76px);font-variant-numeric:tabular-nums;margin:12px 0}.rec-capture p{color:#afc0cd}.rec-capture-meters{max-width:900px;margin:auto}
+        @media(min-width:1100px){.rec-pane .rec-input-grid{grid-template-columns:repeat(2,minmax(0,1fr))}.rec-scroll>.rec-input-grid{grid-template-columns:repeat(3,minmax(0,1fr))}.rec-pane .rec-meter{width:48px}}
+        @media(max-width:720px){.rec-work-head{padding:10px 14px;gap:8px;flex-wrap:wrap}.rec-work-head>div{flex-basis:100%}.rec-work-head nav{width:100%;justify-content:flex-start}.rec-work-head nav .rec-btn{flex:1;padding:6px;font-size:12px}.rec-eyebrow{display:none}.rec-work-head h2{font-size:21px}.rec-scroll{padding:14px}.rec-work-foot{padding:10px 14px max(10px,env(safe-area-inset-bottom));flex-wrap:wrap;gap:8px}.rec-work-foot .rec-btn{min-width:0;flex:1}.rec-foot-note{flex-basis:100%;max-height:32px}.rec-review-foot{grid-template-columns:repeat(2,minmax(0,1fr))}.rec-input-grid{grid-template-columns:1fr}.rec-prep-tabs{display:flex;gap:8px;margin-bottom:12px}.rec-prep-tabs .rec-btn{flex:1}.rec-split{display:block}.rec-split.show-inputs .rec-mix-pane,.rec-split.show-mix .rec-input-pane{display:none}.rec-pane{padding:12px}.rec-review-context{align-items:flex-start;flex-direction:column;gap:6px}.rec-review-context .rec-actions{width:100%}.rec-review-context .rec-btn{flex:1}.rec-take-row{display:block}.rec-take-row .rec-actions{margin-top:10px}.rec-options{gap:8px;padding:10px}.rec-options .rec-btn{font-size:13px;padding:8px 10px}.rec-options .rec-jam{gap:8px}.rec-jam label{font-size:13px}.rec-feedback{padding:8px 14px}}
+        @media(max-height:500px){.rec-work-head{padding:6px 14px;flex-wrap:nowrap}.rec-work-head>div{flex-basis:auto}.rec-work-head h2{font-size:17px}.rec-work-head p,.rec-eyebrow{display:none}.rec-work-head nav{width:auto;flex-wrap:nowrap}.rec-work-head nav .rec-btn{font-size:11px;padding:6px}.rec-work-foot{padding:6px 12px;flex-wrap:nowrap}.rec-review-foot{grid-template-columns:repeat(4,minmax(0,1fr))}.rec-work-foot .rec-btn{font-size:12px;padding:6px}.rec-foot-note{display:none}.rec-capture{padding:8px}.rec-clock{font-size:36px;margin:4px}.rec-feedback{max-height:60px}}
+
+        @media(min-width:900px){.rec-parts .rec-part{display:grid;grid-template-columns:minmax(250px,.8fr) minmax(240px,1.2fr);gap:24px;align-items:center}.rec-parts .rec-part-level{margin:0}.rec-pane .rec-parts .rec-part{display:block}.rec-part-head label{font-size:14px}}
+        @media(max-width:720px){.rec-work-foot .rec-btn{font-size:13px;padding:8px}.rec-review-context .rec-saved{display:none}.rec-review-context .rec-sub{margin:0 0 5px}.rec-review-context{margin-bottom:12px}.rec-part{padding:8px 0}.rec-part-head label{font-size:14px}}
+        .rec-work-head h2{max-height:2.4em;overflow:auto}
+        @media(min-width:721px){.rec-preparing{display:flex;flex-direction:column;overflow:hidden}.rec-preparing>.rec-options{flex-shrink:0}.rec-preparing .rec-split{flex:1;min-height:0;margin-bottom:0}.rec-preparing .rec-pane{overflow:auto;scroll-padding:12px}}
         .jr-song-name {
             font-size: 15px;
             font-weight: 700;
@@ -5509,7 +5544,7 @@
         syncLeadSlider();
         tkRenderPanel();             // paints the performance chips on load
         // Shown in the sidebar so a stale cached page is obvious after a deploy.
-        var REASET_VERSION = "v3.16 - Recording parts and reliable count-in";
+        var REASET_VERSION = "v3.17 - Import and recording workspaces";
         var _rv = document.getElementById("reasetVer");
         if (_rv) _rv.textContent = REASET_VERSION;
         (function () { var t = localStorage.getItem("reasetlist_theme") || "dark"; setTheme(t, true); })();
@@ -8962,7 +8997,7 @@
             return g_recState && Date.now()-g_recHb.at<4000 && (!g_stableId || g_recState.project===g_stableId);
         }
         function recLocked() {
-            return !!(g_recPending && ['record','recordPart','retry','keep','listen'].indexOf(g_recPending.op)>=0 ||
+            return !!(g_recPending && ['record','recordPart','recordPrepared','retry','keep','listen'].indexOf(g_recPending.op)>=0 ||
                 g_recState && (!g_stableId || g_recState.project===g_stableId) && g_recState.mode && g_recState.mode!=='idle');
         }
         function recSong() {
@@ -8997,6 +9032,7 @@
             var open=document.getElementById('recording-panel').classList.contains('open'),context=open||recLocked(),state=g_recState||{},mode=state.mode||'idle';
             document.querySelector('.app-transport').classList.toggle('recording-context',!!context);
             document.body.classList.toggle('free-jam-screen',open&&state.recordMode==='freejam');
+            document.body.classList.toggle('rec-workspace',open);
             btn.disabled=false;
             if(!context){btn.textContent=isPlaying?'Ⅱ PAUSE':'▶ PLAY';return;}
             if(mode==='idle'){btn.textContent=isPlaying?'Stop playback first':'● RECORD';btn.disabled=!recCanStart();}
@@ -9012,31 +9048,21 @@
             var command=Object.assign({op:op,project:g_recState.project,revision:g_recState.revision,nonce:nonce},extra||{});
             g_recProbe=null;
             g_recPending={nonce:nonce,op:op,at:Date.now()};g_recError='';
-            if (['record','recordPart','retry','keep','listen'].indexOf(op)>=0) { cancelTransportActions();queuedRegion=null;_reaperNativeLoopOff(); }
+            if (['record','recordPart','recordPrepared','retry','keep','listen'].indexOf(op)>=0) { cancelTransportActions();queuedRegion=null;_reaperNativeLoopOff(); }
             wwr_req('SET/EXTSTATE/ReaSetRec/want/'+encodeURIComponent(JSON.stringify(command)));
             recRender();
             return nonce;
         }
         function recCopies(job) {
             var url=location.protocol+'//'+location.hostname+':8765/recordings?project='+encodeURIComponent(g_recState.project);
+            url+='&return='+encodeURIComponent(location.href);
             if(job)url+='&job='+encodeURIComponent(job);
             window.open(url,'jamroom-listening');
         }
-        function recMakeCopy(sid,tid) {
-            var state=g_recState,session=(state.sessions||[]).find(function(s){return s.id===sid;}),take=session&&(session.takes||[]).find(function(t){return t.id===tid;});
-            if(!session||!take||!recOnline()||g_recPending)return;
-            var old=document.getElementById('rec-copy-dialog');if(old)old.remove();
-            var dialog=document.createElement('dialog');dialog.id='rec-copy-dialog';
-            dialog.style.cssText='width:min(480px,calc(100vw - 32px));max-height:calc(100dvh - 32px);overflow:auto;background:#172334;color:#edf4ff;border:1px solid #536079;border-radius:16px;padding:24px;box-sizing:border-box';
-            dialog.innerHTML='<h2 style="margin-top:0">Export recording</h2><p style="overflow-wrap:anywhere">'+trEsc(session.song.name)+' · '+trEsc(take.name||'Take '+take.number)+'</p>'
-                +(session.song.free?'':'<label style="display:flex;gap:12px;align-items:center;min-height:48px"><input id="rec-copy-backing" type="checkbox" '+(state.selected!==sid||state.take!==tid||state.backingOn?'checked':'')+'> Include backing</label>')
-                +'<p>Your selected recorded parts, using their saved levels and mutes. Click and count-in are excluded. Room and IEM levels stay separate from this stereo mix.</p><p class="rec-sub">Keep JamRoom Importer open to export the recording and share it with phones on the room Wi-Fi. If it is closed, the export will wait for next time.</p><div class="rec-actions"><button class="rec-btn primary" id="rec-copy-go">Export recording</button><button class="rec-btn" id="rec-copy-cancel">Cancel</button></div>';
-            document.body.appendChild(dialog);dialog.showModal();
-            dialog.querySelector('#rec-copy-cancel').onclick=function(){dialog.close();dialog.remove();};
-            dialog.querySelector('#rec-copy-go').onclick=function(){
-                var backing=dialog.querySelector('#rec-copy-backing'),nonce=recSend('listening',{session:sid,take:tid,backing:!!(backing&&backing.checked)});
-                if(nonce){dialog.close();dialog.remove();recCopies(nonce);}
-            };
+        function recMakeCopy(sid,tid){
+            if(!recOnline()||g_recPending)return;
+            g_recCopy={session:sid,take:tid,backing:g_recState.selected!==sid||g_recState.take!==tid||g_recState.backingOn};
+            recNavigate('export');
         }
         function recHandleExtState(tok) {
             var key=tok[2],v=jrUnescape(tok.slice(3).join('\t'));
@@ -9065,6 +9091,8 @@
                 g_recState=state;g_recGen=g_recFetch.gen;g_recFetch=null;
                 if(g_recPending && state.ack===g_recPending.nonce){
                     if(g_recPending.op==='done' && !state.error){document.getElementById('recording-panel').classList.remove('open');updateTopTabs();}
+                    if(!state.error&&g_recPending.op==='review')g_recView='work';
+                    if(state.error&&g_recPending.op==='listening'&&g_recCopy)g_recCopy.job=null;
                     g_recPending=null;
                     g_recError=state.error||'';
                 }
@@ -9103,7 +9131,7 @@
         }
         function recOpenSaved(){
             if(!document.getElementById('recording-panel').classList.contains('open'))recTogglePanel();
-            var list=document.getElementById('rec-takes');if(list){list.open=true;list.scrollIntoView({block:'start'});}
+            recNavigate('sessions');
         }
         function recUseMatched(){var s=recSong();if(s)recSend('matchGain',{song:s.key});}
         function recSetGain(value){var s=recSong();if(s)recSend('gain',{song:s.key,value:Number(value)/100});}
@@ -9112,141 +9140,164 @@
             var note=document.getElementById('playback-level-note');if(note&&s)note.innerHTML=recLevelNote(s);
             if(el && s && document.activeElement!==el){el.value=Math.round(s.gain*100);el.disabled=!!g_recPending||recLocked();document.getElementById('playback-gain-value').textContent=el.value+'%';}
         }
-        function recRender() {
-            var host=document.getElementById('recording-body');if(!host)return;
-            var state=g_recState||{},online=recOnline(),song=recSong(),mode=state.mode||'idle';
-            var busy=mode==='recording'||mode==='countin',review=mode==='review'||mode==='audition',free=state.recordMode==='freejam',jam=state.jam||{bpm:100,beats:4,click:true};
-            var sessions=state.sessions||[],session=sessions.find(function(s){return s.id===state.selected;});
-            var take=session&&(session.takes||[]).find(function(t){return t.id===state.take;});
-            var notice=document.getElementById('rec-startup-notice'),display=online&&state.notice&&!busy?'flex':'none';
-            if(notice.style.display!==display){notice.style.display=display;perfLayout();}
-            document.getElementById('rec-startup-text').textContent=(state.pending||0)+' recording sessions to tidy up';
-            var label=document.getElementById('rec-tab-label');
-            label.textContent=busy?(mode==='countin'?'COUNT IN':state.paused?'PAUSED':'RECORDING'):('RECORD'+(state.pending?' ('+state.pending+')':''));
-            document.getElementById('tab-btn-recording').classList.toggle('capturing',busy);
-            document.getElementById('main-stop-btn').textContent=busy?'■ STOP · '+(state.paused?'PAUSED':'REC'):'■ STOP';
-            if(g_recPending && Date.now()-g_recPending.at>15000){g_recError='Still waiting for REAPER. Exporting large sessions can take a while. Stop remains available.';}
-            var html='<div role="status" class="rec-status'+(g_recError||state.error?' error':'')+'">'+trEsc(g_recError||state.error||(g_recPending?'Waiting for REAPER…':state.message||''))+'</div>';
-            if(!online || g_recPending || g_recError)html+='<button class="rec-btn" onclick="recCheckStatus()">Reconnect / check status</button>';
-            if(!online && g_recPending && /^export/.test(g_recPending.op))html+='<div class="rec-card"><h2>Waiting for export confirmation</h2><p>Copying a large session can take a while. Leave REAPER open. Source takes are retained until the new project is verified.</p></div>';
-            else if(!online)html+='<div class="rec-card"><h2>Recording controller unavailable</h2><p>Run ReaSet_Startup.lua in REAPER, then reconnect. If recording is running, use REAPER to stop it.</p></div>';
-            else if(!state.ready)html+='<div class="rec-card">Save the REAPER setlist project before recording.</div>';
-            else{
-                html+='<div class="rec-actions"><button class="rec-btn" onclick="recCopies()">Exported recordings</button></div>';
-                if(state.notice)html+='<div class="rec-card"><h3>Recordings to tidy up</h3><p>'+state.pending+' recording sessions awaiting export. Saved takes stay silent during rehearsal.</p>'+recButton('Later','later')+'</div>';
-                if(!busy&&(!review||state.overdub))html+='<p class="rec-sub">'+(state.device==='connecting'?'Connecting recording inputs...':state.device==='unavailable'?'Recording device unavailable. Check the X32 USB connection and REAPER audio device.':state.device==='ready'?'Recording inputs ready':'Recording inputs')+'</p><div class="rec-actions">'+recButton('Reconnect inputs','reconnect',{},mode==='audition')+'</div>';
-                if(!busy&&!review)html+='<div class="rec-actions">'+recButton((!free?'✓ ':'')+'Song','recordMode',{value:'song'})+recButton((free?'✓ ':'')+'Free jam','recordMode',{value:'freejam'})+'</div>';
-                html+='<div class="rec-card"><h2>'+trEsc(busy||review?session&&session.song.name||'Recording':free?'Free jam':song?song.name:'Cue a song to record')+'</h2>';
-                if((busy||review)&&session&&session.song.free)html+='<div class="rec-sub">'+session.song.bpm+' BPM · '+session.song.beats+'/4 · '+(session.song.click?'Click on during recording':'No recording click')+'</div>';
-                if(busy){
-                    html+='<div class="rec-sub">'+(mode==='countin'?'Two-bar count-in':state.paused?'Paused — same take':'Recording · '+trTime(state.elapsed||0))+'</div><div class="rec-actions">'
-                        +recButton(state.paused?'Resume':'Pause','pause',{},mode==='countin')+recButton('Stop','stop',{},false,true)+'</div>';
-                    (state.inputs||[]).filter(function(c){return c.selected;}).forEach(function(c){
-                        html+='<div class="rec-input"><span>'+trEsc(c.name)+'</span><div class="rec-meter'+(c.stereo?' stereo':'')+'" data-rec-meter="'+trEsc(c.id)+'"><i></i>'+(c.stereo?'<i></i>':'')+'</div></div>';
-                    });
-                }else if(review && session && take){
-                    html+='<div class="rec-review"><h3>'+trEsc(take.name||'Take '+take.number)+' \u00b7 '+trTime(take.duration)+'</h3><p class="rec-sub">Saved automatically. Keep this take, record another, or export when ready.</p>';
-                    html+='<section class="rec-review-section" aria-label="Playback"><h4>Playback</h4><div class="rec-actions">'
-                        +recButton(mode==='audition'?'Stop listening':'Listen',mode==='audition'?'stop':'listen',{session:session.id,take:take.id},false,true)+'</div><div class="rec-actions">'
-                        +recMixToggle('Recorded instruments',state.recordingOn,{group:'recording',value:!state.recordingOn})
-                        +(session.song.free?'':recMixToggle('Original backing',state.backingOn,{group:'backing',value:!state.backingOn}))+'</div><details id="rec-review-instruments" '+(state.parts&&state.parts.length?'open':'')+'><summary>Instrument playback</summary><p class="rec-sub">Recorded instruments</p><div class="rec-actions">';
-                    if(state.parts && state.parts.length){
-                        html+='</div><div class="rec-parts">';
-                        state.parts.forEach(function(p){
-                            var db=p.gain>0?Math.max(-60,20*Math.log10(p.gain)):-61;
-                            html+='<div class="rec-part"><div class="rec-part-head"><label for="rec-part-'+trEsc(p.id)+'">'+trEsc(p.name)+(p.new?' <small>New</small>':'')+'</label>'
-                                +recMixToggle('Hear',!p.muted,{group:'part',part:p.id,muted:!p.muted}).replace('role="switch"','role="switch" aria-label="Hear '+trEsc(p.name)+'"')
-                                +recButton('Rename','partMix',{part:p.id,rename:true},mode==='audition')+'</div><div class="rec-part-level">'
-                                +'<input type="range" id="rec-part-'+trEsc(p.id)+'" data-rec-part="'+trEsc(p.id)+'" min="-61" max="12" step="0.5" value="'+db+'" '+(g_recPending?'disabled':'')+'><output>'+ (p.gain===0?'Silent':db.toFixed(1)+' dB')+'</output>'
-                                +recButton('Reset','partMix',{part:p.id,gain:1})+'</div></div>';
-                        });
-                    }else{
-                        (state.inputs||[]).forEach(function(c){if((take.inputs||[]).indexOf(c.id)>=0)html+=recMixToggle(c.name,!(state.recMutes||{})[c.id],{group:'input',input:c.id,value:!(state.recMutes||{})[c.id]});});
+        // Recording workspace: the content scrolls; context and actions do not.
+        var g_recView='work',g_recMixTab='parts',g_recPrepTab='inputs',g_recViewKey='',g_recCopy=null,g_recDragging=false;
+        function recNavigate(view){g_recView=view;recRender();var h=document.querySelector('#recording-body h2');if(h){h.tabIndex=-1;h.focus({preventScroll:true});}}
+        function recLocal(label,view){return '<button class="rec-btn" data-rec-view="'+view+'">'+trEsc(label)+'</button>';}
+        function recInputRow(c,disabled){return '<label class="rec-input"><input type="checkbox" aria-label="Record '+trEsc(c.name)+'" data-rec-input="'+trEsc(c.id)+'" '+(c.selected?'checked':'')+' '+(disabled||g_recPending?'disabled':'')+'><span>'+trEsc(c.name)+(c.stereo?'<small>Stereo</small>':'')+(!c.exists?'<small>Track missing</small>':!c.available?'<small>Input unavailable</small>':'')+'</span><div class="rec-meter'+(c.stereo?' stereo':'')+'" data-rec-meter="'+trEsc(c.id)+'"><i></i>'+(c.stereo?'<i></i>':'')+'</div></label>';}
+        function recInputs(state,disabled){
+            var inputs=state.inputs||[],html='<div class="rec-input-grid">';
+            inputs.filter(function(c){return !c.extra||c.selected;}).forEach(function(c){html+=recInputRow(c,disabled);});
+            html+='</div>';var extra=inputs.filter(function(c){return c.extra&&!c.selected;});
+            if(extra.length)html+='<details id="rec-extra"><summary>Additional inputs ('+extra.length+')</summary><div class="rec-input-grid">'+extra.map(function(c){return recInputRow(c,disabled);}).join('')+'</div></details>';
+            return html;
+        }
+        function recMix(state,session){
+            var parts=state.parts||[],html=session.song.free?'':'<div class="rec-segments" aria-label="Playback groups">'+recLocal('Recorded parts ('+parts.length+')','mix:parts');
+            if(!session.song.free)html+=recLocal('Backing ('+(state.backing||[]).length+')','mix:backing');
+            if(!session.song.free)html+='</div>';
+            if(g_recMixTab==='backing'&&!session.song.free){
+                html+=recMixToggle('Original backing',state.backingOn,{group:'backing',value:!state.backingOn})+'<div class="rec-backing">';
+                (state.backing||[]).forEach(function(c){html+=recMixToggle(recStemName(c.slot),!(state.stemMutes||{})[c.slot],{group:'stem',input:c.slot,value:!(state.stemMutes||{})[c.slot]});});
+                return html+'</div>';
+            }
+            html+=recMixToggle('Recorded instruments',state.recordingOn,{group:'recording',value:!state.recordingOn})+'<div class="rec-parts">';
+            parts.forEach(function(p){
+                var db=p.gain>0?Math.max(-60,20*Math.log10(p.gain)):-61;
+                html+='<div class="rec-part"><div class="rec-part-head"><label for="rec-part-'+trEsc(p.id)+'">'+trEsc(p.name)+(p.new?' <small>New</small>':'')+'</label>'
+                    +recMixToggle('Hear',!p.muted,{group:'part',part:p.id,muted:!p.muted}).replace('role="switch"','role="switch" aria-label="Hear '+trEsc(p.name)+'"')
+                    +'<details class="rec-more" id="rec-more-'+trEsc(p.id)+'"><summary aria-label="Options for '+trEsc(p.name)+'">More</summary><div>'
+                    +recButton('Rename','partMix',{part:p.id,rename:true},state.mode==='audition')+recButton('Reset level','partMix',{part:p.id,gain:1})+'</div></details></div><div class="rec-part-level">'
+                    +'<input type="range" id="rec-part-'+trEsc(p.id)+'" data-rec-part="'+trEsc(p.id)+'" min="-61" max="12" step="0.5" value="'+db+'" '+(g_recPending?'disabled':'')+'><output>'+(p.gain===0?'Silent':db.toFixed(1)+' dB')+'</output></div></div>';
+            });
+            if(!parts.length)html+='<p class="rec-sub">No recorded parts in this take.</p>';
+            return html+'</div>';
+        }
+        function recSessionList(state,onlyCurrent){
+            var sessions=(state.sessions||[]).filter(function(s){return !onlyCurrent||s.id===state.selected;}),html='';
+            if(!sessions.length)return '<div class="rec-empty"><h3>No saved recordings yet</h3><p>Record a song or a free jam. Your takes will appear here.</p></div>';
+            if(!onlyCurrent){var ids=sessions.filter(function(s){return g_recSelected[s.id]&&!s.deleted&&!s.exported;}).map(function(s){return s.id;});html+='<div class="rec-actions">'+recButton('Export selected multitracks','exportBatch',{sessions:ids},!ids.length)+recButton('Delete selected sessions','deleteBatch',{sessions:ids},!ids.length)+'</div>';}
+            sessions.slice().reverse().forEach(function(s){
+                html+='<section class="rec-card"><h3>'+(!onlyCurrent&&!s.deleted&&!s.exported?'<input type="checkbox" aria-label="Select '+trEsc(s.song.name)+' session" data-rec-session="'+trEsc(s.id)+'" '+(g_recSelected[s.id]?'checked':'')+'> ':'')+trEsc(s.song.name)+'</h3><p class="rec-sub">'+trEsc(s.created||'')+'</p>';
+                if(s.deleted)html+='<p>Deleted session. Audio retained.</p>'+recButton('Restore session','restore',{session:s.id});
+                else{
+                    var discarded=[];
+                    function takeRow(t){
+                        var parent=(s.takes||[]).find(function(v){return v.id===t.parent;}),blocked=t.status==='Needs recovery'||!t.duration;
+                        return '<div class="rec-take-row"><div><strong>'+trEsc(t.name||'Take '+t.number)+(t.favourite?' &#9733;':'')+'</strong><small>'+trTime(t.duration)+' &middot; '+(t.partCount||t.inputs.length)+' parts'+(parent?' &middot; Built on '+trEsc(parent.name||'Take '+parent.number):'')+' &middot; '+trEsc(t.status)+'</small></div><div class="rec-actions">'
+                            +(s.exported?'':recButton(t.status==='discarded'?'Restore take':'Open take',t.status==='discarded'?'restoreTake':'review',{session:s.id,take:t.id},blocked))
+                            +recButton('Export recording','copy',{session:s.id,take:t.id},blocked||t.status==='discarded')
+                            +'<details class="rec-more" id="rec-take-more-'+trEsc(t.id)+'"><summary>More</summary><div>'+recButton(t.favourite?'Unfavourite':'Favourite','favourite',{session:s.id,take:t.id})+recButton('Name take','rename',{session:s.id,take:t.id})+'</div></details></div></div>';
                     }
-                    html+='</div>';
-                    if(!session.song.free){
-                        html+='<p class="rec-sub">Original backing</p><div class="rec-actions">';
-                        ['DRUMS','PERC_FX','BASS','GTR1','GTR2','KEYS','BVS','LEAD_VOX','CLICK','EXTRA'].forEach(function(id){html+=recMixToggle(recStemName(id),!(state.stemMutes||{})[id],{group:'stem',input:id,value:!(state.stemMutes||{})[id]});});
-                        html+='</div>';
-                    }
-                    html+='</details></section><section class="rec-review-section" aria-label="Take actions"><h4>Next take</h4><div class="rec-actions">'
-                        +recButton(take.parent?'Keep & add another part':'Add another part','overdub',{session:session.id,take:take.id},mode==='audition')
-                        +recButton('Keep & record another','keep',{session:session.id,take:take.id},mode==='audition')+'</div><div class="rec-actions rec-discard">'
-                        +recButton(take.parent?'Redo new parts':'Discard & re-record','retry',{session:session.id,take:take.id},mode==='audition'||take!==session.takes[session.takes.length-1])
-                        +recButton(take.parent?'Discard new parts':'Discard take','discard',{session:session.id,take:take.id},mode==='audition')+'</div><p class="rec-sub">Discarded takes can be restored from Saved recordings.</p></section>';
-                    if(state.overdub){
-                        var selected=(state.inputs||[]).filter(function(c){return c.selected;});
-                        html+='<section class="rec-review-section" id="rec-next-part"><h4>Record next part</h4><p class="rec-sub">Record these inputs. Existing parts above are your accompaniment.</p><div class="rec-input-grid">';
-                        (state.inputs||[]).forEach(function(c){html+='<label class="rec-input"><input type="checkbox" data-rec-input="'+trEsc(c.id)+'" '+(c.selected?'checked':'')+' '+(g_recPending||mode==='audition'?'disabled':'')+'><span>'+trEsc(c.name)+'</span></label>';});
-                        html+='</div><p class="rec-sub">Recording: '+trEsc(selected.map(function(c){return c.name;}).join(', ')||'Select an input')+'. Playing: '+trEsc((state.recordingOn===false?[]:(state.parts||[]).filter(function(p){return !p.muted;}).map(function(p){return p.name;})).concat(!session.song.free&&state.backingOn!==false?['Original backing']:[]).join(', ')||'No accompaniment')+'</p><div class="rec-actions">'
-                            +recButton('Count-in: '+(state.countin?'2 bars':'off'),'countin',{value:!state.countin})
-                            +(session.song.free?recButton('Click: '+(session.song.click?'on':'off'),'jamClick',{value:!session.song.click},mode==='audition')+'<label><input id="rec-part-stop" type="checkbox" checked> Stop at end</label>':'')
-                            +recButton('Record part','recordPart',{},mode==='audition'||!selected.length||selected.some(function(c){return !c.exists||!c.available;})||state.device==='connecting'||state.device==='unavailable',true)+'</div></section>';
-                    }
-                    html+='<section class="rec-review-section" aria-label="Export"><h4>Export</h4><p class="rec-sub">An MP3 of these parts and their balance, to play, download and share.</p><div class="rec-actions">'
-                        +recButton('Export recording','copy',{session:session.id,take:take.id},mode==='audition')+'</div><p class="rec-sub">For editing in REAPER, export the full multitrack session from Saved recordings below.</p></section><div class="rec-actions">'
-                        +recButton('Done','done',{},mode==='audition')+'</div></div>';
-                }else{
-                    var exists=(state.inputs||[]).some(function(c){return c.exists;}),selected=(state.inputs||[]).filter(function(c){return c.selected;});
-                    if(!exists)html+=recButton('Set up recording tracks','setup',{},false,true);
-                    else{
-                        if(free)html+='<div class="rec-jam rec-actions"><label>Tempo <input id="rec-jam-bpm" type="number" min="40" max="240" step="1" value="'+jam.bpm+'" style="width:76px;min-height:44px"> BPM</label><label>Beats per bar <select id="rec-jam-beats" style="min-height:44px">'+[2,3,4,5,6,7].map(function(n){return '<option '+(n===jam.beats?'selected':'')+'>'+n+'</option>';}).join('')+'</select></label><label><input id="rec-jam-click" type="checkbox" '+(jam.click?'checked':'')+'> Click during recording</label></div><p class="rec-sub">No backing song. Record until you press Stop. Click uses the existing click output and level.</p>';
-                        html+='<div class="rec-sub">'+selected.length+' inputs selected</div>';
-                        html+='<div class="rec-actions rec-start">'+recButton('Record','record',{song:song&&song.key},!recCanStart(),true)
-                            +recButton('Count-in: '+(state.countin?'2 bars':'off'),'countin',{value:!state.countin})+'</div>';
-                        function inputRow(c){return '<label class="rec-input"><input type="checkbox" data-rec-input="'+trEsc(c.id)+'" '+(c.selected?'checked':'')+' '+(g_recPending?'disabled':'')+'><span>'+trEsc(c.name)+(c.stereo?' · stereo':'')+(!c.available?' · unavailable':'')+'</span><div class="rec-meter'+(c.stereo?' stereo':'')+'" data-rec-meter="'+trEsc(c.id)+'"><i></i>'+(c.stereo?'<i></i>':'')+'</div></label>';}
-                        html+='<div class="rec-input-grid">';
-                        (state.inputs||[]).filter(function(c){return !c.extra;}).forEach(function(c){html+=inputRow(c);});
-                        html+='</div>';
-                        html+='<details><summary>Additional inputs</summary>';
-                        (state.inputs||[]).filter(function(c){return c.extra;}).forEach(function(c){html+=inputRow(c);});html+='</details>';
-                    }
+                    (s.takes||[]).forEach(function(t){if(t.status==='discarded')discarded.push(t);else html+=takeRow(t);});
+                    if(discarded.length)html+='<details id="rec-discarded-'+trEsc(s.id)+'"><summary>Discarded takes ('+discarded.length+')</summary>'+discarded.map(takeRow).join('')+'</details>';
+                    html+='<div class="rec-actions">'+(s.exported?recButton('Open multitrack project','open',{session:s.id}):recButton('Export multitrack project','export',{session:s.id})+recButton('Delete session','delete',{session:s.id}))+'</div>';
                 }
-                html+='</div><details class="rec-card" id="rec-takes"><summary>Saved recordings ('+(state.pending||0)+')</summary>';
-                var selectedSessions=sessions.filter(function(s){return g_recSelected[s.id]&&!s.deleted&&!s.exported;}).map(function(s){return s.id;});
-                html+='<div class="rec-actions">'+recButton('Export selected','exportBatch',{sessions:selectedSessions},busy||mode==='audition'||!selectedSessions.length)+recButton('Delete selected','deleteBatch',{sessions:selectedSessions},busy||mode==='audition'||!selectedSessions.length)+'</div>';
-                sessions.slice().reverse().forEach(function(s){
-                    html+='<section><h3>'+(!s.deleted&&!s.exported?'<input type="checkbox" aria-label="Select session" data-rec-session="'+trEsc(s.id)+'" '+(g_recSelected[s.id]?'checked':'')+'> ':'')+trEsc(s.song.name)+' · '+trEsc(s.created)+'</h3>';
-                    if(s.exported){s.takes.filter(function(t){return t.status!=='discarded'&&t.duration>0;}).forEach(function(t){html+='<div class="rec-actions"><span>'+trEsc(t.name||'Take '+t.number)+'</span>'+recButton('Export recording','copy',{session:s.id,take:t.id},busy||mode==='audition')+'</div>';});}
-                    if(s.exported)html+='<p class="rec-sub">Exported: '+trEsc(s.exported)+'</p>'+recButton('Open in REAPER','open',{session:s.id},busy||mode==='audition');
-                    else if(s.deleted)html+='<p>Deleted — recoverable</p>'+recButton('Restore session','restore',{session:s.id},busy);
-                    else{
-                        s.takes.forEach(function(t){
-                            html+='<div class="rec-actions"><span class="rec-sub">'+trEsc(t.name||'Take '+t.number)+' · '+trTime(t.duration)+' · '+trEsc(t.status)+'</span>'
-                                +recButton(t.status==='discarded'?'Restore take':'Listen',t.status==='discarded'?'restoreTake':'listen',{session:s.id,take:t.id},busy||mode==='audition')
-                                +recButton('Export recording','copy',{session:s.id,take:t.id},busy||mode==='audition'||t.status==='discarded'||t.status==='Needs recovery'||!t.duration)
-                                +recButton(t.favourite?'★ Favourite':'☆','favourite',{session:s.id,take:t.id},busy)+recButton('Name','rename',{session:s.id,take:t.id},busy)+'</div>';
-                        });
-                        html+='<div class="rec-actions">'+recButton('Export multitrack & clear from setlist','export',{session:s.id},busy||mode==='audition')
-                            +recButton('Delete session','delete',{session:s.id},busy||mode==='audition')+'</div>';
-                    }
-                    html+='</section>';
-                });
-                html+='</details><details class="rec-card" id="rec-setup"><summary>Setup</summary><p class="rec-sub">Inputs 1–16 follow the X32 live input list. Stereo inputs use the adjacent channel. Output is the first REAPER hardware output for audition. Vox 1–4 default to the lead-vocal return; change these here for your mix.</p>';
-                (state.inputs||[]).forEach(function(c){html+='<div class="rec-setup-row"><span>'+trEsc(c.name)+'</span><label>Input <input type="number" min="1" max="128" id="rec-in-'+c.id+'" value="'+(c.input+1)+'"></label><label>Output <input type="number" min="1" max="128" id="rec-out-'+c.id+'" value="'+(c.output+1)+'"></label>'+recButton('Apply','configure',{input:c.id},busy||review)+'</div>';});
-                html+=recButton('Create missing tracks','setup',{},busy||review)+recButton('Retry save','save',{},busy)+'</details>';
+                html+='</section>';
+            });return html;
+        }
+        function recSettings(state,disabled){
+            var html='<h3>Audio device and routing</h3><p class="rec-sub">Live monitoring comes from the X32. Stereo inputs use adjacent channels.</p><div class="rec-actions">'+recButton('Reconnect inputs','reconnect',{},disabled)+recButton('Create missing tracks','setup',{},disabled)+recButton('Retry save','save',{},disabled)+'</div>';
+            (state.inputs||[]).forEach(function(c){html+='<div class="rec-setup-row"><strong>'+trEsc(c.name)+'</strong><label>Input <input type="number" min="1" max="128" id="rec-in-'+c.id+'" value="'+(c.input+1)+'"></label><label>Output <input type="number" min="1" max="128" id="rec-out-'+c.id+'" value="'+(c.output+1)+'"></label>'+recButton('Apply','configure',{input:c.id},disabled)+'</div>';});return html;
+        }
+        function recRender(){
+            var host=document.getElementById('recording-body');if(!host)return;
+            var state=g_recState||{},online=recOnline(),mode=state.mode||'idle',song=recSong(),busy=mode==='recording'||mode==='countin',review=mode==='review'||mode==='audition';
+            var session=(state.sessions||[]).find(function(s){return s.id===state.selected;}),take=session&&(session.takes||[]).find(function(t){return t.id===state.take;});
+            var prep=state.preparation||(state.overdub&&{kind:'part',parent:state.take,stopAtEnd:true}),free=review&&session?session.song.free:state.recordMode==='freejam',jam=state.jam||{bpm:100,beats:4,click:true};
+            var key=[state.project,state.selected,state.take,busy?'capture':prep?'prepare:'+prep.kind:review?'review':'idle'].join('|');
+            if(key!==g_recViewKey){g_recView='work';g_recPrepTab='inputs';g_recViewKey=key;g_recCopy=null;}
+            var view=busy?'work':g_recView,selected=(state.inputs||[]).filter(function(c){return c.selected;}),canPrepare=online&&!g_recPending&&state.device!=='connecting'&&state.device!=='unavailable'&&selected.length&&selected.every(function(c){return c.exists&&c.available;});
+            var panelOpen=document.getElementById('recording-panel').classList.contains('open');
+            document.body.classList.toggle('rec-workspace',panelOpen);
+            var notice=document.getElementById('rec-startup-notice');notice.style.display=online&&state.notice&&!busy&&!panelOpen?'flex':'none';
+            document.getElementById('rec-startup-text').textContent=(state.pending||0)+' saved recording sessions';
+            document.getElementById('rec-tab-label').textContent=busy?(mode==='countin'?'COUNT IN':state.paused?'PAUSED':'RECORDING'):('RECORD'+(state.pending?' ('+state.pending+')':''));
+            document.getElementById('tab-btn-recording').classList.toggle('capturing',busy);
+            if(g_recPending&&Date.now()-g_recPending.at>15000)g_recError='Still waiting for REAPER. Stop remains available. Check status before retrying.';
+            var title=view==='sessions'?'Saved sessions':view==='takes'?'Choose a take':view==='settings'?'Recording setup':view==='export'?'Export recording':review||busy?session&&session.song.name||'Recording':free?'Free jam':song?song.name:'Choose a song or Free jam';
+            var detail=busy?'Capture running':prep?(prep.kind==='part'?'Adding a part':prep.kind==='redo'?'Redoing latest pass':'New independent take'):review&&take?(take.name||'Take '+take.number)+' / '+trTime(take.duration)+' / '+(state.parts||[]).length+' parts':'Select the inputs you want to record';
+            var html='<header class="rec-work-head"><div><span class="rec-eyebrow">'+(busy?'RECORDING':prep?'PREPARE':'JAM ROOM RECORDING')+'</span><h2>'+trEsc(title)+'</h2><p>'+trEsc(detail)+'</p></div><nav>';
+            if(!busy){html+=recLocal('Sessions'+(state.pending?' ('+state.pending+')':''),'sessions')+recLocal('Exports','exports')+recLocal('Settings','settings');if(review&&take&&!prep)html+=recLocal('Takes','takes');}
+            html+=(review?recButton('Done','done',{},mode==='audition'):'<button class="rec-btn" data-rec-view="close" aria-label="Close recording">&#10005;</button>')+'</nav></header>';
+            var status=g_recError||state.error||(g_recPending?'Waiting for REAPER...':'');
+            if(!online)status='Recording controller unavailable. Use REAPER to stop if disconnected.';
+            if(status)html+='<div class="rec-feedback '+(g_recError||state.error||!online?'error':'')+'" role="status">'+trEsc(status)+' '+(!online||g_recError?'<button class="rec-btn" onclick="recCheckStatus()">Check status</button>':'')+'</div>';
+            var content='',foot='',listen=recButton(mode==='audition'?'Stop listening':'Listen',mode==='audition'?'stop':'listen',{session:state.selected,take:state.take},!online,false);
+            if(!online||!state.ready){content='<div class="rec-empty"><h3>'+(state.ready?'Reconnect to the room':'Save the REAPER project')+'</h3><p>'+(state.ready?'Check REAPER and ReaSet_Startup.lua, then check status.':'Recording requires a saved setlist project.')+'</p></div>';foot=recLocal('Stop','emergency');}
+            else if(view==='sessions'||view==='takes'){content=recSessionList(state,view==='takes');foot=recLocal('Back to recording','work');}
+            else if(view==='settings'){content=recSettings(state,review||busy);foot=recLocal('Back to recording','work');}
+            else if(view==='export'&&g_recCopy){
+                var cs=(state.sessions||[]).find(function(s){return s.id===g_recCopy.session;}),ct=cs&&(cs.takes||[]).find(function(t){return t.id===g_recCopy.take;});
+                if(cs&&ct){content='<div class="rec-export-summary"><h3>'+trEsc(cs.song.name)+' / '+trEsc(ct.name||'Take '+ct.number)+'</h3><p>Your selected parts and saved balance. Click and count-in are excluded.</p>'+(cs.song.free?'':'<label class="rec-input"><input type="checkbox" id="rec-copy-backing" '+(g_recCopy.backing?'checked':'')+'> Include original backing</label>')+'<p class="rec-sub">The importer creates the MP3 in the background. Keep it running so friends can download on the room Wi-Fi. Your multitracks stay saved.</p></div>';foot=recLocal('Back to recording','work')+(g_recCopy.job?recLocal('View export','openExport'):recButton('Create MP3','createCopy',{},mode==='audition',true));}
             }
-            if(html!==g_recHtml){
-                var focused=document.activeElement, editing=host.contains(focused)&&focused.matches('input[type=number],input[type=text],input[type=range],textarea');
-                var draft=Array.from(host.querySelectorAll(editing?'.rec-setup-row input,.rec-jam input,.rec-jam select,.rec-part input,#rec-part-stop':'.rec-jam input,.rec-jam select,#rec-part-stop')).map(function(e){return {id:e.id,value:e.value,checked:e.checked};});
-                var focusId=editing?focused.id:null;
-                var open=Array.from(host.querySelectorAll('details[open]')).map(function(e){return e.id||e.querySelector('summary').textContent;});
-                var revealPart=state.overdub&&!document.getElementById('rec-next-part');
-                g_recHtml=html;host.innerHTML=html;
-                if(revealPart&&document.getElementById('rec-next-part'))document.getElementById('rec-next-part').scrollIntoView({block:'start'});
-                host.querySelectorAll('details').forEach(function(e){if(open.indexOf(e.id||e.querySelector('summary').textContent)>=0)e.open=true;});
-                draft.forEach(function(d){var e=document.getElementById(d.id);if(e){e.value=d.value;if(e.type==='checkbox')e.checked=d.checked;}});
-                if(focusId && document.getElementById(focusId))document.getElementById(focusId).focus({preventScroll:true});
+            else if(busy){
+                content='<div class="rec-capture"><div class="rec-capture-state">'+(mode==='countin'?'Two-bar count-in':state.paused?'Paused':'Recording')+'</div><div class="rec-clock" id="rec-elapsed">'+trTime(state.elapsed||0)+'</div><p>'+selected.length+' inputs / '+(session&&session.song.free?'Free jam':'With backing')+'</p></div><div class="rec-input-grid rec-capture-meters">'+selected.map(function(c){return '<div class="rec-input"><span>'+trEsc(c.name)+'</span><div class="rec-meter'+(c.stereo?' stereo':'')+'" data-rec-meter="'+trEsc(c.id)+'"><i></i>'+(c.stereo?'<i></i>':'')+'</div></div>';}).join('')+'</div>';
+                foot=recButton(state.paused?'Resume':'Pause','pause',{},mode==='countin')+recButton('Stop','stop',{},false,true);
             }
+            else if(prep&&session){
+                var prepareOptions='<div class="rec-options">'+recButton('Count-in: '+(state.countin?'2 bars':'off'),'countin',{value:!state.countin},mode==='audition')+(session.song.free?recButton('Click: '+(session.song.click?'on':'off'),'jamClick',{value:!session.song.click},mode==='audition')+(prep.parent?'<label><input id="rec-part-stop" type="checkbox" '+(prep.stopAtEnd!==false?'checked':'')+'> Stop at end</label>':''):'')+'</div>';
+                content='<div class="rec-prep-tabs">'+recLocal('Inputs','prep:inputs')+recLocal('Accompaniment','prep:mix')+'</div><div class="rec-split '+(g_recPrepTab==='mix'?'show-mix':'show-inputs')+'"><section id="rec-input-pane" class="rec-pane rec-input-pane" aria-label="Recording inputs"><h3>Record these inputs</h3>'+recInputs(state,mode==='audition')+'</section><section id="rec-mix-pane" class="rec-pane rec-mix-pane" aria-label="Accompaniment mix"><h3>What you will hear</h3>'+listen;
+                if(prep.parent)content+=recMix(state,session);else content+='<p class="rec-sub">An independent performance. Earlier recorded parts will not play.</p>'+(!session.song.free?recMixToggle('Original backing',state.backingOn,{group:'backing',value:!state.backingOn}):'<p>No backing song.</p>');
+                content+='</section></div>';
+                content=prepareOptions+content;
+                foot='<span class="rec-foot-note">Recording: '+trEsc(selected.map(function(c){return c.name;}).join(', ')||'Select inputs')+'</span>'+recButton('Cancel','cancelPrepare',{},mode==='audition')+recButton(prep.kind==='part'?'Record part':'Record take',state.preparation?'recordPrepared':'recordPart',{},!canPrepare||mode==='audition',true);
+            }
+            else if(review&&session&&take){
+                var added=(state.parts||[]).filter(function(p){return p.new;}).map(function(p){return p.name;});
+                content='<div class="rec-review-context"><div><span class="rec-saved">Saved on the room PC</span><p class="rec-sub">'+(take.parent?'Latest addition: '+trEsc(added.join(', ')||'New parts'):'Independent take')+'</p></div><div class="rec-actions">'+recButton(take.parent?'Redo latest':'Redo take','prepareTake',{kind:'redo',session:session.id,take:take.id},mode==='audition'||take!==session.takes[session.takes.length-1])+recButton(take.parent?'Discard latest':'Discard take','discard',{session:session.id,take:take.id},mode==='audition')+'</div></div>'+recMix(state,session);
+                foot=listen+recButton('Add part','prepareTake',{kind:'part',session:session.id,take:take.id},mode==='audition')+recButton('New take','prepareTake',{kind:'new',session:session.id,take:take.id},mode==='audition')+recButton('Export recording','copy',{session:session.id,take:take.id},mode==='audition',true);
+            }
+            else{
+                content='<div class="rec-options"><div class="rec-segments">'+recButton('Song','recordMode',{value:'song'},!free)+recButton('Free jam','recordMode',{value:'freejam'},free)+'</div>';
+                if(free)content+='<div class="rec-jam"><label>Tempo <input id="rec-jam-bpm" type="number" min="40" max="240" step="1" value="'+jam.bpm+'"> BPM</label><label>Beats <select id="rec-jam-beats">'+[2,3,4,5,6,7].map(function(n){return '<option '+(n===jam.beats?'selected':'')+'>'+n+'</option>';}).join('')+'</select></label><label><input id="rec-jam-click" type="checkbox" '+(jam.click?'checked':'')+'> Click</label></div>';
+                content+=recButton('Count-in: '+(state.countin?'2 bars':'off'),'countin',{value:!state.countin})+'</div>';
+                if(state.device==='connecting')content+='<p class="rec-sub" role="status">Connecting recording inputs...</p>';
+                if(state.device==='unavailable')content+='<div class="rec-feedback error">Check X32 USB and REAPER audio inputs. '+recButton('Reconnect inputs','reconnect')+'</div>';
+                if(!(state.inputs||[]).some(function(c){return c.exists;}))content+=recButton('Set up recording tracks','setup',{},false,true);
+                else content+='<h3 class="rec-section-title">Recording inputs</h3>'+recInputs(state,false);
+                foot='<span class="rec-foot-note">'+selected.length+' inputs selected'+(state.device==='ready'?' / Ready':'')+'</span>'+recButton('Record','record',{song:song&&song.key},!recCanStart(),true)+(isPlaying?recLocal('Stop playback','emergency'):'');
+            }
+            if((g_recPending||!online||mode==='audition'&&view!=='work')&&foot.indexOf('data-rec-view="emergency"')<0)foot+=recLocal('Stop','emergency');
+            html+='<main class="rec-scroll'+(prep&&view==='work'?' rec-preparing':'')+'" id="rec-scroll">'+content+'</main><footer class="rec-work-foot '+(busy?'rec-capture-foot':!prep&&review&&view==='work'?'rec-review-foot':'')+'">'+foot+'</footer>';
+            // Elapsed/peaks update separately so polling never rebuilds capture controls.
+            html=html.replace(/(<div class="rec-clock" id="rec-elapsed">)[^<]*/, '$1');
+            if(html!==g_recHtml&&!g_recDragging){
+                var focused=document.activeElement,focusId=host.contains(focused)?focused.id:null;
+                var draft=Array.from(host.querySelectorAll('.rec-jam input,.rec-jam select,.rec-setup-row input,#rec-part-stop,#rec-copy-backing')).map(function(e){return {id:e.id,value:e.value,checked:e.checked};});
+                var opened=Array.from(host.querySelectorAll('details[open]')).map(function(e){return e.id;});
+                var positions=Array.from(host.querySelectorAll('#rec-scroll,.rec-pane')).map(function(e){return {id:e.id,top:e.scrollTop};});
+                var sameView=host.dataset.view===key+'|'+view;
+                g_recHtml=html;host.innerHTML=html;host.dataset.view=key+'|'+view;
+                if(sameView){positions.forEach(function(p){var e=document.getElementById(p.id);if(e)e.scrollTop=p.top;});draft.forEach(function(d){var e=document.getElementById(d.id);if(e){e.value=d.value;e.checked=d.checked;}});}
+                opened.forEach(function(id){var e=document.getElementById(id);if(e)e.open=true;});
+                if(focusId&&document.getElementById(focusId))document.getElementById(focusId).focus({preventScroll:true});
+            }
+            var elapsed=document.getElementById('rec-elapsed');if(elapsed)elapsed.textContent=trTime(state.elapsed||0);
             (state.inputs||[]).forEach(function(c){var meter=host.querySelector('[data-rec-meter="'+c.id+'"]');if(meter){Array.from(meter.children).forEach(function(bar,i){var level=c.stereo?(i===0?c.left:c.right):c.peak;bar.style.width=Math.min(100,Math.sqrt(Math.max(0,level||0))*100)+'%';});meter.classList.toggle('clip',c.peak>=1);}});
             updateMainTransport();
         }
+
         document.getElementById('recording-body').addEventListener('click',function(e){
+            var nav=e.target.closest('[data-rec-view]');
+            if(nav){var view=nav.dataset.recView;
+                if(view==='close'){recTogglePanel();return;}
+                if(view==='exports'){recCopies();return;}
+                if(view==='openExport'){recCopies(g_recCopy&&g_recCopy.job);return;}
+                if(view==='emergency'){wwr_req(1016);if(recOnline())recSend('stop');return;}
+                if(view.indexOf('mix:')===0){g_recMixTab=view.slice(4);recRender();return;}
+                if(view.indexOf('prep:')===0){g_recPrepTab=view.slice(5);recRender();return;}
+                recNavigate(view);return;
+            }
             var b=e.target.closest('[data-rec]');if(!b)return;
             var c=JSON.parse(b.dataset.rec),op=c.op;delete c.op;
             if(op==='copy'){b.blur();recMakeCopy(c.session,c.take);return;}
             if(op==='record'){b.blur();recStart();return;}
-            if(op==='recordPart'){var end=document.getElementById('rec-part-stop');c.stopAtEnd=!end||end.checked;}
+            if(op==='createCopy'){
+                var backing=document.getElementById('rec-copy-backing'),nonce=recSend('listening',{session:g_recCopy.session,take:g_recCopy.take,backing:!!(backing&&backing.checked)});
+                if(nonce){g_recCopy.job=nonce;recRender();recCopies(nonce);}return;
+            }
+            if(op==='recordPart'||op==='recordPrepared'){var end=document.getElementById('rec-part-stop');c.stopAtEnd=!end||end.checked;}
             if(op==='mix'&&c.group==='part'){op='partMix';delete c.group;}
             if(op==='partMix'&&c.rename){var partName=window.prompt('Name this part:','');if(partName===null)return;delete c.rename;c.name=partName;}
             if(op==='delete'){if(!window.confirm('Delete this recording session from the setlist? Its audio stays recoverable.'))return;c.confirm=c.session;}
@@ -9263,6 +9314,9 @@
             else if(e.target.dataset.recSession){g_recSelected[e.target.dataset.recSession]=e.target.checked;e.target.blur();recRender();}
             else if(e.target.dataset.recInput){var input=e.target.dataset.recInput,value=e.target.checked;e.target.blur();recSend('select',{input:input,value:value});}
         });
+        document.getElementById('recording-body').addEventListener('pointerdown',function(e){if(e.target.matches('input[type=range]'))g_recDragging=true;});
+        window.addEventListener('pointerup',function(){if(g_recDragging){g_recDragging=false;setTimeout(recRender,0);}});
+        window.addEventListener('pointercancel',function(){g_recDragging=false;recRender();});
         setInterval(function(){recRender();recUpdateGain();},500);
         // Musician-facing backing-group status for the current song.
         // Sources of truth — never cached, never optimistic:

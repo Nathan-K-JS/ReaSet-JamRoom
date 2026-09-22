@@ -78,6 +78,7 @@ function M.new()
   dofile(dir..'ReaSet_FreeJam.lua')(self,M)
   dofile(dir..'ReaSet_RecordingReady.lua')(self,M)
   dofile(dir..'ReaSet_RecordingTimeline.lua')(self,M)
+  dofile(dir..'ReaSet_RecordingPrepare.lua')(self,M)
   function self:save(project)
     assert(self.root,'Save the REAPER setlist project before recording')
     M.write(self.root..'/index.json',J.encode(self.db))
@@ -226,7 +227,7 @@ function M.new()
     assert((reaper.GetPlayState()&4)==4,'REAPER did not start recording; check the audio device')
     self.mode='recording'
   end
-  function self:begin(key,parentId,sessionId)
+  function self:begin(key,parentId,sessionId,preparedMix)
     assert(self.root,'Save the REAPER setlist project before recording')
     assert(self.mode=='idle' or self.mode=='review','Stop the current take first')
     assert(reaper.GetPlayState()==0,'Stop playback before recording')
@@ -269,6 +270,8 @@ function M.new()
     session.takes[#session.takes+1]=take
     self.db.active={session=session.id,take=take.id}
     M.parts(self,session,take,parent)
+    if preparedMix then take.backingOn=preparedMix.backingOn;take.stemMutes=preparedMix.stemMutes end
+    take.countin=self.db.countin;take.click=session.song.click
     self:arm(take)
     for id,tr in pairs(M.tracks()) do
       local _,name=reaper.GetTrackName(tr);take.trackNames[id]=name
@@ -376,7 +379,7 @@ function M.new()
     for _,t in ipairs(s.takes) do if t.id==tid then take=t end end
     assert(take and take.status~='discarded','Select a kept take')
     assert(not take.unresolved,'Some interrupted media needs recovery in REAPER: '..s.folder..'/'..take.id)
-    self.selected=sid;self.take=tid;self.mode='review';self.overdub=nil;s.selected=tid
+    self.selected=sid;self.take=tid;self.mode='review';self.overdub=nil;self.preparation=nil;s.selected=tid
     M.load_mix(self,take)
     self.auditionOptions={rate=reaper.Master_GetPlayRate(0),pitches={}}
     for _,r in ipairs(P.items(s.song,true))do
@@ -399,7 +402,8 @@ function M.new()
     local _,take=M.mix_take(self);local _,allowed=M.arrangement(self,s,take)
     M.owned_items(function(it,tr,owner)
       local id=M.ext(tr,'ReaSetRec',nil,true);local mix=(take.mix or {})[id] or {gain=1}
-      reaper.SetMediaItemInfo_Value(it,'B_MUTE',allowed[id] and self.recordingOn~=false and not mix.muted and 0 or 1)
+      local accompany=not self.preparation or self.preparation.parent~=nil
+      reaper.SetMediaItemInfo_Value(it,'B_MUTE',accompany and allowed[id] and self.recordingOn~=false and not mix.muted and 0 or 1)
       if allowed[id] then reaper.SetMediaTrackInfo_Value(tr,'D_VOL',(s.parts[id].baseGain or 1)*mix.gain)end
     end)
     for _,r in ipairs(P.items(s.song,true))do
@@ -534,6 +538,9 @@ function M.new()
       assert(self.mode=='idle' and reaper.GetPlayState()==0,'Finish the current take first')
       self:jam_settings(c);self:save(false)
     elseif c.op=='countin' then self.db.countin=c.value==true;self:save(false)
+    elseif c.op=='prepareTake' then self:prepare_take(c)
+    elseif c.op=='cancelPrepare' then self:cancel_preparation()
+    elseif c.op=='recordPrepared' then self:record_prepared(c)
     elseif c.op=='overdub' then
       self:review(c.session,c.take)
       self.overdub={session=c.session,take=c.take,stopAtEnd=true}
@@ -561,10 +568,10 @@ function M.new()
     elseif c.op=='review' then self:review(c.session,c.take)
     elseif c.op=='listen' then
       local same=self.selected==c.session and self.take==c.take and self.mode=='review'
-      local overdub=self.overdub
+      local overdub,preparation=self.overdub,self.preparation
       local backing,recording,inputs,stems=self.backingOn,self.recordingOn,self.recMutes,self.stemMutes
       self:review(c.session,c.take)
-      if same then self.overdub=overdub;self.backingOn=backing;self.recordingOn=recording;self.recMutes=inputs;self.stemMutes=stems;self:audition_mix()end
+      if same then self.overdub=overdub;self.preparation=preparation;self.backingOn=backing;self.recordingOn=recording;self.recMutes=inputs;self.stemMutes=stems;self:audition_mix()end
       reaper.Main_OnCommand(1007,0);self.mode='audition'
     elseif c.op=='mix' then
       assert(self.selected,'Select a take');if c.group=='backing' then self.backingOn=c.value==true
@@ -573,7 +580,7 @@ function M.new()
       else self.recMutes=self.recMutes or {};self.recMutes[c.input]=c.value==true end
       if c.group=='input' then local s,t=M.mix_take(self);for _,id in ipairs(t.layers)do if s.parts[id].input==c.input then t.mix[id].muted=c.value==true end end end
       self:audition_mix();M.save_mix(self)
-    elseif c.op=='done' then assert(reaper.GetPlayState()==0,'Stop playback first');self:park();self.mode='idle';self.overdub=nil;self:release_device();self:save(true)
+    elseif c.op=='done' then assert(reaper.GetPlayState()==0,'Stop playback first');self:park();self.mode='idle';self.overdub=nil;self.preparation=nil;self:release_device();self:save(true)
     elseif c.op=='later' then self.later=true
     elseif c.op=='open' then
       assert(reaper.GetPlayState()==0,'Stop playback before opening a recording project')
@@ -661,14 +668,17 @@ function M.new()
     local sessions=J.array();local pending=0
     for _,s in ipairs(self.db.sessions) do
       local row={id=s.id,song=s.song,created=s.created,deleted=s.deleted,exported=s.exported,takes=J.array()}
-      for _,t in ipairs(s.takes)do row.takes[#row.takes+1]={id=t.id,name=t.name,number=t.number,status=t.unresolved and 'Needs recovery' or t.status,duration=t.duration or 0,favourite=t.favourite,inputs=t.inputs,parent=t.parent}end
+      for _,t in ipairs(s.takes)do row.takes[#row.takes+1]={id=t.id,name=t.name,number=t.number,status=t.unresolved and 'Needs recovery' or t.status,duration=t.duration or 0,favourite=t.favourite,inputs=t.inputs,parent=t.parent,partCount=#(t.layers or {})}end
       if not s.deleted and not s.exported then pending=pending+1 end
       sessions[#sessions+1]=row
     end
     local parts=J.array()
     if self.selected and self.take then local s,t=M.mix_take(self);for _,id in ipairs(t.layers or {})do local p=s.parts[id];parts[#parts+1]={id=id,name=p.name,stereo=p.stereo,input=p.input,new=p.take==t.id,gain=(t.mix[id] or {}).gain or 1,muted=(t.mix[id] or {}).muted==true}end end
     local songs=P.songs();for _,s in ipairs(songs)do s.gain=P.gain(s);s.level=P.level(s)end
-    return {elapsed=self.db.active and math.max(0,reaper.GetPlayPosition()-(self.db.active.origin or 0)) or 0,device=self.deviceState,overdub=self.overdub,parts=parts,project=self.id,revision=self.revision,mode=self.mode,paused=(reaper.GetPlayState()&2)==2,inputs=inputs,sessions=sessions,songs=J.array(songs),pending=pending,notice=pending>0 and not self.later,recordMode=self.db.recordMode or 'song',jam=self.db.jam,countin=self.db.countin,selected=self.selected,take=self.take,message=self.message,error=self.error,ack=self.ack,ready=self.root~=nil,backingOn=self.backingOn~=false,recordingOn=self.recordingOn~=false,recMutes=self.recMutes or {},stemMutes=self.stemMutes or {}}
+    local backing=J.array();local seen={};local selected=self.selected and self:session(self.selected)
+    if selected then for _,r in ipairs(P.items(selected.song,true))do if not seen[r.slot]then seen[r.slot]=true;backing[#backing+1]={slot=r.slot}end end end
+    local preparation=self.preparation and {kind=self.preparation.kind,session=self.preparation.session,take=self.preparation.take,parent=self.preparation.parent,stopAtEnd=self.preparation.stopAtEnd}
+    return {elapsed=self.db.active and math.max(0,reaper.GetPlayPosition()-(self.db.active.origin or 0)) or 0,device=self.deviceState,preparation=preparation,backing=backing,overdub=self.overdub,parts=parts,project=self.id,revision=self.revision,mode=self.mode,paused=(reaper.GetPlayState()&2)==2,inputs=inputs,sessions=sessions,songs=J.array(songs),pending=pending,notice=pending>0 and not self.later,recordMode=self.db.recordMode or 'song',jam=self.db.jam,countin=self.db.countin,selected=self.selected,take=self.take,message=self.message,error=self.error,ack=self.ack,ready=self.root~=nil,backingOn=self.backingOn~=false,recordingOn=self.recordingOn~=false,recMutes=self.recMutes or {},stemMutes=self.stemMutes or {}}
   end
   -- Restore preview overrides before ordinary rehearsal playback is available.
   local _,raw=reaper.GetProjExtState(0,'ReaSetRec','audition')
