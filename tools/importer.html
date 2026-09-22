@@ -306,7 +306,7 @@
     <div id="vocalCheck" class="hide">
       <div class="note">Play the lead vocal and check when that line is
         actually sung:</div>
-      <audio controls preload="none" id="vocalAudio" style="width:100%;height:34px"></audio>
+      <audio controls preload="none" id="vocalAudio" style="width:100%;height:34px"></audio><span id="vocalPreviewStatus" role="status"></span>
     </div>
     <label>Shift all lyrics by (seconds — positive = show later)</label>
     <input type="number" id="lyrOffset" step="0.1" value="0">
@@ -355,7 +355,7 @@
 <script>
 // Version of THIS page (served fresh from disk). Compared against the version
 // of the running server. Either side may be older.
-var UI_BUILD = "v3.18";
+var UI_BUILD = "v3.19";
 
 function importerVersionWarning(serverBuild) {
   if (serverBuild === UI_BUILD) return '';
@@ -416,6 +416,7 @@ function resetReviewPanel(){
   window._review = null;
   $('reviewCard').classList.add('hide');
   document.querySelectorAll('#reviewCard audio').forEach(function(a){
+    if(a._previewCleanup)a._previewCleanup();
     try { a.pause(); } catch(e) {}
     a.removeAttribute('src');
     try { a.load(); } catch(e) {}
@@ -1012,82 +1013,79 @@ function doImport(){return importWorkspace('add');}
 function doImportLibrary(){return importWorkspace('add');}
 
 function stemBadge(st){
-  var p = st.profile || {};
-  if(p.error) return '';
-  if(p.verdict === 'silent')       return '<span class="libpill warn">nothing here</span>';
-  if(p.verdict === 'almost empty') return '<span class="libpill warn">almost empty</span>';
-  if(p.verdict === 'sparse')       return '<span class="libpill">only in places</span>';
-  return '';
+  var p=st.profile||{}, label=p.digital_silence?'Silent':p.verdict==='quiet'?'Quiet audio':p.verdict==='sparse'?'Brief parts':'';
+  return label?'<span class="libpill">'+label+'</span>':'';
 }
-
 function stemNote(st){
-  var p = st.profile || {};
-  if(p.error) return 'Could not analyse this stem (' + p.error + ').';
-  var bits = [p.loud_seconds + 's of audible content (' + p.active_pct + '% of the song)',
-              'peak ' + p.peak_db + ' dB'];
-  if(p.below_loudest_db >= 6) bits.push(p.below_loudest_db + ' dB below the loudest stem');
-  var s = bits.join(' · ');
-  if(st.history_note) s += ' · ' + st.history_note;
-  if(st.suggest_skip) s += ' — set to “don’t import”, because ' + st.suggest_skip
-                         + '. Change it if you disagree.';
-  return s;
+  var p=st.profile||{};
+  if(p.error)return 'Analysis unavailable: '+p.error;
+  if(!Number.isFinite(p.duration))return 'Waveform analysis unavailable. Reopen this review to refresh it.';
+  return (st.duration_note?st.duration_note+' ':'')+p.loud_seconds+'s above the activity threshold ('+p.active_pct+'% of the song), peak '+p.peak_db+' dB. Brief and quiet sounds still contribute to the song.';
 }
-
-function drawWave(cv, st, audio){
-  var p = st.profile || {};
-  var peaks = p.peaks || [];
-  var ctx = cv.getContext('2d');
-  var W = cv.width, H = cv.height, mid = H/2;
-  ctx.clearRect(0,0,W,H);
-  ctx.fillStyle = '#12141a'; ctx.fillRect(0,0,W,H);
-  if(!peaks.length){
-    ctx.fillStyle = '#9aa0a6'; ctx.font = '12px system-ui';
-    ctx.fillText('no waveform', 8, mid+4);
-    return;
-  }
-  // The -45 dB line the "audible" figure is measured against, so the picture
-  // and the numbers below it agree.
-  var floor = Math.pow(10, -45/20);
-  ctx.strokeStyle = '#2c3038'; ctx.beginPath();
-  ctx.moveTo(0, mid - floor*mid); ctx.lineTo(W, mid - floor*mid);
-  ctx.moveTo(0, mid + floor*mid); ctx.lineTo(W, mid + floor*mid); ctx.stroke();
-  ctx.fillStyle = p.empty ? '#5a4a2a' : '#2f6fed';
-  for(var i=0;i<peaks.length;i++){
-    var x = i * W / peaks.length;
-    var h = Math.max(1, peaks[i] * mid);
-    ctx.fillRect(x, mid - h, Math.max(1, W/peaks.length - 0.5), h*2);
-  }
-  cv.style.cursor = 'pointer';
-  cv.onclick = function(ev){
-    var r = cv.getBoundingClientRect();
-    var frac = (ev.clientX - r.left) / r.width;
-    if(audio && p.duration){
-      audio.currentTime = Math.max(0, Math.min(p.duration, frac * p.duration));
-      audio.play();
+function stemRoutingNote(row,st){
+  var dest=row.querySelector('select').value, p=st.profile||{}, note=row.querySelector('.stem-route-note');
+  note.textContent=dest==='SKIP'?(p.digital_silence?'Verified silence; excluded.':'Contains audio / silence not verified. Excluded by your choice.'):
+    dest==='EXTRA'?'Kept in Extras; included in playback.':'';
+}
+function setupStemAudio(audio,duration,status,update){
+  if(audio._previewCleanup)audio._previewCleanup();
+  var expected=Number(duration),pending=null,valid=false,dead=false;
+  function say(message){status.textContent=message;}
+  function changed(){if(update)update(audio.currentTime||0);}
+  function seek(){if(pending!==null&&valid){audio.currentTime=Math.max(0,Math.min(expected,pending));pending=null;changed();}}
+  function metadata(){
+    if(dead)return;
+    if(!Number.isFinite(audio.duration)||!Number.isFinite(expected)||expected<=0||Math.abs(audio.duration-expected)>.06){
+      valid=false;audio.pause();audio.controls=false;say('Preview timing does not match the decoded audio. Reopen this review to refresh it.');return;
     }
-  };
-  // Follow playback with a cursor.
-  if(audio){
-    audio.addEventListener('timeupdate', function(){
-      drawWaveCursor(cv, st, audio.currentTime);
-    });
+    valid=true;audio.controls=true;say('');seek();changed();
   }
-}
-
-function drawWaveCursor(cv, st, t){
-  var p = st.profile || {};
-  if(!p.duration) return;
-  if(!cv._base){ cv._base = cv.toDataURL(); }
-  var ctx = cv.getContext('2d');
-  var img = new Image();
-  img.onload = function(){
-    ctx.clearRect(0,0,cv.width,cv.height);
-    ctx.drawImage(img,0,0);
-    var x = (t / p.duration) * cv.width;
-    ctx.strokeStyle = '#fff'; ctx.beginPath();
-    ctx.moveTo(x,0); ctx.lineTo(x,cv.height); ctx.stroke();
+  var handlers={loadedmetadata:metadata,durationchange:()=>{if(audio.readyState)metadata();},
+    loadstart:()=>say('Loading audio...'),waiting:()=>say('Loading audio...'),
+    seeking:()=>say('Seeking...'),seeked:()=>{if(valid)say('');changed();},
+    canplay:()=>{if(valid)say('');},timeupdate:changed,
+    error:()=>say('Audio preview unavailable. Reopen the review to prepare it again.')};
+  Object.entries(handlers).forEach(([name,fn])=>audio.addEventListener(name,fn));
+  audio._previewSeek=function(t,play){
+    if(dead||!Number.isFinite(expected)||expected<=0)return;
+    pending=Math.max(0,Math.min(expected,t));say('Loading audio...');
+    if(!audio.getAttribute('src')){say('No preview audio available.');return;}
+    if(audio.readyState){if(!valid){say('Preview timing is unavailable. Reopen this review.');return;}seek();}else{audio.preload='metadata';audio.load();}
+    if(play)audio.play().catch(e=>{if(!dead&&e.name!=='AbortError')say('Press Play to audition this position.');});
   };
-  img.src = cv._base;
+  audio._previewCleanup=function(){dead=true;pending=null;Object.entries(handlers).forEach(([name,fn])=>audio.removeEventListener(name,fn));};
+  if(audio.readyState)metadata();
+}
+function drawWave(cv,st,audio){
+  var p=st.profile||{},duration=Number(p.duration),base=document.createElement('canvas'),position=0,dragging=false;
+  var status=cv.parentElement.querySelector('.preview-status'),clock=cv.parentElement.querySelector('.preview-clock');
+  function timestamp(t){return Math.floor(t/60)+':'+(t%60).toFixed(1).padStart(4,'0');}
+  function cursor(t){
+    position=Math.max(0,Math.min(duration||0,t));
+    var ctx=cv.getContext('2d');ctx.clearRect(0,0,cv.width,cv.height);ctx.drawImage(base,0,0);
+    if(duration){var x=position/duration*cv.width;ctx.strokeStyle='#fff';ctx.beginPath();ctx.moveTo(x,0);ctx.lineTo(x,cv.height);ctx.stroke();}
+    cv.setAttribute('aria-valuenow',position.toFixed(1));cv.setAttribute('aria-valuetext',timestamp(position));
+    clock.textContent=timestamp(position)+' / '+timestamp(duration||0);
+  }
+  function redraw(){
+    var rect=cv.getBoundingClientRect();if(!rect.width)return;
+    cv.width=base.width=Math.round(rect.width*(window.devicePixelRatio||1));base.height=cv.height=92;
+    var ctx=base.getContext('2d'),peaks=p.peaks||[],mid=base.height/2;
+    ctx.fillStyle='#12141a';ctx.fillRect(0,0,base.width,base.height);ctx.fillStyle=p.digital_silence?'#81734e':'#5693f4';
+    peaks.forEach(function(peak,i){var h=Math.max(1,peak*mid);ctx.fillRect(i*base.width/peaks.length,mid-h,Math.max(1,base.width/peaks.length),h*2);});
+    cursor(position);
+  }
+  cv.style.touchAction='none';cv.style.height='46px';cv.style.cursor='pointer';cv.tabIndex=0;
+  cv.setAttribute('role','slider');cv.setAttribute('aria-label',st.name+' audition position');cv.setAttribute('aria-valuemin','0');cv.setAttribute('aria-valuemax',String(duration||0));
+  setupStemAudio(audio,duration,status,t=>{if(!dragging)cursor(t);});
+  function target(e){var r=cv.getBoundingClientRect();return Math.max(0,Math.min(duration,(e.clientX-r.left)/r.width*duration));}
+  cv.onpointerdown=e=>{if(!duration)return;e.preventDefault();dragging=true;cv.focus();cv.setPointerCapture(e.pointerId);cursor(target(e));};
+  cv.onpointermove=e=>{if(dragging)cursor(target(e));};
+  cv.onpointerup=e=>{if(!dragging)return;dragging=false;audio._previewSeek(target(e),true);};
+  cv.onpointercancel=()=>{dragging=false;cursor(audio.currentTime);};
+  cv.onkeydown=e=>{var t=position;if(e.key==='ArrowRight')t+=e.shiftKey?10:1;else if(e.key==='ArrowLeft')t-=e.shiftKey?10:1;else if(e.key==='Home')t=0;else if(e.key==='End')t=duration;else return;e.preventDefault();cursor(t);audio._previewSeek(t,false);};
+  var observer=new ResizeObserver(redraw);observer.observe(cv);redraw();
+  var cleanup=audio._previewCleanup;audio._previewCleanup=()=>{observer.disconnect();cleanup();};
 }
 
 function showReview(rv){
@@ -1114,13 +1112,15 @@ function showReview(rv){
       '<input class="lbl" type="text" data-file="' + st.file + '" value="' +
         defLbl.replace(/"/g,'&quot;') + '" placeholder="name shown in ReaSet">' +
       '<div class="lblhint">Display name on ReaSet’s mute screen only — the group above decides the routing and muting.</div>' +
-      '<audio controls preload="none" src="' + st.audio + '"></audio>';
+      '<audio controls preload="none"'+(st.audio?' src="'+st.audio+'"':'')+'></audio><output class="preview-clock"></output><span class="preview-status" role="status"></span><div class="stem-route-note note"></div>';
     list.appendChild(row);
     drawWave(row.querySelector('canvas.wave'), st,
              row.querySelector('audio'));
     var selEl = row.querySelector('select'), lblEl = row.querySelector('input.lbl');
+    selEl.dataset.origin=st.choice_source||'automatic';stemRoutingNote(row,st);
     lblEl.addEventListener('input', function(){ lblEl.dataset.touched = '1'; });
     selEl.addEventListener('change', function(){
+      selEl.dataset.origin='explicit';stemRoutingNote(row,st);
       var d = rv.slot_labels[selEl.value] || '';
       lblEl.classList.toggle('hide', selEl.value === 'SKIP');
       if(!lblEl.dataset.touched) lblEl.value = d;
@@ -1136,6 +1136,8 @@ function showReview(rv){
     $('lyrOffset').value = ly.suggested_offset || 0;
     if(rv.vocal_audio){
       $('vocalAudio').src = rv.vocal_audio;
+      var vocal=rv.stems.find(st=>st.audio===rv.vocal_audio);
+      setupStemAudio($('vocalAudio'),vocal&&vocal.profile.duration,$('vocalPreviewStatus'));
       $('vocalCheck').classList.remove('hide');
     }
   } else if (ly.plain) {
@@ -1145,9 +1147,9 @@ function showReview(rv){
   }
   // pause background music players when one starts
   document.querySelectorAll('audio').forEach(function(a){
-    a.addEventListener('play', function(){
+    a.onplay=function(){if(window.ChartAuthor&&ChartAuthor.active)ChartAuthor.active.close();
       document.querySelectorAll('audio').forEach(function(b){ if(b!==a) b.pause(); });
-    });
+    };
   });
   if(window.ImportWorkspace)ImportWorkspace.compactStems();
 }

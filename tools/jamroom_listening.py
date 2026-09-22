@@ -295,7 +295,7 @@ class Listening:
             pass  # A locked intermediate must not turn a completed MP3 into a failure.
 
 
-def serve_audio(handler, path, filename, download=False, head=False):
+def serve_audio(handler, path, filename, download=False, head=False, content_type='audio/mpeg'):
     """Safari/Chrome single byte ranges, including suffix ranges and HEAD probes."""
     size = path.stat().st_size; start, end = 0, size - 1
     value = handler.headers.get('Range')
@@ -313,7 +313,7 @@ def serve_audio(handler, path, filename, download=False, head=False):
             handler.send_response(416); handler.send_header('Content-Range', f'bytes */{size}')
             handler.send_header('Content-Length', '0'); handler.end_headers(); return
     handler.send_response(206 if value else 200)
-    handler.send_header('Content-Type', 'audio/mpeg')
+    handler.send_header('Content-Type', content_type)
     handler.send_header('Content-Length', str(end - start + 1))
     handler.send_header('Accept-Ranges', 'bytes')
     handler.send_header('Cache-Control', 'no-store')

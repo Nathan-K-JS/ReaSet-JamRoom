@@ -96,6 +96,8 @@ class ImporterWorkspaceTests(unittest.IsolatedAsyncioTestCase):
     async def queue(self):
         review=dict(stems=[dict(file=f'{i}.wav',name=f'Stem {i}',slot='BASS',audio='/audio.wav',duration=180) for i in range(8)],
                     slot_choices=[['BASS','Bass'],['GTR1','Guitar 1']],slot_labels={'BASS':'Bass'},lyrics={'synced':False},chart={})
+        for stem in review['stems']:
+            stem['profile']={'duration':180,'peaks':[.1,.4,.05,.7,.2,.5]*80,'verdict':'full','peak_db':-3,'loud_seconds':100,'active_pct':55.6}
         self.jobs=[dict(id=str(i),song=f'Artist - Song {i}',state='review' if i<4 else 'preparing',stage='Working',revision=1,target='JamRoom',review=review,draft={}) for i in range(30)]
         await self.page.reload();await self.page.wait_for_function('ImportJobs.enabled')
         await self.page.get_by_role('button',name='Open Artist - Song 0',exact=True).click()
@@ -153,3 +155,23 @@ class ImporterWorkspaceTests(unittest.IsolatedAsyncioTestCase):
         await self.page.evaluate('ImportJobs.editChart()')
         await self.page.wait_for_selector('.ca-text')
         self.assertIn('Fresh words for our room',await self.page.locator('.ca-text').input_value())
+
+    async def test_expanded_last_stem_preview_fits_phone_and_switches_players(self):
+        from pathlib import Path
+        await self.queue()
+        folder=Path(__file__).resolve().parent.parent/'imports/.visual/stem-review'
+        folder.mkdir(parents=True,exist_ok=True)
+        for width,height in [(1440,900),(390,844),(320,568)]:
+            await self.page.set_viewport_size(dict(width=width,height=height))
+            last=self.page.locator('#stemList .stem-preview').last
+            if await last.get_attribute('aria-expanded')!='true':await last.click()
+            clock=self.page.locator('#stemList .preview-clock').last
+            await clock.scroll_into_view_if_needed()
+            self.assertTrue(await clock.is_visible())
+            self.assertTrue(await self.page.evaluate('document.documentElement.scrollWidth<=innerWidth'))
+            bounds=await self.page.locator('#applyBtn').bounding_box()
+            self.assertLessEqual(bounds['y']+bounds['height'],height+1)
+            await self.page.screenshot(path=str(folder/f'preview-{width}.png'))
+        await self.page.locator('#stemList .stem-preview').first.click()
+        self.assertEqual(await self.page.locator('#stemList .stem-preview[aria-expanded=true]').count(),1)
+        self.assertTrue(await self.page.locator('#stemList audio').last.evaluate('a=>a.paused'))

@@ -274,7 +274,56 @@ class ImportQueue:
                     raise RuntimeError('Another saved Fadr task may still be running for ' + row['song'] +
                                        '. Resume/check that song first, then retry this one. No new split was submitted.')
 
+    def refresh_stem_review(self, ident):
+        # Read/analysis outside the queue lock: other imports and polling keep working.
+        with self.guard:
+            row = self.jobs[ident]
+            if row['state'] != 'review' or row.get('apply_started') or row.get('stem_policy') == ji.STEM_REVIEW_POLICY:
+                return
+            before = copy.deepcopy(row)
+        folder = self.folder(ident)
+        job = copy.deepcopy(ji.load_job(folder))
+        choices = dict(job.get('slot_overrides') or {})
+        for stem in (before.get('review') or {}).get('stems', []):
+            choices.setdefault(stem['file'], stem['slot'])
+        choices.update(before.get('draft', {}).get('slots', {}))
+        explicit = set()
+        for saved in (job, before.get('draft', {})):
+            if saved.get('stem_policy') == ji.STEM_REVIEW_POLICY:
+                explicit.update(file for file, origin in saved.get('slot_origins', {}).items() if origin == 'explicit')
+        skipped = {file for file, slot in choices.items() if slot == 'SKIP' and file not in explicit}
+        job['slot_overrides'] = {file: slot for file, slot in choices.items() if file not in skipped}
+        review = self.server.build_review(job, folder, self.config(before))
+        recovered = []
+        for stem in review['stems']:
+            if stem['file'] in skipped and stem['profile'].get('digital_silence') is not True:
+                stem.update(slot='EXTRA', label=self.config(before)['slot_labels'].get('EXTRA', 'Extras'), choice_source='automatic')
+                recovered.append(stem['file'])
+        with self.guard:
+            row = self.jobs[ident]
+            if row['revision'] != before['revision'] or row['state'] != 'review' or row.get('apply_started'):
+                return
+            # Only replace stem metadata. Authored charts/source candidates/offsets stay intact.
+            current = row.setdefault('review', {})
+            for key in ('stems', 'vocal_audio', 'slot_choices', 'slot_labels', 'stem_policy'):
+                if key in review: current[key] = review[key]
+            draft = row.setdefault('draft', {})
+            slots, origins = draft.setdefault('slots', {}), draft.setdefault('slot_origins', {})
+            for stem in review['stems']:
+                slots[stem['file']] = stem['slot']
+                origins.setdefault(stem['file'], stem.get('choice_source', 'automatic'))
+                if stem['file'] in recovered:
+                    draft.setdefault('labels', {})[stem['file']] = stem['label']
+                    origins[stem['file']] = 'automatic'
+            row['stem_policy'] = ji.STEM_REVIEW_POLICY
+            draft['stem_policy'] = ji.STEM_REVIEW_POLICY
+            row['apply_prepared'] = False
+            row['revision'] += 1
+            row['summary'] = (f'Recovered {len(recovered)} nonempty stems to Extras. ' if recovered else '') + 'Accurate stem previews ready; review choices and chart edits retained.'
+            self._save()
+
     def detail(self, ident):
+        self.refresh_stem_review(ident)
         with self.guard:
             row = self.jobs[ident]
             result = copy.deepcopy(row)
@@ -511,6 +560,8 @@ class ImportQueue:
                     raise Conflict('This job is not ready to apply')
                 if not row['target'] or self.server.project_identity() != row['target']:
                     raise Conflict('Open the intended project, or explicitly select the current project as the target.')
+                if not row.get('apply_started') and row.get('stem_policy') != ji.STEM_REVIEW_POLICY:
+                    raise Conflict('Reopen this review to refresh its stem previews and recovered audio before applying.')
                 if not self.server.BUSY.acquire(blocking=False):
                     raise Conflict('Another REAPER change is running. Try again when it finishes.')
                 old_state = row['state']
@@ -538,6 +589,8 @@ class ImportQueue:
             job = ji.load_job(folder)
             draft = row['draft']
             job['slot_overrides'] = draft.get('slots', job.get('slot_overrides', {}))
+            job['slot_origins'] = draft.get('slot_origins', {})
+            job['stem_policy'] = ji.STEM_REVIEW_POLICY
             labels = {}
             for file, slot in job['slot_overrides'].items():
                 label = ji.sanitize_region_name(draft.get('labels', {}).get(file, ''))

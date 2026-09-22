@@ -27,18 +27,18 @@ window.ImportJobs = (function(){
     message.style.color = '#ffb3a7';
   }
   async function request(path, body){
-    var response = await fetch('/api/jobs' + path, body === undefined ? {signal:AbortSignal.timeout(20000)} : {
+    var response = await fetch('/api/jobs' + path, body === undefined ? {signal:AbortSignal.timeout(120000)} : {
       method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(body)});
     var data = await response.json();
     if(!response.ok || data.error) throw new Error(data.error || 'Importer request failed');
     return data;
   }
   function draft(){
-    var value = {slots:{}, labels:{}, fields:{}};
+    var value = {slots:{}, slot_origins:{}, stem_policy:2, labels:{}, fields:{}};
     value.chart_view=chartView;
     if(chartDraft)value.chart_document=chartDraft;
     if(previousChart)value.previous_chart=previousChart;
-    document.querySelectorAll('#stemList select').forEach(function(node){value.slots[node.dataset.file] = node.value;});
+    document.querySelectorAll('#stemList select').forEach(function(node){value.slots[node.dataset.file] = node.value;value.slot_origins[node.dataset.file]=node.dataset.origin||'automatic';});
     document.querySelectorAll('#stemList input.lbl').forEach(function(node){value.labels[node.dataset.file] = node.value.trim();});
     var offset = parseFloat($('lyrOffset').value);
     value.lyrics_offset = Number.isFinite(offset) ? offset : null;
@@ -50,6 +50,8 @@ window.ImportJobs = (function(){
     chartView=value.chart_view||'edit';chartDraft=value.chart_document||null;previousChart=value.previous_chart||null;
     document.querySelectorAll('#stemList select').forEach(function(node){
       if(value.slots && Object.hasOwn(value.slots, node.dataset.file)) node.value = value.slots[node.dataset.file];
+      if(value.slot_origins&&value.slot_origins[node.dataset.file])node.dataset.origin=value.slot_origins[node.dataset.file];
+      var stem=(window._review&&_review.stems||[]).find(s=>s.file===node.dataset.file);if(stem)stemRoutingNote(node.closest('.stemrow'),stem);
     });
     document.querySelectorAll('#stemList input.lbl').forEach(function(node){
       if(value.labels && Object.hasOwn(value.labels, node.dataset.file)){

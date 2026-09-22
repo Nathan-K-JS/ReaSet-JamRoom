@@ -40,8 +40,8 @@ import jamroom_loudness as level_model
 # what is on disk — the importer server holds its modules in memory, so this is
 # how you tell "did the update take effect?" from "is the old process still up?"
 # BUMP THIS whenever the importer changes, and quote it when handing over.
-BUILD = "v3.18"
-BUILD_DATE = "2026-09-22"
+BUILD = "v3.19"
+BUILD_DATE = "2026-09-23"
 
 # Fadr's S3 throttles each connection independently, so several transfers at
 # once finish far sooner than one at a time. Overridable via config.
@@ -780,7 +780,7 @@ def stage_fadr(job, job_dir, cfg, force):
             (stems_dir / (fname + '.download.json')).write_text(
                 json.dumps({'asset':a['_id'], 'size':wav.stat().st_size}), encoding='utf-8')
         results[i] = {"fadr_name": name, "file": f"stems/{wav.name}",
-                      "slot": slot_map.get(name)}
+                      "slot": slot_map.get(norm_stem_type(name)) or "EXTRA"}
         done["n"] += 1
         log(f"  [{done['n']} of {len(wanted)}] {base} done")
 
@@ -790,12 +790,6 @@ def stage_fadr(job, job_dir, cfg, force):
             future.result()
 
     job["stems"] = [r for r in results if r]
-    unmapped = [r["fadr_name"] for r in job["stems"] if not r["slot"]]
-    if unmapped:
-        log(f"WARNING: no slot mapping for stems: {unmapped} — they were "
-            f"downloaded but will be skipped by the apply step until you add "
-            f"them to slot_map in the config or job.json.")
-
     # Now collect the chord/MIDI analysis. By this point the sub-splits and the
     # stem downloads have given Fadr several minutes to finish it.
     if not main_asset.get("midi"):
@@ -1964,30 +1958,43 @@ def stage_lyrics(job, job_dir, force):
     save_job(job_dir, job)
 
 
+def wav_info(path):
+    """Validate the last declared frame too: a RIFF prefix is not a complete file."""
+    with wave.open(str(path), 'rb') as audio:
+        frames, rate, channels, width = audio.getnframes(), audio.getframerate(), audio.getnchannels(), audio.getsampwidth()
+        if not frames or not rate: raise ValueError('Audio contains no sample frames')
+        audio.setpos(frames - 1)
+        if len(audio.readframes(1)) != channels * width: raise ValueError('Truncated WAV audio')
+    return {'frames': frames, 'rate': rate, 'channels': channels, 'width': width}
+
+
 def ensure_riff_wav(path):
-    """Return a path to a REAL RIFF WAV for `path`. Fadr serves stem downloads
-    as MP3 data regardless of our .wav naming (verified live — every endpoint
-    variant returns ID3-tagged MP3), and REAPER trusts the extension, yielding
-    zero-length items. Converts to a SIBLING `<name>.riff.wav` (never in place:
-    REAPER may hold the original open, which blocks replacement on Windows)."""
-    def is_riff(p):
-        try:
-            with open(p, "rb") as f:
-                return f.read(4) == b"RIFF"
-        except OSError:
-            return False
+    """Validated PCM sibling, atomically published; never replace referenced media."""
     path = Path(path)
-    if is_riff(path):
+    try:
+        wav_info(path)
         return path
-    out = path.with_name(path.stem + ".riff.wav")
-    if is_riff(out):
-        return out
-    ff = shutil.which("ffmpeg") or die("ffmpeg not found on PATH")
-    r = subprocess.run([ff, "-y", "-v", "error", "-i", str(path), str(out)],
-                       capture_output=True, text=True)
-    if r.returncode != 0:
-        die(f"Could not convert {path.name} to WAV:\n{r.stderr[-500:]}")
-    log(f"Converted {path.name} -> {out.name} (Fadr serves stems as MP3).")
+    except (OSError, EOFError, wave.Error, ValueError):
+        pass
+    out = path.with_name(path.stem + '.riff.wav')
+    try:
+        wav_info(out)
+        if out.stat().st_mtime_ns >= path.stat().st_mtime_ns: return out
+    except (OSError, EOFError, wave.Error, ValueError):
+        pass
+    ff = shutil.which('ffmpeg') or die('ffmpeg not found on PATH')
+    # Unique temporary files also allow independent readers to request a legacy asset.
+    import uuid
+    temporary = out.with_name(out.stem + '.' + uuid.uuid4().hex + '.part.wav')
+    try:
+        r = subprocess.run([ff, '-y', '-v', 'error', '-i', str(path), '-c:a', 'pcm_s16le', str(temporary)],
+                           capture_output=True, text=True, timeout=300, creationflags=getattr(subprocess, 'CREATE_NO_WINDOW', 0))
+        if r.returncode: raise ValueError('Could not decode '+path.name+': '+r.stderr[-500:])
+        wav_info(temporary)
+        temporary.replace(out)
+    finally:
+        temporary.unlink(missing_ok=True)
+    log(f'Prepared accurate audio: {out.name}')
     return out
 
 
@@ -2023,81 +2030,71 @@ def _activity(wav_path):
     return env > thr, hop / 22050.0
 
 
+STEM_REVIEW_POLICY = 2
+
+
 def stem_profile(path, buckets=480, cache=True):
-    """A stem's shape, and how much is actually in it.
-
-    Answers the question that otherwise costs four minutes of listening: is
-    there anything in this track, and where? Fadr's melodic split emits a stem
-    per instrument whether or not the song contains one, so several routinely
-    arrive holding nothing but bleed from the guitars or the edges of a backing
-    vocal. Seeing that at a glance is the difference between curating a song in
-    a minute and playing every stem through.
-
-    Cached beside the audio: the decode is the slow part and stems never change.
-    """
-    path = Path(path)
-    cf = path.with_name(path.name + ".profile.json")
-    try:
-        if cache and cf.exists() and cf.stat().st_mtime >= path.stat().st_mtime:
-            return json.loads(cf.read_text(encoding="utf-8"))
-    except (OSError, ValueError):
-        pass
-
+    """One decoded stereo clock for audition, waveform and conservative routing."""
     import numpy as np
-    ff = shutil.which("ffmpeg")
-    if not ff:
-        raise RuntimeError("ffmpeg not found on PATH")
-    SR = 8000            # plenty for an envelope, and quick to decode
-    r = subprocess.run([ff, "-v", "error", "-i", str(path), "-ac", "1",
-                        "-ar", str(SR), "-f", "s16le", "-"], capture_output=True)
-    if r.returncode != 0 or not r.stdout:
-        raise RuntimeError("could not decode that stem")
-    x = np.frombuffer(r.stdout, dtype=np.int16).astype(np.float32) / 32768.0
-    if not x.size:
-        raise RuntimeError("that stem is empty")
-
-    edges = np.linspace(0, x.size, buckets + 1).astype(int)
-    peaks, rmss = [], []
+    path = ensure_riff_wav(path)
+    info = wav_info(path)
+    identity = {'version': STEM_REVIEW_POLICY, 'size': path.stat().st_size,
+                'mtime_ns': path.stat().st_mtime_ns, 'buckets': buckets, **info}
+    import hashlib
+    with path.open('rb') as source:
+        identity['sha256'] = hashlib.file_digest(source, 'sha256').hexdigest()
+    cf = path.with_name(path.name + '.profile.json')
+    try:
+        saved = json.loads(cf.read_text(encoding='utf-8')) if cache else {}
+        if saved.get('identity') == identity: return saved
+    except (OSError, ValueError): pass
+    with wave.open(str(path), 'rb') as audio: raw = audio.readframes(info['frames'])
+    width = info['width']
+    if width == 1: values = np.frombuffer(raw, dtype=np.uint8).astype(np.float32) - 128
+    elif width in (2, 4): values = np.frombuffer(raw, dtype='<i'+str(width)).astype(np.float32)
+    elif width == 3:
+        data = np.frombuffer(raw, dtype=np.uint8).reshape(-1, 3).astype(np.int32)
+        values = data[:,0] | (data[:,1] << 8) | (data[:,2] << 16)
+        values = ((values ^ 0x800000) - 0x800000).astype(np.float32)
+    else: raise ValueError('Unsupported PCM sample width')
+    silent = not np.any(values)
+    values /= (2 ** (width * 8 - 1))
+    samples = values.reshape(-1, info['channels'])
+    # Maximum channel amplitude preserves opposite-polarity stereo and brief bursts.
+    envelope = np.max(np.abs(samples), axis=1)
+    edges = np.linspace(0, len(envelope), buckets + 1).astype(int)
+    peaks, rms = [], []
     for a, b in zip(edges[:-1], edges[1:]):
-        seg = x[a:b]
-        if seg.size:
-            peaks.append(float(np.abs(seg).max()))
-            rmss.append(float(np.sqrt((seg ** 2).mean())))
-        else:
-            peaks.append(0.0)
-            rmss.append(0.0)
-
-    def db(v):
-        return round(20.0 * math.log10(max(v, 1e-7)), 1)
-
-    arr = np.asarray(rmss)
-    peak_db = db(max(peaks) if peaks else 0.0)
-    # "Audible" is judged on an ABSOLUTE floor, not relative to this stem's own
-    # peak — otherwise a stem containing nothing but quiet bleed normalises
-    # itself and looks busy.
-    active = float((arr > 10 ** (-45.0 / 20.0)).mean()) * 100.0
-    dur = x.size / SR
-    if peak_db < -35.0:
-        verdict = "silent"
-    elif active < 4.0:
-        verdict = "almost empty"
-    elif active < 25.0:
-        verdict = "sparse"
-    else:
-        verdict = "full"
-    prof = {"peaks": [round(p, 4) for p in peaks],
-            "duration": round(dur, 2),
-            "peak_db": peak_db,
-            "rms_db": db(float(np.sqrt((x ** 2).mean()))),
-            "active_pct": round(active, 1),
-            "loud_seconds": round(active / 100.0 * dur, 1),
-            "verdict": verdict}
+        part = envelope[a:b]
+        peaks.append(float(part.max()) if part.size else 0.)
+        rms.append(float(np.sqrt(np.mean(part ** 2))) if part.size else 0.)
+    db = lambda v: round(20 * math.log10(max(float(v), 1e-7)), 1)
+    active = float((np.asarray(rms) > 10 ** (-45 / 20)).mean()) * 100
+    duration = info['frames'] / info['rate']
+    peak = db(envelope.max())
+    verdict = 'silent' if silent else 'quiet' if peak < -35 else 'sparse' if active < 25 else 'full'
+    result = {'identity': identity, 'duration': duration, 'peaks': [round(p, 6) for p in peaks],
+              'peak_db': peak, 'rms_db': db(np.sqrt(np.mean(samples ** 2))),
+              'active_pct': round(active, 1), 'loud_seconds': round(active * duration / 100, 1),
+              'verdict': verdict, 'digital_silence': silent, 'empty': silent}
     if cache:
+        import uuid
+        temporary = cf.with_name(cf.name + '.' + uuid.uuid4().hex + '.tmp')
         try:
-            cf.write_text(json.dumps(prof), encoding="utf-8")
-        except OSError:
-            pass
-    return prof
+            temporary.write_text(json.dumps(result), encoding='utf-8'); temporary.replace(cf)
+        finally: temporary.unlink(missing_ok=True)
+    return result
+
+
+def stem_destination(stem, job, cfg, profile):
+    """An explicit review choice wins; unclassified audio always has a home."""
+    override = (job.get('slot_overrides') or {}).get(stem['file'])
+    if override: return override
+    mapping = {norm_stem_type(k): v for k, v in cfg['slot_map'].items()}
+    mapped = mapping.get(norm_stem_type(stem['fadr_name']))
+    if profile.get('digital_silence') is True: return 'SKIP'
+    if profile.get('verdict') in ('quiet', 'sparse', 'almost empty', 'silent'): return 'EXTRA'
+    return mapped if mapped and mapped != 'SKIP' else 'EXTRA'
 
 
 def _vocal_onset(vocal_path, min_voiced=0.5):
@@ -2233,16 +2230,18 @@ def stage_mixdown(job, job_dir, cfg, force):
     overrides = job.get("slot_overrides") or {}
     by_slot = {}
     for s in job.get("stems", []):
-        ov = overrides.get(s["file"])
-        if ov == "SKIP":
-            s["slot"] = None
-            log(f"Stem '{s['fadr_name']}' skipped by your choice.")
+        if s['file'] not in overrides:
+            try: profile = stem_profile(job_dir / s['file'])
+            except Exception as error:
+                log(f"Stem analysis unavailable for {s['fadr_name']}: {error}"); profile = {}
+        else: profile = {}
+        slot = stem_destination(s, job, cfg, profile)
+        if slot == 'SKIP':
+            s['slot'] = None
+            log(f"Stem '{s['fadr_name']}' excluded by the reviewed choice or verified silence.")
             continue
-        s["slot"] = ov or slot_map.get(norm_stem_type(s["fadr_name"]))
-        if s["slot"]:
-            by_slot.setdefault(s["slot"], []).append(s["file"])
-        else:
-            log(f"NOTE: stem '{s['fadr_name']}' has no slot mapping — skipped.")
+        s['slot'] = slot
+        by_slot.setdefault(slot, []).append(s['file'])
     # A later review for another project must not overwrite media referenced
     # by an earlier saved project.
     slot_prefix = 'slots'

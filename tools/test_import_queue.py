@@ -42,7 +42,7 @@ class QueueTests(unittest.TestCase):
         job.update(stems=[{'file':'stems/bass.wav', 'fadr_name':'bass'}])
         job['stages'].update(download=True, fadr=True)
         ji.save_job(folder, job)
-        row.update(state='review', review=self.bridge.build_review.return_value)
+        row.update(state='review', review=self.bridge.build_review.return_value, stem_policy=ji.STEM_REVIEW_POLICY)
         self.queue._save()
         return row
 

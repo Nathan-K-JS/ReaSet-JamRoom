@@ -38,6 +38,11 @@ ancestry first; never force-push or overwrite divergent changes. Pushing only
 `feature/timing-repair` does not deliver an update to standard installations.
 
 Current architecture:
+- v3.19 preserves quiet/sparse/unmapped stems in Extras; only measured digital
+  silence is auto-excluded. `stem_destination()` is shared by review and mixdown.
+  Audition uses validated PCM, not original Fadr MP3 metadata. Profile caches are
+  versioned and hashed. Unapplied reviews migrate old nonempty SKIP choices once;
+  new explicit choices retain provenance. See `docs/STEM_REVIEW.md`.
 - v3.18 implements chart authoring; see `docs/CHART_AUTHORING.md` and the approved
   `docs/CHART_AUTHORING_PLAN.md`. Lyrics/Chords share authored content. The native
   editor is embedded from `tools/chart-author.js` using `tools/embed_chart_author.py`;

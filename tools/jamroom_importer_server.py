@@ -170,72 +170,40 @@ def search(query):
 
 
 def _preview_file(job_dir, stem_file):
-    """Best browser-playable file for a stem: the original Fadr download
-    (MP3 data — small, streams well) if the entry points at a converted
-    .riff.wav sibling; otherwise the file itself."""
-    p = job_dir / stem_file
-    if p.name.endswith(".riff.wav"):
-        orig = p.with_name(p.name[:-len(".riff.wav")] + ".wav")
-        if orig.exists():
-            return orig
-    return p
+    return ji.ensure_riff_wav(Path(job_dir) / stem_file)
 
 
 def build_review(job, job_dir, cfg):
-    slot_map = {ji.norm_stem_type(k): v for k, v in cfg["slot_map"].items()}
-    # Decisions made last time this song was reviewed win over the config
-    # guesses, so re-importing or re-adding does not make you redo the work.
-    prev_slots = job.get("slot_overrides") or {}
-    prev_labels = job.get("label_overrides") or {}
-    default_labels = cfg["slot_labels"]
+    from urllib.parse import quote
+    prev_labels = job.get('label_overrides') or {}
     stems = []
-    for s in job.get("stems", []):
-        slot = prev_slots.get(s["file"]) \
-            or slot_map.get(ji.norm_stem_type(s["fadr_name"])) or "SKIP"
-        # What is actually IN this stem, so it can be judged by eye rather than
-        # by playing it end to end.
+    for stem in job.get('stems', []):
         try:
-            prof = ji.stem_profile(_preview_file(job_dir, s["file"]))
-        except Exception as e:  # noqa: BLE001 — a preview aid, never fatal
-            prof = {"error": str(e)}
-        stems.append({"file": s["file"], "name": s["fadr_name"],
-                      "slot": slot,
-                      "label": prev_labels.get(slot)
-                               or default_labels.get(slot, ""),
-                      "profile": prof,
-                      "audio": "/api/audio?f=" +
-                               _preview_file(job_dir, s["file"]).name})
-
-    # How loud a stem is relative to the rest is worth SEEING, but it is not
-    # evidence of bleed: a strings stem carrying nothing but guitar spill is
-    # every bit as loud as a real one. (Correlating stem envelopes to catch
-    # spill was tried and does not work — separation decorrelates them by
-    # construction, and measured across Dreams no pair exceeded 0.41.)
-    # So only genuine emptiness, which IS measurable, suggests skipping.
-    loudest = max((s["profile"].get("peak_db", -99) for s in stems
-                   if not s["profile"].get("error")), default=None)
-    skip_history = _usually_skipped(job_dir)
-    for s in stems:
-        p = s["profile"]
-        if not p.get("error") and loudest is not None:
-            p["below_loudest_db"] = round(loudest - p.get("peak_db", -99), 1)
-        p["empty"] = p.get("verdict") in ("silent", "almost empty")
-        if s["file"] in prev_slots:
-            continue                      # a decision already made always wins
-        if p.get("empty"):
-            s["suggest_skip"] = "there is essentially nothing in this stem"
-            s["slot"] = "SKIP"
-        elif skip_history.get(ji.norm_stem_type(s["name"])):
-            n, tot = skip_history[ji.norm_stem_type(s["name"])]
-            s["history_note"] = (f"You left this stem type out of {n} of the last "
-                                 f"{tot} songs. Listen before deciding for this song.")
-
+            asset = _preview_file(job_dir, stem['file'])
+            profile = ji.stem_profile(asset)
+            version = (profile.get('identity') or {}).get('sha256') or str(asset.stat().st_mtime_ns)
+            audio = '/api/audio?f=' + quote(asset.name) + '&v=' + version
+        except Exception as error:
+            profile, audio = {'error': str(error)}, None
+        slot = ji.stem_destination(stem, job, cfg, profile)
+        origin = (job.get('slot_origins') or {}).get(stem['file'],
+                  'explicit' if stem['file'] in (job.get('slot_overrides') or {}) else 'automatic')
+        stems.append({'file': stem['file'], 'name': stem['fadr_name'], 'slot': slot,
+                      'choice_source': origin, 'label': prev_labels.get(slot) or cfg['slot_labels'].get(slot, ''),
+                      'profile': profile, 'audio': audio})
+    loudest = max((s['profile'].get('peak_db', -140) for s in stems if not s['profile'].get('error')), default=-140)
+    for stem in stems:
+        p = stem['profile']
+        if not p.get('error'): p['below_loudest_db'] = round(loudest - p.get('peak_db', -140), 1)
+        p['empty'] = p.get('digital_silence') is True
+        if p.get('duration') and job.get('duration') and abs(p['duration']-job['duration'])>.5:
+            stem['duration_note'] = f"This stem lasts {p['duration']:.1f}s; the song is {job['duration']:.1f}s. Check that the source is complete."
 
     ly = job.get("lyrics") or {}
     first = next((l for l in ly.get("lines", []) if l["text"]), None)
     align = ly.get("align") or {}
     chart = job.get("chart") or {}
-    return {"document": job.get("chart_document"), "duration": job.get("duration"), "stems": stems, "slot_choices": SLOT_CHOICES,
+    return {"stem_policy": ji.STEM_REVIEW_POLICY, "document": job.get("chart_document"), "duration": job.get("duration"), "stems": stems, "slot_choices": SLOT_CHOICES,
             "band": job.get("band", ""), "title": job.get("title", ""),
             "chords_count": len(job.get("chords") or []),
             # Everything the review screen states about the chart has to come
@@ -263,43 +231,7 @@ def build_review(job, job_dir, cfg):
                     if align else "Audio analysis unavailable"),
             },
             "vocal_audio": next((s["audio"] for s in stems
-                                 if s["slot"] == "LEAD_VOX"), None)}
-
-
-def _usually_skipped(this_job_dir, min_songs=3, ratio=0.7):
-    """Stem types you have consistently chosen not to import.
-
-    Fadr always returns its full melodic set, so the same handful of stems —
-    strings, wind, whatever it calls "melodics other" — get thrown away song
-    after song. Past decisions are already recorded per song; this reads them
-    so the same work is not repeated by hand every time.
-    """
-    counts = {}
-    try:
-        jobs_dir = Path(this_job_dir).resolve().parent
-        for jf in jobs_dir.glob("*/job.json"):
-            if jf.parent.resolve() == Path(this_job_dir).resolve():
-                continue
-            try:
-                job = json.loads(jf.read_text(encoding="utf-8"))
-            except (OSError, ValueError):
-                continue
-            overrides = job.get("slot_overrides") or {}
-            if not overrides:
-                continue
-            by_file = {s["file"]: s.get("fadr_name", "") for s in job.get("stems", [])}
-            for f, slot in overrides.items():
-                nm = ji.norm_stem_type(by_file.get(f, ""))
-                if not nm:
-                    continue
-                tot, sk = counts.get(nm, (0, 0))
-                counts[nm] = (tot + 1, sk + (1 if slot == "SKIP" else 0))
-    except OSError:
-        return {}
-    return {nm: (sk, tot) for nm, (tot, sk) in counts.items()
-            if tot >= min_songs and sk / tot >= ratio}
-
-
+                                 if ji.norm_stem_type(s["name"]) in ("vocals lead", "vocals")), None)}
 
 
 def _reaper_web(cfg):
@@ -920,7 +852,10 @@ class Handler(BaseHTTPRequestHandler):
         f = (job_dir / "stems" / name).resolve()
         if not f.is_relative_to((Path(job_dir) / "stems").resolve()) or not f.is_file():
             return self._send(404, {"error": "not found"})
-        return self._serve_audio_file(f)
+        try:
+            return self._serve_audio_file(ji.ensure_riff_wav(f))
+        except (ValueError, OSError) as error:
+            return self._send(503, {'error': str(error)})
 
     def _serve_click_review(self):
         from urllib.parse import parse_qs, quote
@@ -956,42 +891,17 @@ class Handler(BaseHTTPRequestHandler):
             self._send(404,{'error':'Click review unavailable: '+str(error)})
 
     def _serve_audio_file(self, f):
-        with open(f, "rb") as fh:
-            head = fh.read(4)
-        ctype = "audio/mpeg" if head[:3] == b"ID3" or head[:2] == b"\xff\xfb" \
-            else "audio/wav"
-        size = f.stat().st_size
-        rng = self.headers.get("Range")
-        start, end = 0, size - 1
-        if rng:
-            m = re.match(r"bytes=(\d*)-(\d*)", rng)
-            if m:
-                if m.group(1):
-                    start = int(m.group(1))
-                if m.group(2):
-                    end = min(int(m.group(2)), size - 1)
-        length = end - start + 1
-        self.send_response(206 if rng else 200)
-        self.send_header("Content-Type", ctype)
-        self.send_header("Accept-Ranges", "bytes")
-        if rng:
-            self.send_header("Content-Range", f"bytes {start}-{end}/{size}")
-        self.send_header("Content-Length", str(length))
-        self.end_headers()
-        with open(f, "rb") as fh:
-            fh.seek(start)
-            remaining = length
-            while remaining > 0:
-                chunk = fh.read(min(1 << 16, remaining))
-                if not chunk:
-                    break
-                try:
-                    self.wfile.write(chunk)
-                except ConnectionError:
-                    return
-                remaining -= len(chunk)
+        with open(f, 'rb') as source: header = source.read(12)
+        if header[:4] in (b'RIFF', b'RF64') and header[8:12] == b'WAVE': mime = 'audio/wav'
+        elif header[:3] == b'ID3' or len(header)>1 and header[0]==255 and header[1]&224==224: mime = 'audio/mpeg'
+        elif header[:4] == b'fLaC': mime = 'audio/flac'
+        elif header[4:8] == b'ftyp': mime = 'audio/mp4'
+        elif header[:4] == b'OggS': mime = 'audio/ogg'
+        else: return self._send(415, {'error': 'Unsupported audition audio format'})
+        return listening.serve_audio(self, Path(f), '', head=self.command=='HEAD', content_type=mime)
 
     def do_HEAD(self):
+        if self.path.startswith('/api/audio?'): return self._serve_audio()
         if self.path.startswith('/listen/') and listening.handle_get(self, listening_service(), lan_url, head=True):
             return
         self.send_response(404); self.send_header('Content-Length', '0'); self.end_headers()
