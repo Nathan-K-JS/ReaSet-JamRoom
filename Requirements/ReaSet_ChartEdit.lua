@@ -9,7 +9,10 @@ function M.apply(doc,action,data,duration)
   require_ok(type(doc)=='table' and type(doc.sections)=='table','No chart to edit')
   require_ok(type(data)=='table' and finite(duration) and duration>0,'Invalid edit')
   local function array() return setmetatable({},getmetatable(doc.sections)) end
-  if action=='offset' then
+  if action=='author' then
+    local dir=debug.getinfo(1,'S').source:sub(2):match('(.+[\\/])')
+    doc=dofile(dir..'ReaSet_ChartAuthor.lua')(doc,data,duration)
+  elseif action=='offset' then
     require_ok(finite(data.seconds) and math.abs(data.seconds)<duration,'Offset must be shorter than the song')
     doc.timing_offset=data.seconds
   elseif action=='layout' then
@@ -52,7 +55,7 @@ function M.apply(doc,action,data,duration)
     local previous=doc.sections[i-1]
     require_ok(t>=0 and t<s['end'] and (not previous or t>previous.start),'Cue would cross another section')
     require_ok(i~=1 or t==0,'The first page already starts at zero')
-    s.start=t;s.confidence='section checked'
+    s.start=t;s.confidence='section checked';s.timing_status='checked'
     if previous then previous['end']=t end
     -- No stretching rows or moving a single chord relative to a word.
   elseif action=='pagecue' then

@@ -3621,7 +3621,7 @@
         .source-chart>.lead-row,.source-chart>.timing-fix-btn{display:none!important}
         #chords-live.structured-chart,#lyrics-live.structured-chart{display:grid!important;grid-template-rows:auto auto minmax(0,1fr) auto auto;gap:12px;flex:1;min-width:0;min-height:0!important;max-height:none!important;width:100%;padding:0!important;overflow:hidden;text-align:left;align-items:stretch;justify-content:stretch;white-space:normal;font-size:16px!important}
         #lyrics-panel.source-chart .lyrics-content{padding:0;min-height:0;display:flex;align-items:stretch;justify-content:flex-start;white-space:normal}
-        .structured-chart button,.structured-chart select,#chart-editor button,#chart-editor input{font:inherit;color:#e5eaf1;background:#222a35;border:1px solid #455163;border-radius:7px;padding:9px 13px;min-height:40px}
+        .structured-chart button,.structured-chart select{font:inherit;color:#e5eaf1;background:#222a35;border:1px solid #455163;border-radius:7px;padding:9px 13px;min-height:40px}
         .structured-chart button:disabled{opacity:.35}.structured-chart button.on{background:#235a80}
         .structured-chart .sc-nav{display:flex;gap:8px;justify-content:flex-start;flex-wrap:wrap;min-height:40px}
         .vtab.t-show:not(.active){color:rgba(255,255,255,.4);border-bottom-color:transparent}
@@ -3646,17 +3646,7 @@
         .structured-chart{position:relative}
         .sc-timing{position:absolute;bottom:0;left:0;right:0;height:118px;overflow:auto;box-sizing:border-box;background:#151c25;border:1px solid #455163;border-radius:8px;padding:8px;z-index:2;font-size:14px}
         .sc-taps{display:flex;gap:8px;margin-bottom:6px}
-        #chart-editor{position:fixed;inset:60px 3vw 20px;z-index:1200;background:#141a22;border:1px solid #455163;border-radius:12px;display:flex;flex-direction:column;padding:20px;color:#e5eaf1;box-shadow:0 0 0 100vmax #0009;font:16px var(--font-ui)}
-        #chart-editor.hide{display:none}.ce-head{display:flex;justify-content:space-between;align-items:center;gap:12px}
-        #chart-editor h2{margin:0;font-size:24px}#chart-editor p{font-size:14px;color:#a5b1c3;line-height:1.5}
-        #chart-edit-lines{overflow:auto;flex:1;min-height:0;padding:0 8px 12px 0}
-        .ce-section{border:1px solid #354354;border-radius:8px;margin:14px 0;padding:12px}
-        .ce-section-head{display:flex;gap:8px;align-items:center;flex-wrap:wrap;padding-bottom:10px;border-bottom:1px solid #354354}
-        .ce-section-head>input{flex:1;min-width:130px;max-width:55%}.ce-section-head label input{width:100px}
-        .ce-row{display:grid;grid-template-columns:1fr auto;gap:12px;padding:10px 0;align-items:center;border-bottom:1px solid #252f3c;white-space:pre-wrap}
-        .ce-row button{font-size:12px!important}.ce-row small{font-size:12px;color:#a5b1c3}
-        #chart-edit-status{min-height:24px;padding-top:12px;color:#8edbcc}
-        @media(max-width:600px){#chords-panel.source-chart,#lyrics-panel.source-chart{padding:8px}.structured-chart .sc-nav{gap:4px}.structured-chart button{padding:7px;font-size:12px;min-height:36px}.sc-heading select{font-size:20px!important}#chart-editor{inset:58px 4px 4px;padding:12px}.ce-row{grid-template-columns:1fr}.ce-row button{justify-self:start}}
+        @media(max-width:600px){#chords-panel.source-chart,#lyrics-panel.source-chart{padding:8px}.structured-chart .sc-nav{gap:4px}.structured-chart button{padding:7px;font-size:12px;min-height:36px}.sc-heading select{font-size:20px!important}}
         /* Shared overlays live above the performance bar; music keeps its own space. */
         .song-ctx-panel{max-height:calc(100dvh - 16px);overflow-y:auto}
         .song-play-btn{flex-shrink:0;width:40px;height:44px;margin:0;padding:0;border:0;border-radius:10px;background:#20392d;color:#8edbcc;cursor:pointer}
@@ -3678,7 +3668,7 @@
         #live-view{top:56px;bottom:var(--perf-clearance,44px);overflow:auto;justify-content:flex-start;padding-top:70px}
         #live-view>*{flex-shrink:0}
         #canvas-mode{bottom:var(--perf-clearance,44px)}
-        #chart-editor{max-height:calc(100dvh - 64px);overflow:auto}
+
         @media(max-width:620px){
             .app-topbar{padding:0;overflow:visible}.app-menu-btn{width:38px;flex-shrink:0}
             .app-topbar>.vtab{min-width:0;flex:1;padding:0 3px;font-size:10px}
@@ -3703,8 +3693,8 @@
             .sc-preview{display:none}.sc-footer{min-height:20px;font-size:11px;padding:2px;flex-wrap:nowrap}
             .sc-footer>span:last-child{overflow:hidden;white-space:nowrap;text-overflow:ellipsis}
             .sc-paper{padding:2px 8px}.sc-timing{height:110px}
-            #chart-editor{inset:4px 8px;padding:10px;max-height:calc(100dvh - 8px)}
-            #chart-editor>p{display:none}#chart-edit-lines{min-height:90px}
+
+            #chart-edit-lines{min-height:90px}
             #live-view{padding:50px 16px 16px;gap:8px}#live-song-name{font-size:calc(32px * var(--live-font-scale,1))!important}
         }
         @media(max-width:360px){.app-menu-btn{width:32px}.more-views{width:34px;font-size:9px}.app-topbar>.vtab{font-size:9px;padding:0 1px}}
@@ -3714,6 +3704,99 @@
         .connection-symbol{display:none}
         @media(max-width:600px){.connection-label{display:none}.connection-symbol{display:inline}}
     </style>
+<script id="chart-author-core">
+/* Shared chart authoring. Embedded in ReaSet.html for offline native use. GPL-3.0. */
+(function(global){
+'use strict';
+const clone=x=>JSON.parse(JSON.stringify(x)), uid=()=> 'a'+Date.now().toString(36)+Math.random().toString(36).slice(2,10);
+const esc=s=>String(s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const chord=/^(?:N\.?C\.?|[A-G](?:#|b|♯|♭)?(?:(?:maj|min|m|M|dim|aug|sus|add|ø|°|\+|-)?\d*(?:sus[24]|add\d+|[#b]\d+|\([^\s()]+\))*)?(?:\/[A-G](?:#|b|♯|♭)?)?)$/;
+const time=t=>Math.floor(Math.max(0,t)/60)+':'+(Math.max(0,t)%60).toFixed(1).padStart(4,'0');
+function expand(s){return s.replace(/\r/g,'').split('\n').map(l=>{let out='';for(const c of l)out+=c==='\t'?' '.repeat(4-out.length%4):c;return out;}).join('\n');}
+function tokens(s){return Array.from(s.matchAll(/\S+/g)).flatMap(m=>{const matches=Array.from(m[0].matchAll(new RegExp(chord.source.slice(1,-1),'g')));if(matches.length>1&&matches.map(x=>x[0]).join('')===m[0])return matches.map(x=>({symbol:x[0],offset:m.index+x.index,width:x[0].length}));return [{symbol:m[0],offset:m.index,width:m[0].length}];});}
+function isChordLine(s,mode){if(mode==='Lyrics')return false;if(mode==='Chords')return true;const ts=tokens(s),cs=ts.filter(t=>chord.test(t.symbol));return !!cs.length&&ts.every(t=>chord.test(t.symbol)||/^(?:[|:]+|[xX]\d+|\(\d+x\)|\d+x|-+)$/.test(t.symbol))&&!(ts.length===1&&ts[0].symbol==='A');}
+function lines(section){let out=[],modes=[];(section.rows||[]).forEach(r=>{if(r.chord_line||(r.anchors||[]).length){let s=r.chord_line||'';if(!s){(r.anchors||[]).forEach(a=>{s=s.padEnd(a.offset,' ')+a.symbol;});}out.push(s);modes.push((r.line_modes||[])[0]||(s.trim()==='A'?'Chords':'Auto'));}if(r.text||!r.chord_line&&!(r.anchors||[]).length){out.push(r.text||'');modes.push((r.line_modes||[]).slice(-1)[0]||'Auto');}});return {text:out.join('\n'),modes};}
+function parse(text,modes,previous){const ls=expand(text).split('\n'),out=[],used=new Set();let pending=null;
+ function put(r,from,to){let old=(previous||[]).find(p=>!used.has(p.id)&&p.text===r.text&&(p.chord_line||'')===(r.chord_line||''));if(!old&&r.text.trim())old=(previous||[]).find(p=>!used.has(p.id)&&p.text===r.text);if(old){used.add(old.id);r=Object.assign(clone(old),r);}else r.id=uid();r._from=from;r._to=to;if(old&&(old.chord_line||'')!==(r.chord_line||'')){delete r.repeat;delete r.repeat_at;}const repeat=(r.chord_line||'').match(/\bx\s*(\d+)/i);if(repeat){r.repeat=Math.min(32,Math.max(1,Number(repeat[1])));r.repeat_at=r.anchors.filter(a=>a.offset<repeat.index).length;}out.push(r);}
+ ls.forEach((s,i)=>{const mode=modes[i]||'Auto';if(isChordLine(s,mode)){if(pending)put(pending.row,pending.from,pending.from);pending={from:i,row:{text:'',chord_line:s,anchors:tokens(s).filter(t=>chord.test(t.symbol)),line_modes:[mode]}};}else{const r=pending?pending.row:{text:'',chord_line:'',anchors:[],line_modes:[]};r.text=s;r.line_modes.push(mode);put(r,pending?pending.from:i,i);pending=null;}});if(pending)put(pending.row,pending.from,pending.from);return out;}
+function tidy(doc,duration){doc=clone(doc||{});doc.schema=2;doc.duration=duration;doc.timing_offset=doc.timing_offset||0;doc.sections=doc.sections&&doc.sections.length?doc.sections:[{id:uid(),label:'Song',start:0,rows:[]}];const ids=new Set();doc.sections.forEach((s,i)=>{if(!s.id||ids.has(s.id))s.id=uid();ids.add(s.id);s.end=doc.sections[i+1]?doc.sections[i+1].start:duration;s.repeat=s.repeat||1;s.timing_status=s.timing_status||(s.confidence==='section checked'?'checked':'estimated');s.rows=s.rows||[];s.rows.forEach(r=>{if(!r.id||ids.has(r.id))r.id=uid();ids.add(r.id);r.anchors=r.anchors||[];if(!r.timing_evidence&&Number.isFinite(r.cue)&&r.cue_word_coverage>=.8)r.timing_evidence={text:r.text,time:r.cue};if(r.chord_line&&r.anchors.some(a=>r.chord_line.slice(a.offset,a.offset+(a.width||a.symbol.length))!==a.symbol)){
+ const chars=r.chord_line.split('');for(const a of r.anchors)for(let k=a.offset;k<a.offset+(a.width||a.symbol.length);k++)chars[k]=' ';
+ for(const a of r.anchors){while(chars.length<a.offset)chars.push(' ');for(let k=0;k<a.symbol.length;k++)chars[a.offset+k]=a.symbol[k];a.width=a.symbol.length;}
+ r.chord_line=chars.join('');}
+});});return doc;}
+function open(options){
+ if(global.ChartAuthor.active)global.ChartAuthor.active.close();
+ let doc=tidy(options.document,options.duration),base=clone(doc),selected=0,view=options.view||'edit',closed=false,saving=false,dirty=false,composing=false,history=[],future=[],audio=options.audio,zoom=1,previous=options.previous||null;
+ const storage=options.draftKey,focusBefore=document.activeElement,root=document.createElement('div');root.id='chart-author';root.style.zoom=String(1/(parseFloat(getComputedStyle(document.body).zoom)||1));root.role='dialog';root.setAttribute('aria-modal','true');root.setAttribute('aria-label','Chart editor');
+ root.innerHTML='<header><div><strong class="ca-title"></strong><small class="ca-key"></small></div><button data-act="close">Close</button></header><nav><button data-tab="edit">Edit</button><button data-tab="preview">Preview</button><button data-tab="timing">Timing</button><span class="ca-draft" role="status"></span></nav><div class="ca-main"><aside><label>Section<select class="ca-sections" aria-label="Select chart section"></select></label><div class="ca-section-list"></div></aside><main class="ca-edit"><div class="ca-tools"><input class="ca-name" aria-label="Section name"><select class="ca-mode" aria-label="Current line type"><option>Auto</option><option>Chords</option><option>Lyrics</option></select><button data-act="split">Start section here</button><button data-act="merge">Merge previous</button><button data-act="undo">Undo section change</button><button data-act="redo">Redo</button></div><p class="ca-hint">Write chords above words. Recognised chords turn gold. Tabs = 4 spaces. Choose Chords or Lyrics to override the current line.</p><div class="ca-writing"><pre aria-hidden="true" class="ca-highlight"></pre><textarea class="ca-text" spellcheck="false" wrap="off" aria-label="Chart text"></textarea></div><div class="ca-boundary"><button data-act="up">Move divider up</button><button data-act="down">Move divider down</button><button data-act="source">Change source chart</button><button data-act="previous">Restore previous chart</button></div></main><section class="ca-preview"><div class="ca-tools"><strong>Performance preview</strong><select class="ca-preview-mode" aria-label="Preview mode"><option value="both">Chords + lyrics</option><option value="lyrics">Lyrics</option><option value="chart">Chords</option></select><button data-act="prevpage">Previous page</button><button data-act="nextpage">Next page</button><button data-act="pagehere">Page starts here</button></div><div class="ca-pages"></div></section><section class="ca-timing"><h3>Section timing</h3><p>Drag a marker to change its time. Drag a divider onto a chart line to change its grouping.</p><label>Start (seconds)<input class="ca-start" type="number" step="0.1" min="0"></label><div class="ca-time-label"></div><button data-act="before">Play before cue</button><button data-act="suggest">Suggest timing</button><button data-act="here">Starts here</button><button data-act="checked">Checked during playback</button><label>Timeline zoom<select class="ca-zoom"><option value="1">Whole song</option><option value="2">2×</option><option value="4">4×</option><option value="8">8×</option></select></label><div class="ca-marker-list"></div></section></div><div class="ca-player"><div class="ca-timeline" role="group" aria-label="Song timeline"><canvas></canvas><div class="ca-markers"></div><i class="ca-playhead"></i></div><div class="ca-controls"><button data-act="play">Play</button><button data-act="pause">Pause</button><button data-act="stop">Stop</button><output class="ca-clock">0:00.0</output><span class="ca-audio-status"></span></div></div><footer><span class="ca-status" role="status"></span><button class="ca-save" data-act="save">Save chart</button></footer>';
+ document.body.appendChild(root);
+ const toolHost=root.querySelector('.ca-edit .ca-tools'),extraHost=root.querySelector('.ca-boundary'),compact=document.createElement('details');
+ compact.className='ca-compact-tools';compact.innerHTML='<summary>Tools</summary><div class="ca-pop"><button type="button">Close tools</button></div>';toolHost.appendChild(compact);
+ const pop=compact.querySelector('.ca-pop'),toolButtons=Array.from(toolHost.children).filter(n=>n.tagName==='BUTTON'),extraButtons=Array.from(extraHost.children);
+ pop.querySelector('button').onclick=()=>compact.open=false;
+ function viewport(){const short=(global.visualViewport?visualViewport.height:innerHeight)<500;compact.hidden=!short;
+ if(short){toolButtons.concat(extraButtons).forEach(b=>pop.appendChild(b));}else{toolButtons.forEach(b=>toolHost.insertBefore(b,compact));extraButtons.forEach(b=>extraHost.appendChild(b));compact.open=false;}
+if(global.visualViewport&&matchMedia('(max-width:600px)').matches){root.style.height=visualViewport.height+'px';root.style.top=visualViewport.offsetTop+'px';}else{root.style.height='';root.style.top='';}}if(global.visualViewport)visualViewport.addEventListener('resize',viewport);viewport();const $=s=>root.querySelector(s),text=$('.ca-text'),highlight=$('.ca-highlight'),name=$('.ca-name'),mode=$('.ca-mode'),status=$('.ca-status');
+ $('.ca-title').textContent=options.title||'Chart editor';$('.ca-key').textContent='Editing original recording pitch'+(options.key?' · '+options.key:'')+' · Capo/transposition apply only in performance';
+ root.querySelector('[data-act="source"]').hidden=!options.changeSource;root.querySelector('[data-act="previous"]').disabled=!previous;
+ let modes=[],pageIndex=0,currentPages=[],peaks=options.peaks||[],heard=false,windowStart=0;
+ const transport=options.transport||{position:()=>audio?audio.currentTime:0,playing:()=>audio&&!audio.paused,play:()=>audio&&audio.play(),pause:()=>audio&&audio.pause(),stop:()=>{if(audio){audio.pause();audio.currentTime=0;}},seek:t=>{if(audio)audio.currentTime=t;}};
+ function message(s){status.textContent=s;}
+ function snapshot(){history.push(clone(doc));if(history.length>60)history.shift();future=[];}
+ function changed(){dirty=true;doc.authored=true;doc.manual=true;doc.revision='authored:'+uid();doc.sections.forEach((s,i)=>{s.end=doc.sections[i+1]?doc.sections[i+1].start:doc.duration;s.confidence=s.timing_status==='checked'?'section checked':'estimated';});$('.ca-draft').textContent='Draft';try{if(storage)localStorage.setItem(storage,JSON.stringify({base:base.revision,document:doc,previous}));}catch(e){message('Draft cannot be saved in this browser. Keep the editor open until saved.');}if(options.onChange)Promise.resolve(options.onChange(clone(doc))).catch(e=>message(e.message));drawPreview();drawMarkers();}
+ function saveText(){const s=doc.sections[selected],old=s.rows,newRows=parse(text.value,modes,old);if(JSON.stringify(newRows.map(r=>[r.text,r.chord_line,r.line_modes]))!==JSON.stringify(old.map(r=>[r.text,r.chord_line||'',r.line_modes||lines({rows:[r]}).modes]))){const lost=old.length!==newRows.length||old.some((r,i)=>r.text!==newRows[i].text);s.rows=newRows;if(lost)s.timing_status='manual';changed();}else old.forEach((r,i)=>{r._from=newRows[i]._from;r._to=newRows[i]._to;});paint();}
+ function paint(){highlight.innerHTML=expand(text.value).split('\n').map((line,i)=>{if(!isChordLine(line,modes[i]||'Auto'))return esc(line);let last=0,out='';tokens(line).forEach(t=>{out+=esc(line.slice(last,t.offset))+(chord.test(t.symbol)?'<b>'+esc(t.symbol)+'</b>':esc(t.symbol));last=t.offset+t.width;});return out+esc(line.slice(last));}).join('\n')+'\n';highlight.scrollTop=text.scrollTop;highlight.scrollLeft=text.scrollLeft;}
+ function lineAt(){return text.value.slice(0,text.selectionStart).split('\n').length-1;}
+ function loadSection(){const s=doc.sections[selected],value=lines(s);text.value=value.text;modes=value.modes;name.value=s.label;mode.value=modes[0]||'Auto';pageIndex=0;paint();drawList();drawPreview();drawMarkers();$('.ca-start').value=(s.start+(selected?doc.timing_offset:0)).toFixed(2);$('.ca-start').disabled=selected===0;$('.ca-time-label').textContent=label(selected);root.querySelector('[data-act="merge"]').disabled=doc.sections.length<2;root.querySelector('[data-act="merge"]').textContent=selected?'Merge previous':'Merge next';root.querySelector('[data-act="up"]').disabled=!selected;root.querySelector('[data-act="down"]').disabled=!selected;}
+ function label(i){const s=doc.sections[i],t=s.start+(i?doc.timing_offset:0),prev=i?doc.sections[i-1].start+(i>1?doc.timing_offset:0):0;return s.label+' · '+time(t)+' · +'+(t-prev).toFixed(1)+'s · '+({matched:'Matched from lyrics — check playback',estimated:'Estimated — check playback',manual:'Manually placed — check playback',checked:'Checked during playback'}[s.timing_status]||'Estimated');}
+ function drawList(){const list=$('.ca-section-list'),select=$('.ca-sections');list.replaceChildren();select.replaceChildren();doc.sections.forEach((s,i)=>{let o=document.createElement('option');o.value=i;o.textContent=s.label;select.appendChild(o);let b=document.createElement('button');b.textContent=label(i);b.className=i===selected?'selected':'';b.onclick=()=>choose(i);b.draggable=i>0;b.title=i?'Drag this divider onto a line in the editor':'First section';b.ondragstart=e=>{e.dataTransfer.setData('application/x-chart-divider',String(i));};list.appendChild(b);});select.value=selected;$('.ca-marker-list').textContent=doc.sections.map((s,i)=>label(i)).join('\n');}
+ function choose(i){saveText();selected=i;heard=false;loadSection();}
+ function drawPreview(){const target=$('.ca-pages'),s=doc.sections[selected],previewMode=$('.ca-preview-mode').value;
+ if(global.chartBuildPages){currentPages=global.chartBuildPages(doc,Math.max(300,target.clientWidth),Math.max(520,target.clientHeight),previewMode,options.previewSemis||0).filter(p=>p.section===selected);}else currentPages=[];
+ if(currentPages.length){pageIndex=Math.min(pageIndex,currentPages.length-1);const p=currentPages[pageIndex];target.innerHTML='<small>'+esc(s.label)+' · Page '+(pageIndex+1)+' / '+currentPages.length+'</small>'+p.parts.map(f=>{let chordText=String(f.decorations||'').split('');f.anchors.forEach(a=>{while(chordText.length<a.offset)chordText.push(' ');for(let i=0;i<a.symbol.length;i++)chordText[a.offset+i]=a.symbol[i];});return '<pre><b>'+esc(chordText.join(''))+'</b>'+(f.hasWords?'\n'+esc(f.text):'')+'</pre>';}).join('');}
+ else target.innerHTML='<small>'+esc(s.label)+'</small>'+s.rows.map(r=>'<pre>'+(previewMode!=='lyrics'&&r.chord_line?'<b>'+esc(r.chord_line)+'</b>\n':'')+(previewMode!=='chart'?esc(r.text||''):'')+'</pre>').join('');
+ }
+ function setTime(i,t,checked){if(!Number.isFinite(t))throw Error('Enter a valid time.');if(i===0){doc.sections[0].timing_status=checked?'checked':'manual';return;}const min=doc.sections[i-1].start+.02,max=(doc.sections[i+1]?doc.sections[i+1].start:doc.duration)-.02;doc.sections[i].start=Math.round(Math.min(max,Math.max(min,t))*1000)/1000;doc.sections[i].timing_status=checked?'checked':'manual';const s=doc.sections[i];for(const r of s.rows){if(r.cue<s.start||r.cue>=max)delete r.cue;for(const col in r.page_cues||{})if(r.page_cues[col]<s.start||r.page_cues[col]>=max)delete r.page_cues[col];}}
+ function bounds(){const span=doc.duration/zoom;windowStart=Math.min(doc.duration-span,Math.max(0,doc.sections[selected].start-span/3));return span;}
+ function drawMarkers(){const span=bounds(),host=$('.ca-markers');host.replaceChildren();doc.sections.forEach((s,i)=>{const t=s.start+(i?doc.timing_offset:0);if(t<windowStart||t>windowStart+span)return;const b=document.createElement('button');b.className='ca-marker';b.style.left=((t-windowStart)/span*100)+'%';b.textContent=String(i+1);b.setAttribute('aria-label',label(i));b.title=label(i);b.onkeydown=e=>{if(!i||!['ArrowLeft','ArrowRight'].includes(e.key))return;e.preventDefault();snapshot();setTime(i,s.start+(e.key==='ArrowRight'?1:-1)*(e.shiftKey?1:.1));changed();loadSection();};b.onpointerdown=e=>{e.preventDefault();e.stopPropagation();snapshot();b.setPointerCapture(e.pointerId);let moved=false;const rect=$('.ca-timeline').getBoundingClientRect();b.onpointermove=ev=>{moved=true;setTime(i,windowStart+(ev.clientX-rect.left)/rect.width*span-(i?doc.timing_offset:0));b.style.left=((doc.sections[i].start+(i?doc.timing_offset:0)-windowStart)/span*100)+'%';message(label(i));};b.onpointerup=()=>{b.onpointermove=null;b.onpointerup=null;if(moved){selected=i;changed();loadSection();}else choose(i);};};host.appendChild(b);});const canvas=$('canvas'),rect=canvas.getBoundingClientRect();canvas.width=Math.max(1,rect.width*devicePixelRatio);canvas.height=Math.max(1,rect.height*devicePixelRatio);const ctx=canvas.getContext('2d');ctx.strokeStyle='#508e9a';ctx.beginPath();peaks.forEach((p,i)=>{const t=i/peaks.length*doc.duration;if(t<windowStart||t>windowStart+span)return;let x=(t-windowStart)/span*canvas.width;ctx.moveTo(x,canvas.height*(.5-p*.45));ctx.lineTo(x,canvas.height*(.5+p*.45));});ctx.stroke();drawList();$('.ca-time-label').textContent=label(selected);}
+ function split(){saveText();const s=doc.sections[selected],line=lineAt(),at=s.rows.findIndex(r=>r._from>=line);if(at<=0)return message('Place the caret at the start of a later lyric/chord pair.');snapshot();const end=s.end,start=s.start+(end-s.start)*at/s.rows.length;doc.sections.splice(selected+1,0,{id:uid(),label:'New section',start,end,rows:s.rows.splice(at),repeat:1,timing_status:'estimated'});selected++;changed();loadSection();}
+ function moveDivider(i,target,row){if(!i||target!==i&&target!==i-1)return message('Move a divider within its two adjacent sections.');const a=doc.sections[i-1],b=doc.sections[i];snapshot();if(target===i-1){if(row<=0)return message('Leave at least one line in the previous section.');b.rows=a.rows.splice(row).concat(b.rows);}else{if(row>=b.rows.length)return message('Leave at least one line in this section.');a.rows=a.rows.concat(b.rows.splice(0,row));}a.timing_status=b.timing_status='manual';changed();loadSection();}
+ text.ondragover=e=>e.preventDefault();text.ondrop=e=>{const raw=e.dataTransfer.getData('application/x-chart-divider');if(!raw)return;e.preventDefault();saveText();const line=Math.floor((e.clientY-text.getBoundingClientRect().top+text.scrollTop-16)/24),rs=doc.sections[selected].rows,at=rs.findIndex(r=>r._from>=line);moveDivider(Number(raw),selected,at<0?rs.length:at);};
+ text.onpaste=e=>{const pasted=e.clipboardData.getData('text/plain');if(!/^\s*\[[^\]\n]+\]\s*$/m.test(pasted))return;e.preventDefault();saveText();snapshot();const combined=text.value.slice(0,text.selectionStart)+pasted+text.value.slice(text.selectionEnd),parts=[],original=doc.sections[selected];let part={label:original.label,lines:[]};for(const line of expand(combined).split('\n')){const match=line.match(/^\s*\[([^\]]+)\]\s*$/);if(match){if(part.lines.some(l=>l.trim()))parts.push(part);part={label:match[1],lines:[]};}else part.lines.push(line);}if(part.lines.length)parts.push(part);if(!parts.length)return;const span=original.end-original.start,sections=parts.map((p,i)=>({id:i?uid():original.id,label:p.label,start:original.start+span*i/parts.length,end:original.end,rows:parse(p.lines.join('\n'),[],i===0?original.rows:[]),timing_status:'estimated',repeat:1}));doc.sections.splice(selected,1,...sections);changed();loadSection();message('Pasted sections need timing review.');};text.oncompositionstart=()=>composing=true;text.oncompositionend=()=>{composing=false;saveText();};let oldText=text.value; text.onbeforeinput=()=>{oldText=text.value;};text.oninput=()=>{const before=oldText.split('\n'),after=text.value.split('\n');if(before.length!==after.length){let first=0;while(first<before.length&&first<after.length&&before[first]===after[first])first++;modes.splice(first,Math.max(1,before.length-after.length+1),...Array(Math.max(1,after.length-before.length+1)).fill('Auto'));}if(!composing)saveText();};text.onscroll=paint;text.onclick=text.onkeyup=()=>mode.value=modes[lineAt()]||'Auto';
+ mode.onchange=()=>{modes[lineAt()]=mode.value;saveText();};name.onchange=()=>{if(!name.value.trim())return;doc.sections[selected].label=name.value.trim();changed();};$('.ca-sections').onchange=e=>choose(Number(e.target.value));$('.ca-preview-mode').onchange=drawPreview;
+ $('.ca-start').onchange=e=>{snapshot();setTime(selected,Number(e.target.value)-(selected?doc.timing_offset:0));changed();loadSection();};$('.ca-zoom').onchange=e=>{zoom=Number(e.target.value);drawMarkers();};$('.ca-timeline').onclick=e=>{if(e.target.closest('button'))return;const r=$('.ca-timeline').getBoundingClientRect();transport.seek(Math.min(doc.duration,Math.max(0,windowStart+(e.clientX-r.left)/r.width*bounds())));};
+ function close(){if(saving)return;saveText();closed=true;clearInterval(tick);if(global.visualViewport)visualViewport.removeEventListener('resize',viewport);if(audio)audio.pause();if(options.onClose)options.onClose();root.remove();global.ChartAuthor.active=null;if(focusBefore&&focusBefore.isConnected)focusBefore.focus();}
+ function replace(candidate){saveText();snapshot();previous=clone(doc);doc=tidy(candidate,doc.duration);selected=0;root.querySelector('[data-act="previous"]').disabled=false;if(options.onPrevious)options.onPrevious(clone(previous));changed();loadSection();}
+ function suggest(){const section=doc.sections[selected],row=section.rows.find(r=>r.text.trim()||r.anchors.length),evidence=row&&row.timing_evidence;
+ if(section.timing_status==='checked')return message('This section is already checked. Its timing has been kept.');
+ if(!selected)return message('The first section starts at zero.');
+ if(!evidence||evidence.text!==row.text||!Number.isFinite(evidence.time))return message('No retained lyric match for the opening line. Listen and use Starts here.');
+ const t=evidence.time,min=doc.sections[selected-1].start,max=section.end;
+ if(t<=min||t>=max)return message('The lyric match is outside the adjacent section starts. Review the neighbouring sections first.');
+ snapshot();setTime(selected,t);section.timing_status='matched';changed();loadSection();message('Suggested '+time(t+doc.timing_offset)+' from the retained match for: '+row.text);
+ }
+ const actions={close,split,suggest,before:()=>{transport.seek(Math.max(0,doc.sections[selected].start+(selected?doc.timing_offset:0)-2));return transport.play();},merge:()=>{if(doc.sections.length<2)return;snapshot();const at=selected||1;doc.sections[at-1].rows.push(...doc.sections[at].rows);doc.sections[at-1].timing_status='manual';doc.sections.splice(at,1);selected=at-1;changed();loadSection();},up:()=>moveDivider(selected,selected-1,doc.sections[selected-1].rows.length-1),down:()=>moveDivider(selected,selected,1),undo:()=>{if(!history.length)return;future.push(clone(doc));doc=history.pop();selected=Math.min(selected,doc.sections.length-1);changed();loadSection();},redo:()=>{if(!future.length)return;history.push(clone(doc));doc=future.pop();selected=Math.min(selected,doc.sections.length-1);changed();loadSection();},play:()=>Promise.resolve(transport.play()).catch(e=>message(e.message)),pause:()=>transport.pause(),stop:()=>transport.stop(),here:()=>{snapshot();setTime(selected,transport.position()-(selected?doc.timing_offset:0));changed();loadSection();},checked:()=>{if(!heard)return message('Play this section first, then confirm its timing.');doc.sections[selected].timing_status='checked';changed();loadSection();},pagehere:()=>{const p=currentPages[pageIndex];if(!p)return;const t=transport.position()-doc.timing_offset,s=doc.sections[selected];if(!transport.playing())return message('During playback, press Page starts here as this page begins.');if(t<s.start||t>=s.end)return message('Play within this section to mark its page.');snapshot();if(p.part===0)setTime(selected,t,true);else{const f=p.parts[0],r=s.rows.find(r=>r.id===f.row);if(!r)return;r.page_cues=r.page_cues||{};r.page_cues[String(f.column)]=t;}changed();message('Page timing checked at '+time(t+doc.timing_offset)+'.');},prevpage:()=>{pageIndex=Math.max(0,pageIndex-1);drawPreview();},nextpage:()=>{pageIndex=Math.min(currentPages.length-1,pageIndex+1);drawPreview();},source:async()=>{try{await options.changeSource(replace,clone(doc));}catch(e){message(e.message);}},previous:()=>{if(previous){const p=clone(previous);replace(p);}},save:async()=>{if(saving)return;saveText();if(options.canSave&&options.canSave())return message(options.canSave());if(doc.sections.some(s=>!s.label.trim()))return message('Name each section.');saving=true;$('.ca-main').inert=true;$('.ca-save').disabled=true;message('Saving…');try{const revision=await options.save(clone(doc));if(revision){base.revision=revision;doc.revision=revision;}dirty=false;if(storage)localStorage.removeItem(storage);$('.ca-draft').textContent='Saved';message(options.savedMessage||'Chart saved.');if(options.closeOnSave){saving=false;close();}}catch(e){message('Not saved: '+e.message);}finally{saving=false;$('.ca-main').inert=false;$('.ca-save').disabled=false;}}};
+ root.querySelectorAll('[data-act]').forEach(b=>b.onclick=()=>{try{compact.open=false;const value=actions[b.dataset.act]();if(value&&value.catch)value.catch(e=>message(e.message));}catch(e){message(e.message);}});root.querySelectorAll('[data-tab]').forEach(b=>b.onclick=()=>{view=b.dataset.tab;root.dataset.view=view;try{if(storage)localStorage.setItem(storage+':view',view);}catch(e){}if(options.onView)options.onView(view);drawPreview();drawMarkers();});try{if(storage&&!options.view)view=localStorage.getItem(storage+':view')||view;}catch(e){}root.dataset.view=['edit','preview','timing'].includes(view)?view:'edit';
+ root.onkeydown=e=>{e.stopPropagation();if(e.key==='Escape'){e.preventDefault();if(compact.open)compact.open=false;else close();}if(e.key==='Tab'){const nodes=Array.from(root.querySelectorAll('button,input,select,textarea')).filter(n=>!n.disabled&&n.getClientRects().length);if(e.shiftKey&&document.activeElement===nodes[0]){e.preventDefault();nodes[nodes.length-1].focus();}else if(!e.shiftKey&&document.activeElement===nodes[nodes.length-1]){e.preventDefault();nodes[0].focus();}}};
+ if(storage){try{const saved=JSON.parse(localStorage.getItem(storage)||'null');if(saved&&saved.document.revision===doc.revision){localStorage.removeItem(storage);}else if(saved&&saved.base===base.revision){doc=tidy(saved.document,doc.duration);previous=saved.previous;dirty=true;message('Recovered unfinished chart draft.');}else if(saved){previous=saved.document;root.querySelector('[data-act="previous"]').disabled=false;root.querySelector('[data-act="previous"]').textContent='Recover older draft';message('The saved chart has changed. Recover older draft only if you want to replace it with your earlier work.');}}catch(e){message('Could not recover browser draft.');}}
+ const tick=setInterval(()=>{if(closed)return;const pos=transport.position()||0,playing=transport.playing();if(playing&&pos>=doc.sections[selected].start&&pos<doc.sections[selected].end)heard=true;if(options.draftStatus)$('.ca-draft').textContent=options.draftStatus();$('.ca-clock').textContent=time(pos)+' / '+time(doc.duration);$('.ca-playhead').style.left=Math.max(0,Math.min(100,(pos-windowStart)/bounds()*100))+'%';const reason=options.canSave&&options.canSave();$('.ca-save').disabled=saving||!!reason;$('.ca-save').title=reason||'';$('.ca-audio-status').textContent=reason||options.audioStatus||'';},150);
+ loadSection();if(previous)root.querySelector('[data-act="previous"]').disabled=false;text.focus();global.ChartAuthor.active={close,replace,getDocument:()=>clone(doc),setAudio:(value,wave)=>{audio=value;peaks=wave||[];options.audioStatus='';drawMarkers();},status:message};return global.ChartAuthor.active;
+}
+const css=`#chart-author{position:fixed;inset:12px;z-index:100000;background:#111a24;color:#e7edf5;border:1px solid #425267;border-radius:16px;box-shadow:0 16px 80px #000b;display:flex;flex-direction:column;font:14px system-ui;min-width:0;text-align:left}#chart-author *{box-sizing:border-box}#chart-author select{appearance:none;-webkit-appearance:none}.ca-compact-tools summary{padding:8px;border:1px solid #4b6077;border-radius:7px;background:#26384b;cursor:pointer}.ca-pop{position:fixed;z-index:5;inset:95px 12px 90px;background:#1a2735;border:1px solid #8faecb;border-radius:8px;padding:12px;overflow:auto}.ca-pop button{margin:4px!important}.ca-compact-tools[hidden]{display:none}#chart-author header,#chart-author footer,#chart-author nav,.ca-controls,.ca-tools,.ca-boundary{display:flex;gap:8px;align-items:center;flex-wrap:wrap}#chart-author header,#chart-author footer{padding:12px 16px;justify-content:space-between;background:#1a2735;border-radius:14px}#chart-author header>div{min-width:0;flex:1}.ca-title{display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:18px}.ca-key{display:block;color:#a8bbce;font-size:12px;margin-top:4px}#chart-author button,#chart-author select,#chart-author input{font:inherit;color:inherit;background:#26384b;border:1px solid #4b6077;border-radius:7px;padding:8px;min-height:38px;max-width:100%;margin:0;width:auto}#chart-author button{cursor:pointer}#chart-author button:disabled{opacity:.45;cursor:default}#chart-author button:focus-visible,#chart-author select:focus-visible,#chart-author input:focus-visible{outline:2px solid #eabd67}#chart-author nav{padding:8px 16px;border-bottom:1px solid #33485e}.ca-draft{margin-left:auto;color:#b6cddd}.ca-main{flex:1;min-height:0;display:grid;grid-template-columns:190px minmax(0,1fr) minmax(0,1fr);overflow:hidden}.ca-main>aside{overflow:auto;border-right:1px solid #33485e;padding:10px}.ca-main>aside>label{display:none}.ca-section-list button{display:block;width:100%!important;text-align:left;margin-bottom:8px!important;line-height:1.6}.ca-section-list .selected{border-color:#eabd67!important;background:#39424b!important}.ca-edit,.ca-preview,.ca-timing{min-width:0;min-height:0;padding:12px;display:flex;flex-direction:column;gap:10px}.ca-preview{border-left:1px solid #33485e}.ca-timing{display:none;overflow:auto}.ca-hint{font-size:12px;color:#b3c5d8;margin:0}.ca-tools .ca-name{flex:1;min-width:100px}.ca-writing{position:relative;flex:1;min-height:100px;background:#0c141d;border:1px solid #425267;border-radius:8px;overflow:hidden}.ca-writing .ca-text,.ca-writing .ca-highlight{position:absolute;inset:0;width:100%;height:100%;padding:16px;margin:0;border:0;border-radius:0;font:16px/24px Consolas,monospace;letter-spacing:0;tab-size:4;white-space:pre;text-align:left;overflow:auto;resize:none;word-wrap:normal}.ca-writing .ca-text{background:transparent;color:transparent;caret-color:#fff;-webkit-text-fill-color:transparent}.ca-writing .ca-text::selection{background:#6386a577}.ca-writing .ca-highlight{background:transparent;pointer-events:none;color:#edf3fa}.ca-highlight b,.ca-pages b{font-weight:normal;color:#f4c36e}.ca-pages{flex:1;min-height:0;overflow:auto;background:#0c141d;border-radius:8px;padding:16px}.ca-pages pre{font:16px/1.5 Consolas,monospace;margin:12px 0;white-space:pre}.ca-player{flex-shrink:0;padding:8px 16px;border-top:1px solid #33485e}.ca-timeline{position:relative;height:48px;background:#0b131c;border-radius:6px;touch-action:none;cursor:crosshair}.ca-timeline canvas{width:100%;height:100%;position:absolute;inset:0}.ca-marker{position:absolute;top:0;transform:translateX(-50%);padding:2px!important;min-width:24px;min-height:26px!important;background:#b88334!important;color:white!important;touch-action:none;z-index:2}.ca-playhead{position:absolute;top:0;bottom:0;width:2px;background:white;pointer-events:none}.ca-controls{padding-top:6px}.ca-clock{font-variant-numeric:tabular-nums}.ca-audio-status{font-size:12px;color:#b9cbdc;flex:1}.ca-status{flex:1;font-size:12px;min-width:100px}.ca-save{background:#266e60!important;border-color:#7fc8b7!important}.ca-marker-list{white-space:pre-wrap;line-height:2}.ca-main label{display:flex;flex-direction:column;gap:5px}#chart-author[data-view=timing] .ca-edit{display:none}#chart-author[data-view=timing] .ca-timing{display:flex;grid-column:2;grid-row:1}#chart-author[data-view=timing] .ca-preview{grid-column:3;grid-row:1}@media(max-width:1000px){.ca-main{grid-template-columns:150px minmax(0,1fr)}.ca-preview{display:none}#chart-author[data-view=preview] .ca-edit{display:none}#chart-author[data-view=preview] .ca-preview{display:flex}#chart-author[data-view=timing] .ca-preview{display:none}}@media(max-width:600px),(max-height:500px){#chart-author{inset:0;border-radius:0;height:100dvh}#chart-author header,#chart-author footer{padding:7px 10px;border-radius:0}.ca-key{font-size:10px}#chart-author nav{padding:4px 10px}.ca-main{display:flex;flex-direction:column}.ca-main>aside{padding:4px 10px;flex-shrink:0;border:0}.ca-main>aside>label{display:flex;flex-direction:row;align-items:center;gap:10px}.ca-section-list{display:none}.ca-edit,.ca-preview,.ca-timing{flex:1;padding:6px 10px;gap:6px}.ca-hint{display:none}.ca-tools{gap:4px}.ca-tools button,.ca-boundary button{font-size:11px!important;min-height:30px!important;padding:4px!important}.ca-boundary{gap:4px}.ca-player{padding:5px 10px}.ca-timeline{height:32px}.ca-audio-status{display:none}.ca-controls button{min-height:30px!important;padding:5px!important}.ca-writing{min-height:55px}.ca-key{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}}`;
+if(global.document){const style=document.createElement('style');style.textContent=css+'@media(max-height:500px){#chart-author header,#chart-author footer{padding:4px 10px}#chart-author .ca-edit{gap:2px}#chart-author .ca-key{display:none}#chart-author nav button{min-height:30px;padding:4px 8px}#chart-author .ca-main>aside{padding-top:0;padding-bottom:0}#chart-author .ca-main>aside select{min-height:30px;padding:4px 8px}#chart-author .ca-writing{min-height:0}#chart-author .ca-writing .ca-text,#chart-author .ca-writing .ca-highlight{padding:8px}}';document.head.appendChild(style);}
+global.ChartAuthor={parse,lines,isChordLine,tidy,open,time,active:null};
+global.ChartAuthor.audition=function(editor,query){
+ const url='/api/chart-preview?'+new URLSearchParams(query),audio=new Audio();
+ async function prepare(){try{const response=await fetch(url),data=await response.json();if(global.ChartAuthor.active!==editor)return;
+ if(data.error||data.state==='error')return editor.status('Audio unavailable: '+(data.error||data.message)+'. You can still edit this chart.');
+ if(data.state==='ready'){audio.src=url+'&audio=1';audio.addEventListener('error',()=>editor.status('This browser could not play the cached audio. Chart editing is still available.'));editor.setAudio(audio,data.peaks);editor.status('Audio ready. Section times still need playback review.');}
+ else{editor.status(data.message||'Preparing audio…');setTimeout(prepare,1000);}
+ }catch(e){if(global.ChartAuthor.active===editor)editor.status('Audio unavailable. You can still edit this chart.');}}
+ document.querySelectorAll('audio').forEach(a=>a.pause());prepare();
+};
+})(window);
+
+</script>
 </head>
 
 <body>
@@ -4165,14 +4248,6 @@
     <!-- Timing repair stays out of the normal performance view. It is opened
          deliberately from Lyrics/Chords and speaks in musical, not technical,
          terms; offsets and interpolation remain implementation details. -->
-    <div id="chart-editor" class="hide" role="dialog" aria-modal="true" aria-labelledby="chart-edit-title">
-        <div class="ce-head"><h2 id="chart-edit-title">Song sections</h2><button onclick="chartEditorClose()">Close</button></div>
-        <p>All chart lines are shown in source order. Start a section at any line, join it to the previous section, or rename it. Chords stay with their words. For playback cues, close this editor and turn on Timing.</p>
-        <p><a id="chart-source-link" target="_blank" rel="noopener noreferrer" style="color:#86d9cf">View source chart</a></p>
-        <div id="chart-edit-lines"></div>
-        <div id="chart-edit-status" role="status"></div>
-        <div class="ce-head"><span>Changes apply only after REAPER confirms.</span><button onclick="chartEditorSave()">Save sections</button></div>
-    </div>
     <!-- JAM ROOM TRACKS PANEL -->
     <div id="tracks-panel">
         <div class="panel-header">
@@ -5544,7 +5619,7 @@
         syncLeadSlider();
         tkRenderPanel();             // paints the performance chips on load
         // Shown in the sidebar so a stale cached page is obvious after a deploy.
-        var REASET_VERSION = "v3.17 - Import and recording workspaces";
+        var REASET_VERSION = "v3.18 - Chart authoring";
         var _rv = document.getElementById("reasetVer");
         if (_rv) _rv.textContent = REASET_VERSION;
         (function () { var t = localStorage.getItem("reasetlist_theme") || "dark"; setTheme(t, true); })();
@@ -9426,7 +9501,7 @@
                 if (val === '') return;
                 var parts = val.split(':');
                 var gen = parts[0], count = parseInt(parts[1]);
-                if (!Number.isInteger(count) || count < 1 || count > 256) return;
+                if (!Number.isInteger(count) || count < 1 || count > 2048) return;
                 if (g_clFetch && Date.now() - g_clFetch.at > 3000) g_clFetch = null;
                 if (gen !== g_clDataGen && (!g_clFetch || g_clFetch.gen !== gen)) {
                     g_clFetch = { gen: gen, count: count, chunks: [], got: 0, at: Date.now() };
@@ -9650,7 +9725,7 @@
             var index=g_chartPage===null?active:Math.min(g_chartPage,pages.length-1),page=pages[index],section=doc.sections[page.section];
             host._pageIndex=index;
             if((lyricsOnly && lyricsVisible)||(!lyricsOnly && chordsVisible)||!g_chartPages.length)g_chartPages=pages;
-            var html='<div class="sc-nav"><button onclick="chartNavigate(-1)" '+(index===0?'disabled':'')+'>Previous</button><button onclick="chartFollow()">'+(g_chartPage===null?'Following':'Resume following')+'</button><button onclick="chartNavigate(1)" '+(index===pages.length-1?'disabled':'')+'>Next</button><button onclick="chartEditorOpen()">Edit sections</button><button class="'+(g_chartTiming?'on':'')+'" onclick="g_chartTiming=!g_chartTiming;renderChordsView();renderLyricsView()">Timing</button></div>';
+            var html='<div class="sc-nav"><button onclick="chartNavigate(-1)" '+(index===0?'disabled':'')+'>Previous</button><button onclick="chartFollow()">'+(g_chartPage===null?'Following':'Resume following')+'</button><button onclick="chartNavigate(1)" '+(index===pages.length-1?'disabled':'')+'>Next</button><button onclick="chartEditorOpen()">Edit chart</button><button class="'+(g_chartTiming?'on':'')+'" onclick="g_chartTiming=!g_chartTiming;renderChordsView();renderLyricsView()">Timing</button></div>';
             html+='<div class="sc-heading"><select aria-label="Chart section" onchange="chartChooseSection(this.value)">'+doc.sections.map(function(s,i){return '<option value="'+i+'" '+(page.section===i?'selected':'')+'>'+trEsc(s.label)+'</option>';}).join('')+'</select><span>'+(page.part+1)+' / '+page.total+'</span></div>';
             html+='<div class="sc-paper" style="font-size:'+page.font+'px">';
             page.parts.forEach(function(f){
@@ -9681,28 +9756,39 @@
             if(canvasOpen){var canvas=document.getElementById(lyricsOnly?'cw-content-lyrics':'cw-content-chords');if(canvas)canvas.textContent=section.label+'\n'+(lyricsOnly?(section.rows||[]).map(function(r){return r.text;}).join('\n'):(section.progression||[]).join('  '));}
             return true;
         }
-        function chartSend(action,data,done){
-            if(g_chartPending)return chartStatus('Saving in REAPER; wait for confirmation.');
-            if(!clAlive() || !g_clData || !g_clData.song)return chartStatus('Not saved: connect to REAPER before adjusting timing.');
+        function chartSend(action,data,done,failed){
+            if(g_chartPending){if(failed)failed(Error('Another chart save is pending.'));return chartStatus('Saving in REAPER; wait for confirmation.');}
+            if(!clAlive() || !g_clData || !g_clData.song){if(failed)failed(Error('Connect to REAPER before saving.'));return chartStatus('Not saved: connect to REAPER before adjusting timing.');}
             var nonce=Date.now().toString(36)+Math.random().toString(36).slice(2,7);
             // REAPER truncates long individual web commands. Hex chunks keep
             // UTF-8, slashes and separators out of its command parser.
             var bytes=new TextEncoder().encode(JSON.stringify(data)),hex='';
             bytes.forEach(function(b){hex+=b.toString(16).padStart(2,'0');});
             var chunks=hex.match(/.{1,384}/g)||[];
-            if(chunks.length>192)return chartStatus('This chart is too large to save sections.');
-            chunks.forEach(function(chunk,i){wwr_req('SET/EXTSTATE/ReaSetCL/edit:'+nonce+':'+i+'/'+chunk);});
-            var fields=[nonce,action,g_clData.song.id,(g_chartEdit?g_chartEdit.revision:g_clData.document.revision),(g_chartEdit?g_chartEdit.project:g_clData.project),'chunks:'+chunks.length];
+            if(chunks.length>(action==='author'?1024:192)){if(failed)failed(Error('Chart exceeds the 192 KB save limit.'));return chartStatus('Chart is too large to save.');}
+            var commands=chunks.map(function(chunk,i){return 'SET/EXTSTATE/ReaSetCL/edit:'+nonce+':'+i+'/'+chunk;});
+            var fields=[nonce,action,g_clData.song.id,(g_chartEdit?g_chartEdit.revision:(g_clData.document||{}).revision||''),(g_chartEdit?g_chartEdit.project:g_clData.project),'chunks:'+chunks.length];
             var command='SET/EXTSTATE/ReaSetCL/want/'+encodeURIComponent(fields.join('|'));
-            g_chartPending={nonce:nonce,done:done,project:g_clData.project,song:g_clData.song.id};
-            wwr_req(command);chartStatus('Saving in REAPER...');
-            setTimeout(function(){if(g_chartPending&&g_chartPending.nonce===nonce){g_chartPending=null;chartStatus('Save unconfirmed. Save your project, restart REAPER and refresh ReaSet, then check the offset before retrying.');}},6000);
+            g_chartPending={nonce:nonce,done:done,failed:failed,project:g_clData.project,song:g_clData.song.id};
+            chartStatus('Saving in REAPER...');
+            if(action==='author'){
+                (async function(){try{
+                    for(var i=0;i<commands.length;i+=8){
+                        if(!g_chartPending||g_chartPending.nonce!==nonce)return;
+                        var response=await fetch('/_/'+commands.slice(i,i+8).join(';'),{cache:'no-store',signal:AbortSignal.timeout(10000)});
+                        if(!response.ok)throw Error('REAPER did not receive all chart data.');
+                    }
+                    if(!g_chartPending||g_chartPending.nonce!==nonce)return;
+                    g_chartPending.submitted=true;wwr_req(command);
+                }catch(error){if(g_chartPending&&g_chartPending.nonce===nonce){g_chartPending=null;chartStatus(error.message);if(failed)failed(error);}}})();
+            }else{commands.forEach(function(c){wwr_req(c);});wwr_req(command);}
+            setTimeout(function(){if(g_chartPending&&g_chartPending.nonce===nonce){var fail=g_chartPending.failed;g_chartPending=null;if(fail)fail(Error('Save unconfirmed; reconnect and check the saved chart before retrying.'));chartStatus('Save unconfirmed. Save your project, restart REAPER and refresh ReaSet, then check the offset before retrying.');}},action==='author'?30000:6000);
         }
         function chartStatus(message){g_chartMessage=message;var status=document.getElementById('chart-edit-status');if(status)status.textContent=message;renderChordsView();renderLyricsView();}
         function chartEditReply(value){
             var f=String(value).split('|');if(!g_chartPending||f[0]!==g_chartPending.nonce)return;
             var pending=g_chartPending;g_chartPending=null;chartStatus(f.slice(2).join(' '));
-            if(f[1]==='ok' && pending.done)pending.done();
+            if(f[1]==='ok' && pending.done)pending.done();else if(f[1]!=='ok'&&pending.failed)pending.failed(Error(f.slice(2).join(' ')));
             renderChordsView();renderLyricsView();
         }
         function chartTapPage(next){
@@ -9715,35 +9801,29 @@
             chartSend(action,data,function(){g_chartPage=index;});
         }
         function chartEditorOpen(){
-            if(!g_clData || !g_clData.document)return;
-            var doc=g_clData.document;
-            var source=document.getElementById('chart-source-link'),url=String(doc.source_url||'');
-            source.hidden=!/^https:\/\/(?:tabs\.)?ultimate-guitar\.com\//i.test(url);
-            source.href=source.hidden?'#':url;
-            g_chartEdit={revision:doc.revision,project:g_clData.project,song:g_clData.song.id,
-                sections:JSON.parse(JSON.stringify(doc.sections)),duration:doc.duration,offset:doc.timing_offset||0,review:doc.review};
-            g_chartEdit.sections.forEach(function(s,si){(s.rows||[]).forEach(function(r,ri){r._key=chartRowKey(r,si,ri);});});
-            document.getElementById('chart-editor').classList.remove('hide');chartEditorRender();chartStatus('');
-        }
-        function chartEditorClose(){if(g_chartPending)return;document.getElementById('chart-editor').classList.add('hide');g_chartEdit=null;}
-        function chartEditorRender(){
-            var host=document.getElementById('chart-edit-lines');
-            var review=g_chartEdit.review;
-            host.innerHTML=(review?'<p>'+trEsc(review.message)+'</p>'+review.issues.map(function(issue){return '<p>'+trEsc(issue.message)+'</p>';}).join(''):'')+g_chartEdit.sections.map(function(s,si){return '<section class="ce-section"><div class="ce-section-head"><input aria-label="Section name" value="'+trEsc(s.label)+'" onchange="g_chartEdit.sections['+si+'].label=this.value"><label>Start <input aria-label="Section start" type="number" step="0.01" min="0" value="'+(s.start+(si?g_chartEdit.offset:0))+'" onchange="g_chartEdit.sections['+si+'].start=Number(this.value)-'+(si?g_chartEdit.offset:0)+'"></label>'+(si?'<button onclick="chartEditorJoin('+si+')">Join previous</button>':'')+'</div>'+(s.rows||[]).map(function(r,ri){return '<div class="ce-row"><div>'+trEsc(r.text.trim()||((r.anchors||[]).map(function(a){return a.symbol;}).join('  ')||'Instrumental'))+'</div>'+(ri?'<button onclick="chartEditorSplit('+si+','+ri+')">Start section here</button>':'<small>First line</small>')+'</div>';}).join('')+'</section>';}).join('');
-        }
-        function chartEditorSplit(si,ri){
-            var s=g_chartEdit.sections[si],end=g_chartEdit.sections[si+1]?g_chartEdit.sections[si+1].start:g_chartEdit.duration;
-            var cue=s.rows[ri].cue,guess=s.start+(end-s.start)*ri/s.rows.length;
-            var start=Number.isFinite(cue)&&cue>s.start&&cue<end?cue:guess;
-            var section={label:'New section',start:Math.round(start*1000)/1000,end:end,rows:s.rows.splice(ri),repeat:1};
-            g_chartEdit.sections.splice(si+1,0,section);chartEditorRender();
-        }
-        function chartEditorJoin(si){var sections=g_chartEdit.sections;sections[si-1].rows=sections[si-1].rows.concat(sections[si].rows);sections.splice(si,1);chartEditorRender();}
-        function chartEditorSave(){
-            if(!g_chartEdit||g_chartEdit.song!==g_clData.song.id||g_chartEdit.project!==g_clData.project)return chartStatus('Song changed. Close and reopen the editor.');
-            var groups=g_chartEdit.sections.map(function(s){return {label:s.label,start:s.start,repeat:s.repeat||1,rows:s.rows.map(function(r){return r._key;})};});
-            if(groups.some(function(s,i){return !s.label.trim()||!Number.isFinite(s.start)||s.start<0||s.start>=g_chartEdit.duration||(i===0?s.start!==0:s.start<=groups[i-1].start);}))return chartStatus('Give each section a name and increasing start time; the first starts at zero.');
-            chartSend('layout',{sections:groups},function(){chartEditorClose();});
+            if(!g_clData||!g_clData.song)return;
+            var song=JSON.parse(JSON.stringify(g_clData.song)),project=g_clData.project,doc=g_clData.document||{schema:2,revision:'',sections:[]};
+            var duration=doc.duration||song.end-song.start;
+            if(!g_clData.document&&g_clData.lyrics&&g_clData.lyrics.length){
+                doc={schema:2,revision:'',duration:duration,sections:[{id:'legacy-song',label:'Song',start:0,end:duration,timing_status:'estimated',rows:[]} ]};
+                g_clData.lyrics.forEach(function(line,i){String(line[2]||'').split('\n').forEach(function(words,j){doc.sections[0].rows.push({id:'legacy-'+i+'-'+j,text:words,anchors:[]});});});
+            }
+            g_chartEdit={revision:doc.revision||'',project:project,song:song.id};
+            var sourceToken='',popup=null,listener=function(event){
+                if(event.origin!==location.protocol+'//'+location.hostname+':8765'||event.source!==popup||!sourceToken||event.data.type!=='chart-source'||event.data.token!==sourceToken)return;
+                if(ChartAuthor.active)ChartAuthor.active.replace(event.data.document);sourceToken='';
+            };
+            window.addEventListener('message',listener);
+            function available(){return !g_clData||g_clData.project!==project||g_clData.song.id!==song.id?'Song or project changed. Reopen the editor.':!clAlive()?'Reconnect to REAPER before saving.':recLocked()?'Choose Done in Recording before saving.':isPlaying?'Stop playback before saving chart content.':'';}
+            ChartAuthor.open({document:doc,previous:g_clData.previous_document,duration:duration,title:song.name,key:doc.editing_key,
+                draftKey:'reaset-chart:'+project+':'+song.id,canSave:available,
+                previewSemis:((g_tkState&&g_tkState.semis)||0)-getCapo(),
+                transport:{position:function(){return currentPos-song.start;},playing:function(){return isPlaying;},play:function(){if(recLocked())throw Error('Finish Recording first.');wwr_req('1007');},pause:function(){wwr_req('1008');},stop:function(){wwr_req('1016');},seek:function(t){if(recLocked())throw Error('Finish Recording first.');cancelTransportActions();wwr_req('SET/POS/'+(song.start+t));}},
+                save:function(value){return new Promise(function(resolve,reject){if(available())return reject(Error(available()));var revision=g_chartEdit.revision;chartSend('author',value,function(){var until=Date.now()+15000;function confirmed(){if(!g_chartEdit||!g_clData||g_clData.project!==project||g_clData.song.id!==song.id)return reject(Error('Song changed before the saved chart was received.'));if(g_clData.document&&g_clData.document.revision!==revision){g_chartEdit.revision=g_clData.document.revision;resolve(g_chartEdit.revision);}else if(Date.now()>until)reject(Error('REAPER accepted the save but has not published the updated chart. Reconnect to verify it.'));else setTimeout(confirmed,100);}confirmed();},reject);});},
+                savedMessage:'Chart installed. Save the REAPER project to keep it.',
+                onClose:function(){window.removeEventListener('message',listener);g_chartEdit=null;},
+                changeSource:function(){sourceToken=Date.now().toString(36)+Math.random().toString(36);popup=window.open(location.protocol+'//'+location.hostname+':8765/chart-source?'+new URLSearchParams({name:song.name,origin:location.origin,token:sourceToken}),'chart-source');}
+            });
         }
         function openSongImporter(){window.open(location.protocol+'//'+location.hostname+':8765/','jamroom-importer');}
         function openSongUpdates(){
@@ -9757,7 +9837,7 @@
             host.classList.remove('structured-chart');host._chartHtml=null;document.getElementById('chords-panel').classList.remove('source-chart');document.getElementById('chords-panel').style.bottom='';
             if (!g_clData || !g_clData.chords || !g_clData.chords.length) {
                 host.innerHTML = '<div class="cv-empty">' + (clAlive()
-                    ? 'No chords for this song.'
+                    ? 'No chords for this song. <button onclick="chartEditorOpen()">Create chart</button>'
                     : 'Chord timeline script not running — run <b>ReaSet_Startup.lua</b> in REAPER.')
                     + '</div>';
                 return;

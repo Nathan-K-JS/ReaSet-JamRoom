@@ -10,7 +10,7 @@ import json
 import math
 import re
 
-GENERATOR = "source-pages-5"
+GENERATOR = "source-pages-6"
 PARSER = 3
 SCHEMA = 2
 CH = re.compile(r"\[ch\](.*?)\[/ch\]", re.I)
@@ -28,6 +28,9 @@ def norm(text):
 
 
 def lyric_items(job):
+    if job.get('authored_chart'):
+        from jamroom_chart_author import lyric_items as authored_items
+        return authored_items(job['authored_chart'])
     ly = job.get("lyrics") or {}
     if not ly.get("synced"):
         return []
@@ -405,6 +408,8 @@ def build_document(job, templates, detected, transpose=lambda x: x):
     for section in sections:
         if section['end']-section['start'] < 2:
             issues.append({'code':'short_section', 'section':section['id'], 'message':'Section lasts less than two seconds; check its boundary.'})
+    for section in sections:
+        section["timing_status"] = "matched" if any(abs(r.get("cue", -999)-section["start"]) < .001 and r.get("cue_word_coverage", 0) >= .8 for r in section["rows"]) else "estimated"
     doc = {"schema":SCHEMA,"generator":GENERATOR,"source_preserved":True,"duration":duration,
            "sections":sections,"templates":copy.deepcopy(templates),
            "source_hash":fingerprint(templates),"lyrics_hash":fingerprint(job.get("lyrics",{})),

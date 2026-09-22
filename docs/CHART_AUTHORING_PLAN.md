@@ -1,7 +1,7 @@
 # Chart authoring and timing review
 
-Status: proposed after user clarification, 22 September 2026. No application
-changes are included in this plan. Baseline: v3.17.
+Status: approved and implemented as v3.18. See [Chart authoring](CHART_AUTHORING.md)
+for the delivered workflow, maintenance notes and validation. Baseline: v3.17.
 
 ## Agreed scope
 

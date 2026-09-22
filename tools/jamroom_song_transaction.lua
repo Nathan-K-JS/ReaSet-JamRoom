@@ -66,6 +66,10 @@ local function run()
   end
   local _, previous_op = reaper.GetProjExtState(0,"ReaSetSong",prefix .. "operation")
   if previous_op == job.operation then reply("ok","Already applied"); return end
+  if job.expected_revision~=nil then
+    local _,rev=reaper.GetProjExtState(0,'ReaSetSong',prefix..'revision')
+    assert(rev==job.expected_revision,'Chart changed since this review opened; reopen it before saving')
+  end
   local tracks={}
   for ti=0,reaper.CountTracks(0)-1 do
     local tr=reaper.GetTrack(0,ti); local _,name=reaper.GetTrackName(tr)
@@ -197,6 +201,9 @@ local function run()
       end
     end
   end
+  local chart_undo=dofile(dir..'../Requirements/ReaSet_ChartUndo.lua')
+  local restored_chart=restored and (restored.ext.document~=before.ext.document or restored.ext.revision~=before.ext.revision)
+  local undo_track=(job.document or restored_chart) and chart_undo.prepare(song.id) or nil
   reaper.Undo_BeginBlock(); reaper.PreventUIRefresh(1)
   local level_message
   local success,err=pcall(function()
@@ -223,6 +230,8 @@ local function run()
         end
       end
       if job.document then
+        local _,old_document=reaper.GetProjExtState(0,'ReaSetSong',prefix..'document')
+        reaper.SetProjExtState(0,'ReaSetSong',prefix..'previous',old_document)
         reaper.SetProjExtState(0,"ReaSetSong",prefix .. "document",job.document)
         reaper.SetProjExtState(0,"ReaSetSong",prefix .. "revision",job.revision or "")
       end
@@ -237,6 +246,7 @@ local function run()
       end
     end
     reaper.SetProjExtState(0,"ReaSetSong",prefix .. "operation",job.operation)
+    if undo_track then chart_undo.commit(song.id,undo_track)end
     write(job.after,J.encode(snapshot()))
   end)
   if not success then

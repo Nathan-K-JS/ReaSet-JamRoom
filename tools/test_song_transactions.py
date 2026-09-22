@@ -31,6 +31,7 @@ reaper={
  EnumProjectMarkers2=function(_,i)if i==0 then return 1,true,0,region_end,'Song',1 end return 0 end,
  CountTracks=function()return #tracks end,GetTrack=function(_,i)return tracks[i+1]end,
  GetTrackName=function(tr)return true,tr.name end,
+ GetSetMediaTrackInfo_String=function(tr,key,value,set)tr.ext=tr.ext or {};if set then tr.ext[key]=value end;return true,tr.ext[key] or '' end,
  CountTrackMediaItems=function(tr)return #tr.items end,
  GetTrackMediaItem=function(tr,i)return tr.items[i+1] end,
  GetMediaItemInfo_Value=function(it,key)if key=='D_POSITION'then return it.p elseif key=='B_MUTE'then return it.mute or 0 else return it.l end end,

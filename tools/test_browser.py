@@ -14,7 +14,7 @@ EDGE = Path(os.environ.get('PROGRAMFILES(X86)', 'C:/Program Files (x86)')) / 'Mi
 
 def serve_workspace(req):
     name=req.request.url.rsplit('/',1)[-1]
-    if name in ('importer-workspace.js','importer-workspace.css'):
+    if name in ('importer-workspace.js','importer-workspace.css','chart-author.js','chart-pagination.js'):
         req.fulfill(path=str(ROOT/'tools'/name),content_type='text/javascript' if name.endswith('.js') else 'text/css')
         return True
     return False
@@ -35,6 +35,8 @@ class BrowserTests(unittest.TestCase):
         self.page = self.browser.new_page()
         self.page.set_default_timeout(5000)
         self.errors = []
+        self.chart_wire=[]
+        self.page.on('request', lambda r:self.chart_wire.extend(r.url.split('/_/',1)[1].split(';')) if '/_/SET/EXTSTATE/ReaSetCL/edit:' in r.url else None)
         self.page.on('pageerror', lambda error: self.errors.append(str(error)))
 
     def tearDown(self):
@@ -70,10 +72,13 @@ class BrowserTests(unittest.TestCase):
         self.assertIn('C', self.page.locator('#chords-live').inner_text())
         self.page.evaluate('currentPos=25;renderChordsView();renderLyricsView()')
         self.assertIn('Solo', self.page.locator('#lyrics-live').inner_text())
-        self.page.evaluate("chartEditorOpen();chartEditorSave();repairHandleReply(g_chartPending.nonce+'|ok|Sections saved')")
+        self.page.evaluate("chartEditorOpen()")
+        self.page.get_by_role('button',name='Save chart',exact=True).click()
+        self.page.wait_for_function('g_chartPending && g_chartPending.submitted')
+        self.page.evaluate("g_clData.document.revision='manual:test';repairHandleReply(g_chartPending.nonce+'|ok|Sections saved')")
         self.assertIsNone(self.page.evaluate('g_chartPending'))
         self.assertIn('Sections saved', self.page.evaluate('g_chartMessage'))
-        self.assertIn('|layout|', self.page.evaluate('decodeURIComponent(sent[sent.length-1])'))
+        self.assertIn('|author|', self.page.evaluate('decodeURIComponent(sent[sent.length-1])'))
 
     def recording_state(self):
         self.load_reaset()
@@ -346,7 +351,7 @@ class BrowserTests(unittest.TestCase):
         self.page.evaluate('chartEditorOpen()')
         self.assertTrue(self.page.evaluate('''() => {
           let r=document.getElementById('perfBar').getBoundingClientRect();
-          return document.getElementById('chart-editor').contains(document.elementFromPoint(innerWidth/2,r.y+r.height/2));
+          return document.getElementById('chart-author').contains(document.elementFromPoint(innerWidth/2,r.y+r.height/2));
         }'''))
         self.page.get_by_role('button',name='Close',exact=True).click()
         self.page.evaluate('openMidiModal()')
@@ -478,14 +483,15 @@ class BrowserTests(unittest.TestCase):
         self.load_reaset()
         self.page.evaluate('chartEditorOpen()')
         before=self.page.evaluate('JSON.stringify(g_clData.document)')
-        self.page.evaluate('chartEditorJoin(1)')
-        self.page.evaluate('chartEditorSplit(0,1)')
+        self.page.locator('.ca-section-list button').nth(1).click()
+        self.page.get_by_role('button',name='Merge previous',exact=True).click()
         self.assertEqual(self.page.evaluate('JSON.stringify(g_clData.document)'),before)
-        self.assertIn('Here we sing',self.page.locator('#chart-edit-lines').inner_text())
-        self.page.evaluate('chartEditorSave()')
+        self.assertIn('Here we sing',self.page.locator('.ca-text').input_value())
+        self.page.get_by_role('button',name='Save chart',exact=True).click()
+        self.page.wait_for_function('g_chartPending && g_chartPending.submitted')
         self.assertEqual(self.page.evaluate('JSON.stringify(g_clData.document)'),before)
-        self.assertIn('|layout|',self.page.evaluate('decodeURIComponent(sent[sent.length-1])'))
-        commands=self.page.evaluate('sent.filter(c=>c.includes("/edit:"))')
+        self.assertIn('|author|',self.page.evaluate('decodeURIComponent(sent[sent.length-1])'))
+        commands=[c for c in self.chart_wire if '/edit:' in c]
         self.assertTrue(commands)
         self.assertTrue(all(len(c)<500 for c in commands))
         payload=bytes.fromhex(''.join(c.rsplit('/',1)[1] for c in commands)).decode('utf-8')

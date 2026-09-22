@@ -38,10 +38,13 @@ ancestry first; never force-push or overwrite divergent changes. Pushing only
 `feature/timing-repair` does not deliver an update to standard installations.
 
 Current architecture:
-- A proposed chart-authoring upgrade is in `docs/CHART_AUTHORING_PLAN.md`, with
-  `docs/ui-layout/chart-editor.svg`. The user confirmed shared Lyrics/Chords,
-  both text-divider and timeline-marker dragging, and section/page timing only.
-  This is a plan, not an implemented feature or approval to implement it.
+- v3.18 implements chart authoring; see `docs/CHART_AUTHORING.md` and the approved
+  `docs/CHART_AUTHORING_PLAN.md`. Lyrics/Chords share authored content. The native
+  editor is embedded from `tools/chart-author.js` using `tools/embed_chart_author.py`;
+  the importer serves that editor and the native paginator. Import journal drafts
+  survive restart and override regeneration. Source replacement uses isolated
+  previews and revision guards. `ReaSet_ChartUndo.lua` carries native undo snapshots
+  on an inert track property; project extstate alone does not create an undo step.
 - v3.17 implements the approved task-based importer/recording workspaces; see
   `docs/WORKSPACE_LAYOUTS.md` and the original `docs/WORKSPACE_LAYOUT_PLAN.md`.
   Import review has Stems/Lyrics/Chords tabs and persistent Apply; recording has

@@ -40,8 +40,8 @@ import jamroom_loudness as level_model
 # what is on disk — the importer server holds its modules in memory, so this is
 # how you tell "did the update take effect?" from "is the old process still up?"
 # BUMP THIS whenever the importer changes, and quote it when handing over.
-BUILD = "v3.17"
-BUILD_DATE = "2026-09-18"
+BUILD = "v3.18"
+BUILD_DATE = "2026-09-22"
 
 # Fadr's S3 throttles each connection independently, so several transfers at
 # once finish far sooner than one at a time. Overridable via config.
@@ -1749,6 +1749,11 @@ def build_chart_chords(job, url, job_dir=None, key_offset=None):
 
 def prepare_chart_document(job, job_dir):
     """Shared generation path for fresh imports, repairs and bulk upgrades."""
+    if job.get("authored_chart"):
+        from jamroom_chart_author import validate
+        job["chart_document"] = validate(job["authored_chart"], job["duration"])
+        job["generation"] = {"generator": chart_model.GENERATOR, "revision": job["chart_document"].get("revision", "authored")}
+        return job["chart_document"]
     url = (job.get("chart") or {}).get("url")
     if url:
         result = build_chart_chords(job, url, job_dir,
@@ -1762,6 +1767,8 @@ def prepare_chart_document(job, job_dir):
         doc, events = chart_model.build_document(job, [], detected)
         chart_model.validate_document(doc)
         job["chart_document"], job["chords"] = doc, events
+    if isinstance((job.get('fadr') or {}).get('key'), str):
+        job['chart_document']['editing_key'] = job['fadr']['key']
     job["generation"] = {"generator": chart_model.GENERATOR,
                          "revision": job["chart_document"]["revision"]}
     return job["chart_document"]
@@ -2326,11 +2333,17 @@ def write_reaper_job(job, job_dir):
     if ly.get("offset_override") is not None:
         shift = ly["offset_override"]
     L.append("  lyrics_lines = {")
-    for ln in ly.get("lines", []):
+    written_lines = ly.get('lines', [])
+    if job.get('authored_chart'):
+        shift = 0
+        written_lines = []
+        for section in chart_model.lyric_items(job):
+            written_lines.extend([{'time':section['start'],'text':section['text']},{'time':section['end'],'text':''}])
+    for ln in written_lines:
         L.append(f"    {{ t = {max(0.0, round(ln['time'] + shift, 3))}, "
                  f"text = {lua_quote(ln['text'])} }},")
     L.append("  },")
-    if ly.get("plain"):
+    if ly.get("plain") and not job.get('authored_chart'):
         L.append(f"  lyrics_plain = {lua_quote(ly['plain'])},")
     L.append("}")
     with open(job_dir / "job_for_reaper.lua", "w", encoding="utf-8") as f:

@@ -138,3 +138,18 @@ class ImporterWorkspaceTests(unittest.IsolatedAsyncioTestCase):
         await self.page.locator('#workspaceUpdateSearch').fill('Song 8')
         self.assertLess(await self.page.locator('#updateSongs .songrow').count(),80)
         self.assertEqual(self.calls['/api/updates'],before)
+
+    async def test_chart_draft_survives_importer_reload_without_resetting_stems(self):
+        import test_chart_authoring as authored
+        await self.queue()
+        self.jobs[0]['review'].update(document=authored.document(),duration=60)
+        await self.page.evaluate('d=>{window._review.document=d;window._review.duration=60;}',authored.document())
+        await self.page.evaluate('ImportJobs.editChart()')
+        await self.page.locator('.ca-text').fill('Dm7   G/B\nFresh words for our room')
+        await self.page.wait_for_timeout(900)
+        await self.page.get_by_role('button',name='Close',exact=True).click()
+        await self.page.reload()
+        await self.page.wait_for_function('ImportJobs.enabled')
+        await self.page.evaluate('ImportJobs.editChart()')
+        await self.page.wait_for_selector('.ca-text')
+        self.assertIn('Fresh words for our room',await self.page.locator('.ca-text').input_value())

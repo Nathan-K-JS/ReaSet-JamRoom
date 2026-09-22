@@ -79,7 +79,7 @@ class Updates:
                                  states.get(f"song:{song['id']}:level") == level_stamp)
             has_backing = any(s.get('slot') not in ('CLICK','SKIP') for s in job.get('slots', []))
             level_eligible = has_backing and not level_current
-            manual_edits = bool(revision and revision != generation.get("revision"))
+            manual_edits = bool(revision and revision != generation.get("revision")) or bool(job.get('authored_chart'))
             status = "Keep this version" if protected else "Current" if current else "Update available" if job else "Source files missing"
             out.append(dict(song, project=project, protected=protected, current=current,
                             click_status=('Old click method: replace this version' if click and click.get('generator')!=ji.click_model.GENERATOR else
@@ -251,6 +251,7 @@ class Updates:
             candidate = copy.deepcopy(original)
             candidate["duration"] = item["end"] - item["start"]
             if not preserve_chart:
+                candidate.pop('authored_chart', None)
                 ji.stage_lyrics_align(candidate, folder, False, persist=False)
                 ji.prepare_chart_document(candidate, folder)
             if batch.get('approve_click'):

@@ -190,6 +190,7 @@ window.ImporterActivity = (function () {
     '/api/updates/protect':'Saving song protection', '/api/songs':'Reading REAPER songs', '/api/orphans':'Checking cached songs',
     '/api/library':'Loading Fadr library', '/api/search':'Searching songs', '/api/ug_search':'Searching charts',
     '/api/lyrics_search':'Searching lyrics', '/api/rechord':'Updating chart in REAPER', '/api/relyric':'Updating lyrics in REAPER',
+    '/api/library-chart-preview':'Preparing replacement chart preview', '/api/library-chart-install':'Saving reviewed chart in REAPER',
     '/api/cue_repair':'Opening chart tools', '/api/delete_song':'Deleting song', '/api/setkey':'Saving Fadr key'
   };
   window.fetch = function(input, options) {

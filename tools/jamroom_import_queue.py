@@ -281,6 +281,10 @@ class ImportQueue:
             result.pop('folder', None)
             result.pop('config', None)
             if result.get('review'):
+                if 'duration' not in result['review'] or 'document' not in result['review']:
+                    cached = ji.load_job(self.folder(ident))
+                    result['review'].setdefault('duration', cached.get('duration'))
+                    result['review'].setdefault('document', cached.get('authored_chart') or cached.get('chart_document'))
                 def scope(value):
                     if isinstance(value, dict):
                         return {k: scope(v) for k, v in value.items()}
@@ -369,6 +373,9 @@ class ImportQueue:
             offset = draft.get('lyrics_offset')
             if offset is not None and (not isinstance(offset, (int, float)) or not math.isfinite(offset)):
                 raise ValueError('Invalid lyric offset')
+            if draft.get('chart_document'):
+                from jamroom_chart_author import validate
+                draft['chart_document'] = validate(draft['chart_document'], ji.load_job(self.folder(ident))['duration'])
             row['draft'] = copy.deepcopy(draft)
             row['apply_prepared'] = False
             row['revision'] += 1
@@ -386,9 +393,13 @@ class ImportQueue:
         try:
             folder, cfg = self.folder(ident), self.config(row)
             job = ji.load_job(folder)
+            job = copy.deepcopy(job)
+            job.pop('authored_chart', None)
+            if row.get('draft', {}).get('lyrics_offset') is not None:
+                job.setdefault('lyrics', {})['offset_override'] = row['draft']['lyrics_offset']
             with self.analysis:
                 if action == 'lyrics':
-                    ji.lyrics_use_record(job, folder, body.get('id'))
+                    ji.lyrics_use_record(job, folder, body.get('id'), persist=False)
                     ji.prepare_chart_document(job, folder)
                 else:
                     if not job.get('chords_detected'):
@@ -398,16 +409,23 @@ class ImportQueue:
                     job['chart'] = {k: result.get(k) for k in ('method', 'key', 'capo',
                         'key_offset', 'lines_matched', 'chart_lines', 'fallback_reason')}
                     job['chart']['url'] = body.get('url', '')
-                ji.save_job(folder, job)
                 review = self.server.build_review(job, folder, cfg)
+                if body.get('preview'):
+                    candidate = uuid.uuid4().hex
+                    row['chart_candidate'] = {'id':candidate, 'job':job, 'review':review}
+                else:
+                    if row.get('draft', {}).get('chart_document'):
+                        raise Conflict('Review this replacement chart before replacing your authored words.')
+                    ji.save_job(folder, job)
             with self.guard:
-                row.update(review=review, revision=row['revision'] + 1)
+                if not body.get('preview'): row.update(review=review, revision=row['revision'] + 1)
         finally:
             ji.JOB_LOG.reset(token)
             with self.guard:
                 row['state'] = 'review'
                 self._save()
-        return {'ok': True, 'revision': row['revision'], 'review': self.detail(ident)['review'],
+        return {'ok': True, 'revision': row['revision'], 'review': review,
+                'candidate':row.get('chart_candidate',{}).get('id') if body.get('preview') else None,
                 'chart': job.get('chart', {})}
 
     def action(self, ident, action, body):
@@ -449,6 +467,19 @@ class ImportQueue:
                 return {'ok': True}
             if body.get('revision') != row['revision']:
                 raise Conflict('This review changed. Reopen it before continuing.')
+            if action == 'accept-chart':
+                candidate = row.get('chart_candidate')
+                if row['state'] != 'review' or row.get('apply_started') or not candidate or candidate['id'] != body.get('candidate'):
+                    raise Conflict('This chart preview is no longer current. Preview it again.')
+                row.setdefault('draft', {})['previous_chart'] = row['draft'].get('chart_document') or row.get('review', {}).get('document')
+                row['draft']['chart_document'] = candidate['review']['document']
+                ji.save_job(self.folder(ident), candidate['job'])
+                row['review'] = candidate['review']
+                row.pop('chart_candidate')
+                row['revision'] += 1
+                row['apply_prepared'] = False
+                self._save()
+                return self.detail(ident)
             if action == 'reopen':
                 if row['state'] != 'done':
                     raise Conflict('Only completed imports can be reopened for another project')
@@ -515,6 +546,9 @@ class ImportQueue:
             job['label_overrides'] = labels or job.get('label_overrides', {})
             if draft.get('lyrics_offset') is not None:
                 job.setdefault('lyrics', {})['offset_override'] = draft['lyrics_offset']
+            if draft.get('chart_document'):
+                from jamroom_chart_author import validate
+                job['authored_chart'] = validate(draft['chart_document'], job['duration'])
             job.update(import_operation=row['operation'], target_project=row['target'])
             ji.save_job(folder, job)
             if not row.get('apply_prepared'):

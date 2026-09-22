@@ -4,6 +4,7 @@ window.ImportJobs = (function(){
   var api = {enabled:false}, selected = null, detail = null, rows = [], paused = false;
   var dirty = false, timer = null, saving = null, version = 0, selection = 0, busy = false, polling = false;
   var filterText='',filterState='all',conflict=false;
+  var chartDraft=null,previousChart=null,chartView='edit';
   var rendered = '', listSignature = '', card, list, message, saved, target, recovery;
   function el(tag, text, parent){
     var node = document.createElement(tag);
@@ -34,6 +35,9 @@ window.ImportJobs = (function(){
   }
   function draft(){
     var value = {slots:{}, labels:{}, fields:{}};
+    value.chart_view=chartView;
+    if(chartDraft)value.chart_document=chartDraft;
+    if(previousChart)value.previous_chart=previousChart;
     document.querySelectorAll('#stemList select').forEach(function(node){value.slots[node.dataset.file] = node.value;});
     document.querySelectorAll('#stemList input.lbl').forEach(function(node){value.labels[node.dataset.file] = node.value.trim();});
     var offset = parseFloat($('lyrOffset').value);
@@ -43,6 +47,7 @@ window.ImportJobs = (function(){
   }
   function restoreDraft(value){
     value = value || {};
+    chartView=value.chart_view||'edit';chartDraft=value.chart_document||null;previousChart=value.previous_chart||null;
     document.querySelectorAll('#stemList select').forEach(function(node){
       if(value.slots && Object.hasOwn(value.slots, node.dataset.file)) node.value = value.slots[node.dataset.file];
     });
@@ -100,6 +105,7 @@ window.ImportJobs = (function(){
     renderJobActions(row);
   }
   async function select(id){
+    if(window.ChartAuthor&&ChartAuthor.active)ChartAuthor.active.close();
     if(busy) throw new Error('Let the current review change finish first.');
     await flush();
     var generation = ++selection;
@@ -117,6 +123,7 @@ window.ImportJobs = (function(){
     if(row.state === 'cached') message.textContent = 'Cached song: press Resume / open to prepare its review. Existing completed stages are reused.';
   }
   async function close(){
+    if(window.ChartAuthor&&ChartAuthor.active)ChartAuthor.active.close();
     if(busy) throw new Error('Let the current review change finish first.');
     await flush(); selection++; selected = null; detail = null; rendered = '';
     localStorage.removeItem('jamroom-import-job');
@@ -190,7 +197,7 @@ window.ImportJobs = (function(){
       if(selected && !busy && !dirty && !saving){
         var id = selected, generation = selection, row = await request('/' + selected);
         if(id !== selected || generation !== selection || dirty || saving || busy) return;
-        if(conflict||detail&&row.state==='review'&&row.revision!==detail.revision&&$('reviewCard').contains(document.activeElement)){
+        if(conflict||detail&&row.state==='review'&&row.revision!==detail.revision&&($('reviewCard').contains(document.activeElement)||window.ChartAuthor&&ChartAuthor.active)){
           conflict=true;$('workspaceReviewTools').open=true;
           saved.textContent='This review changed elsewhere. Reload the saved review before continuing.';
           $('applyBtn').disabled=true;return;
@@ -254,12 +261,36 @@ window.ImportJobs = (function(){
     try {
       if(busy) return;
       await flush(); busy = true; btn.disabled = true;
-      var result = await request('/' + selected + '/' + action, Object.assign({}, body, {revision:detail.revision}));
-      detail.revision = result.revision; detail.review = result.review;
-      showReview(result.review); restoreDraft(detail.draft);
-      saved.textContent = 'Saved';
+      var result = await request('/' + selected + '/' + action, Object.assign({}, body, {revision:detail.revision,preview:true}));
+      var candidate=result.candidate,id=selected;
+      ChartAuthor.open({title:'Preview replacement · '+detail.song,document:result.review.document,duration:result.review.duration,
+        save:async function(doc){
+          if(selected!==id)throw Error('Selected import changed.');
+          var accepted=await request('/'+id+'/accept-chart',{revision:detail.revision,candidate:candidate});
+          detail=accepted;showReview(detail.review);restoreDraft(detail.draft);chartDraft=doc;dirty=true;version++;await flush();
+          setTimeout(function(){ChartAuthor.active.close();api.editChart();},0);
+        },savedMessage:'Chart selected.'});
+      document.querySelector('#chart-author .ca-save').textContent='Use this chart';ChartAuthor.audition(ChartAuthor.active,{job:id});
+      return;
+
     } catch(error){failure(error);}
     finally {busy = false; btn.disabled = false;}
+  };
+  api.editChart=function(){
+    if(!detail||detail.state!=='review'||detail.apply_started)return;
+    var id=selected,audio=new Audio(),stopped=false;
+    document.querySelectorAll('audio').forEach(function(a){a.pause();});
+    var editor=ChartAuthor.open({view:chartView,onView:function(view){chartView=view;edited();},title:detail.song,document:chartDraft||detail.review.document,duration:detail.review.duration,
+      draftStatus:function(){return conflict?'Review conflict':saving||dirty?'Saving draft…':'Draft saved';},previous:previousChart,onPrevious:function(doc){previousChart=doc;},draftKey:'import-chart:'+id,audio:audio,audioStatus:'Preparing song audio…',
+      onChange:function(doc){if(selected===id){chartDraft=doc;edited();}},
+      canSave:function(){return conflict?'Review changed in another browser. Reload the saved review.':'';},
+      save:async function(doc){chartDraft=doc;edited();await flush();},
+      onClose:function(){stopped=true;audio.pause();flush().catch(failure);},
+      changeSource:function(){ChartAuthor.active.close();if(window.ImportWorkspace)ImportWorkspace.tab('chords');$('ugQuery').focus();$('ugQuery').scrollIntoView({block:'center'});}
+    });
+    async function prepare(){try{var response=await fetch('/api/chart-preview?job='+encodeURIComponent(id)),data=await response.json();if(stopped)return;if(data.error||data.state==='error'){editor.status(data.error||data.message);return;}if(data.state==='ready'){audio.src='/api/chart-preview?job='+encodeURIComponent(id)+'&audio=1';editor.setAudio(audio,data.peaks);}else{editor.status(data.message||'Preparing audio…');setTimeout(prepare,1000);}}catch(e){if(!stopped)editor.status('Audio unavailable: '+e.message+'. Chart editing is still available.');}}
+    audio.addEventListener('play',function(){document.querySelectorAll('audio').forEach(function(a){a.pause();});});
+    prepare();
   };
   api.open = select;
   api.nextReady=async function(){var next=rows.find(function(r){return r.state==='review'&&r.id!==selected;});if(next)await select(next.id);else if(window.ImportWorkspace)ImportWorkspace.showQueue();};

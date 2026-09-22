@@ -215,7 +215,7 @@
       <div class="note">Edit the full chart's section breaks in ReaSet, then tap page starts while playing.</div>
       <div class="repair-actions">
         <button class="primary" id="repairTimingBtn" onclick="openLiveTimingRepair()">
-          Edit sections and page timing
+          Edit chart and timing
           <small>Source words and chord positions stay together.</small>
         </button>
         <button onclick="openRechordFromRepair()">
@@ -324,6 +324,7 @@
 
     <h2 style="margin-top:16px">Chord chart</h2>
     <div id="chartNow" class="note"></div>
+    <button class="small" onclick="ImportJobs.editChart()">Review / edit chart</button>
     <div class="note">The chart becomes the chords shown in ReaSet, placed on
       the words they are printed above. Nothing is chosen automatically — pick
       the chart you actually play from.</div>
@@ -354,7 +355,7 @@
 <script>
 // Version of THIS page (served fresh from disk). Compared against the version
 // of the running server. Either side may be older.
-var UI_BUILD = "v3.17";
+var UI_BUILD = "v3.18";
 
 function importerVersionWarning(serverBuild) {
   if (serverBuild === UI_BUILD) return '';
@@ -799,7 +800,7 @@ function openLiveTimingRepair(){
     g_timingLaunchedSong = g_repairSong.name;
     if(target) target.location = url; else window.location.href = url;
     $('repairLaunchLog').innerHTML = '<span class="check ok">Song selected. '
-      + 'Use Edit sections, then Timing in the ReaSet window.</span>';
+      + 'Use Edit chart, then Timing in the ReaSet window.</span>';
   }).catch(function(e){
     $('repairTimingBtn').disabled = false;
     if(target) target.close();
@@ -915,29 +916,18 @@ function searchRechord(free, artist, title){
   });
 }
 
-function doRechord(url, btn){
-  if(!g_rechordSong) return;
-  dismissReceipt();
-  var songName = g_rechordSong.name;
-  btn.disabled = true; btn.style.opacity = '.6';
-  $('rechordLog').textContent = 'Rewriting chords in REAPER…';
-  fetch('/api/rechord', {method:'POST', headers:{'Content-Type':'application/json'},
-    body: JSON.stringify({name: g_rechordSong.name, url: url, snap: true,
-                          key_offset: $('rechordKey').value === ''
-                                      ? null : parseInt($('rechordKey').value, 10)})})
-  .then(r=>r.json()).then(function(d){
-    btn.disabled = false; btn.style.opacity = '';
-    if(d.error){
-      $('rechordLog').innerHTML = '<span class="check bad">' + d.error + '</span>';
-      return;
-    }
-    showReceipt('Chords replaced', songName + ' now uses the selected chart. '
-      + 'The stems and routing were left unchanged.', d.log || [], false, false);
-  }).catch(function(e){
-    btn.disabled = false; btn.style.opacity = '';
-    $('rechordLog').textContent = 'Failed: ' + e;
-  });
+async function libraryChartPreview(body,btn,log){
+  btn.disabled=true;log.textContent='Preparing chart preview…';
+  async function post(path,value){var r=await fetch(path,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(value)}),d=await r.json();if(!r.ok||d.error)throw Error(d.error||'Request failed');return d;}
+  try{var result=await post('/api/library-chart-preview',body);
+    ChartAuthor.open({title:'Replacement preview · '+body.name,document:result.document,duration:result.duration,
+      save:async function(doc){var response=await post('/api/library-chart-install',{candidate:result.candidate,document:doc});return response.revision;},
+      closeOnSave:true,savedMessage:'Chart installed. Save the REAPER project.'});
+    document.querySelector('#chart-author .ca-save').textContent='Use this chart';ChartAuthor.audition(ChartAuthor.active,{name:body.name});
+    log.textContent='Review the chart before replacing the current version.';
+  }catch(e){log.textContent=e.message;}finally{btn.disabled=false;}
 }
+function doRechord(url,btn){if(g_rechordSong)return libraryChartPreview({name:g_rechordSong.name,url:url,key_offset:$('rechordKey').value===''?null:parseInt($('rechordKey').value,10)},btn,$('rechordLog'));}
 
 // ── Give an existing song different lyrics (and re-place its chords) ──────
 
@@ -1312,6 +1302,8 @@ if(updateScopeIds){setSource('man');openUpdates();}
 setInterval(refreshChecks, 10000);
 </script>
 <script src="/importer-workspace.js"></script>
+<script src="/chart-pagination.js"></script>
+<script src="/chart-author.js"></script>
 <script src="/importer-queue.js"></script>
 </body>
 </html>

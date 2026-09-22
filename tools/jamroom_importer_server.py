@@ -235,7 +235,7 @@ def build_review(job, job_dir, cfg):
     first = next((l for l in ly.get("lines", []) if l["text"]), None)
     align = ly.get("align") or {}
     chart = job.get("chart") or {}
-    return {"stems": stems, "slot_choices": SLOT_CHOICES,
+    return {"document": job.get("chart_document"), "duration": job.get("duration"), "stems": stems, "slot_choices": SLOT_CHOICES,
             "band": job.get("band", ""), "title": job.get("title", ""),
             "chords_count": len(job.get("chords") or []),
             # Everything the review screen states about the chart has to come
@@ -660,6 +660,8 @@ def rechord_song(name, chart_url, snap=True, force=False, key_offset=None):
     jobs_dir = Path(cfg.get("jobs_dir") or (ji.REPO_ROOT / "imports"))
     job_dir = jobs_dir / ji.sanitize_filename(name)
     job = ji.load_job(job_dir)
+    if job.get('authored_chart'):
+        raise ValueError('This song has authored words. Use chart replacement preview before installing a different source.')
     if not job.get("chords") and not job.get("chart_source") and not job.get("chords_detected"):
         raise RuntimeError(
             "No chord timings are saved for this song, so there is nothing to "
@@ -670,6 +672,11 @@ def rechord_song(name, chart_url, snap=True, force=False, key_offset=None):
     if not song:
         raise RuntimeError(f'"{name}" is not in the REAPER project.')
     song["project"] = target_project
+
+    from jamroom_chart_library import revision as chart_revision
+    base_revision = chart_revision(sys.modules[__name__],cfg,song)
+    if base_revision.startswith('manual:'):
+        raise ValueError('This chart has manual edits. Preview the replacement before installing it.')
 
     # The chart REPLACES the detected chords rather than renaming them. The
     # detector's fault is not bad names but spurious changes - passing notes and
@@ -711,7 +718,7 @@ def rechord_song(name, chart_url, snap=True, force=False, key_offset=None):
     match = {"overlap_pct": res.get("key_fit_pct", 0), "warning": ""}
     stats = {"method": res["method"], "shown": len(res["chords"])}
 
-    result = _push_song_items(cfg, name, song, chords=job["chords"], document=job.get("chart_document"))
+    result = _push_song_items(cfg, name, song, chords=job["chords"], document=job.get("chart_document"), expected_revision=base_revision)
     ji.save_job(job_dir, job)
     return {"result": result, "match": match, "snapped": stats,
             "chart": job["chart"]}
@@ -728,7 +735,7 @@ def project_identity(cfg=None):
 
 
 def _push_song_items(cfg, name, song, chords=None, lyric_lines=None,
-                     document=None, operation_dir=None, expected=None, restore=None, click=None, level=None):
+                     document=None, operation_dir=None, expected=None, restore=None, click=None, level=None, expected_revision=None):
     """Shared durable transaction for repairs and batch upgrades."""
     operation_dir = Path(operation_dir or (Path(cfg["jobs_dir"]) / ".updates" / project_identity(cfg) / uuid.uuid4().hex))
     operation_dir.mkdir(parents=True, exist_ok=True)
@@ -739,6 +746,7 @@ def _push_song_items(cfg, name, song, chords=None, lyric_lines=None,
                "operation": operation, "before": str(operation_dir / "before.json"),
                "after": str(operation_dir / "after.json"), "receipt": str(receipt)}
     if expected: request["expected"] = str(expected)
+    if expected_revision is not None: request['expected_revision'] = expected_revision
     if restore: request["restore"] = str(restore)
     if click is not None: request['click'] = click
     if level is not None: request['level'] = level
@@ -784,11 +792,17 @@ def relyric_song(name, record_id=None, offset=None):
     jobs_dir = Path(cfg.get("jobs_dir") or (ji.REPO_ROOT / "imports"))
     job_dir = jobs_dir / ji.sanitize_filename(name)
     job = ji.load_job(job_dir)
+    if job.get('authored_chart'):
+        raise ValueError('This song has authored words. Use Edit chart to keep Lyrics and Chords consistent.')
     song = next((s for s in project_songs() if s["name"] == name), None)
     if not song:
         raise RuntimeError(f'"{name}" is not in the REAPER project.')
     song["project"] = target_project
 
+    from jamroom_chart_library import revision as chart_revision
+    base_revision = chart_revision(sys.modules[__name__], cfg, song)
+    if base_revision.startswith('manual:'):
+        raise ValueError('This chart has manual edits. Preview replacement lyrics before installing them.')
     if not job.get("chords_detected"):
         job["chords_detected"] = ji.detected_chords(job, job_dir)
     if record_id is not None:
@@ -826,7 +840,7 @@ def relyric_song(name, record_id=None, offset=None):
                 "replaced. Use “Fix chords…” to take chords from a chart.")
     ji.prepare_chart_document(job, job_dir)
     result = _push_song_items(cfg, name, song, chords=job["chords"],
-                              lyric_lines=lyric_items, document=job["chart_document"])
+                              lyric_lines=lyric_items, document=job["chart_document"], expected_revision=base_revision)
     ji.save_job(job_dir, job)
     # These checkpoints describe the old source timestamps. Applying them to
     # newly selected lyric timings would double-correct the song. Chord timing
@@ -983,6 +997,30 @@ class Handler(BaseHTTPRequestHandler):
         self.send_response(404); self.send_header('Content-Length', '0'); self.end_headers()
 
     def do_GET(self):
+        if self.path in ('/chart-author.js', '/chart-pagination.js'):
+            html = (ji.REPO_ROOT / 'ReaSet.html').read_text(encoding='utf-8')
+            if self.path == '/chart-author.js':
+                source = html.split('<script id="chart-author-core">',1)[1].split('</script>',1)[0]
+            else:
+                source = html[html.index('        function chartRowKey('):html.index('        function renderStructuredChart(')]
+                source = 'function transposeChordName(s,n){return s;}\n' + source
+            return self._send(200, source.encode('utf-8'), 'text/javascript')
+        if self.path.startswith('/api/chart-preview?'):
+            from urllib.parse import parse_qs
+            import jamroom_chart_preview as preview
+            try:
+                query = parse_qs(urlparse(self.path).query)
+                if query.get('job'): folder = import_queue().folder(query['job'][0])
+                else:
+                    cfg=ji.load_config(None)
+                    folder=Path(cfg.get('jobs_dir') or ji.REPO_ROOT/'imports')/ji.sanitize_filename(query['name'][0])
+                result = preview.prepare(folder, ji.load_job(folder))
+                if query.get('audio') and result['state']=='ready':
+                    return self._serve_audio_file(folder / '.chart-preview' / result['key'] / 'audio.wav')
+                return self._send(200, result)
+            except Exception as error: return self._send(400, {'error':str(error)})
+        if self.path.startswith('/chart-source?'):
+            return self._send(200, (TOOLDIR / 'chart-source.html').read_bytes(), 'text/html')
         if self.path.startswith(('/recordings', '/listen/', '/api/listening')):
             if listening.handle_get(self, listening_service(), lan_url): return
         if self.path in ("/", "/index.html"):
@@ -1055,6 +1093,23 @@ class Handler(BaseHTTPRequestHandler):
                     ACTIVE_REQUESTS += 1
                     tracked = True
             body = self._body()
+            if self.path in ('/api/library-chart-preview','/api/library-chart-install'):
+                import jamroom_chart_library as library_chart
+                if not self._claim_maintenance(): return
+                try:
+                    if QUEUE is not None and body.get('name'): QUEUE.protect([body['name']])
+                    result = (library_chart.preview if self.path.endswith('preview') else library_chart.install)(sys.modules[__name__],body)
+                    return self._send(200,result)
+                finally: BUSY.release()
+            if self.path == '/api/chart-source':
+                cfg = ji.load_config(None)
+                folder = Path(cfg.get('jobs_dir') or ji.REPO_ROOT / 'imports') / ji.sanitize_filename(body['name'])
+                job = copy.deepcopy(ji.load_job(folder))
+                if not job.get('duration'): raise ValueError('No cached source for this song. You can still write the chart manually.')
+                job.pop('authored_chart', None)
+                result = ji.build_chart_chords(job, body['url'], job_dir=folder)
+                if not job.get('chart_document'): raise ValueError('This source did not provide a chart.')
+                return self._send(200, {'document':job['chart_document'], 'chart':result})
             if self.path == '/api/stop':
                 DRAIN.set()
                 UPDATES.stop.set()

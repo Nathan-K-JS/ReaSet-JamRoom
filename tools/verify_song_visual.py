@@ -42,6 +42,8 @@ def main():
     job = json.loads((source / 'job.json').read_text(encoding='utf-8'))
     for slot in job.get('slots', []):
         assert (source / slot['file']).is_file(), slot['file']
+        local=folder/slot['file'];local.parent.mkdir(parents=True,exist_ok=True)
+        if not local.exists():os.link(source/slot['file'],local)
     importer.write_reaper_job(job, folder)
     generated = folder / 'job_for_reaper.lua'
     content = generated.read_text(encoding='utf-8')
@@ -53,6 +55,7 @@ def main():
     (folder / 'Requirements').mkdir()
     shutil.copy2(ROOT / 'tools/jamroom_import_apply.lua', folder / 'tools')
     shutil.copy2(ROOT / 'Requirements/ReaSet_JSON.lua', folder / 'Requirements')
+    shutil.copy2(ROOT / 'Requirements/ReaSet_Playback.lua', folder / 'Requirements')
     (folder / 'tools/jamroom_pending_job.txt').write_text(folder.as_posix(), encoding='utf-8')
     lua = r'''
 local root,folder=ROOT,FOLDER
@@ -154,6 +157,7 @@ if not ok then write('error.json',{error=tostring(why)});cleanup()end
             browser = pw.chromium.launch(executable_path=str(edge), headless=True)
             page = browser.new_page(viewport={'width':1440,'height':1000})
             page.on('pageerror', lambda e: errors.append(str(e)))
+            page.route('**/ReaSet.html', lambda route: route.fulfill(path=str(ROOT/'ReaSet.html'),content_type='text/html'))
             page.on('request', lambda r: (folder / 'edit-request.txt').write_text(r.url, encoding='utf-8') if 'SET/EXTSTATE/ReaSetCL/want/' in r.url else None)
             page.goto(WEB + '/ReaSet.html')
             page.locator('#tab-btn-chords').click()
@@ -200,14 +204,22 @@ if not ok then write('error.json',{error=tostring(why)});cleanup()end
             if '--edit-check' in sys.argv:
                 page.set_viewport_size({'width':1440,'height':1000})
                 before = page.evaluate('g_clData.document')
-                page.get_by_role('button', name='Edit sections', exact=True).click()
+                page.get_by_role('button', name='Edit chart', exact=True).click()
+                # Choose a section with at least two written rows and split at
+                # the second row's actual text caret position.
+                index=next(i for i,s in enumerate(before['sections']) if len(s['rows'])>1)
+                page.locator('.ca-section-list button').nth(index).click()
+                page.locator('.ca-text').evaluate('''e=>{const rows=ChartAuthor.active.getDocument().sections[Number(document.querySelector('.ca-sections').value)].rows;
+                    const first=ChartAuthor.lines({rows:[rows[0]]}).text.length+1;e.setSelectionRange(first,first);}''')
                 page.get_by_role('button', name='Start section here', exact=True).first.click()
                 page.screenshot(path=str(folder / 'section-editor.png'), full_page=True)
-                page.get_by_role('button', name='Save sections', exact=True).click()
+                page.get_by_role('button', name='Save chart', exact=True).click()
                 page.wait_for_function('r => g_clData.document.revision !== r', arg=before['revision'])
                 edited = page.evaluate('g_clData.document')
                 assert len(edited['sections']) == len(before['sections']) + 1
-                assert [r for s in before['sections'] for r in s['rows']] == [r for s in edited['sections'] for r in s['rows']]
+                def content(d):return [(r.get('text',''),r.get('chord_line',''),r.get('anchors',[])) for s in d['sections'] for r in s['rows']]
+                assert content(before)==content(edited)
+                page.get_by_role('button',name='Close',exact=True).click()
                 # Test a real cue tap at a stopped transport position, not a
                 # synthetic browser acknowledgment or a mutation of its data.
                 section = edited['sections'][1]

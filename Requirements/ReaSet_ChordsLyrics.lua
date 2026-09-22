@@ -34,10 +34,11 @@
 
 local dir = debug.getinfo(1,"S").source:match("@?(.*[\\/])") or ""
 local J = dofile(dir .. "ReaSet_JSON.lua")
+local ChartUndo = dofile(dir .. "ReaSet_ChartUndo.lua")
 local SEC        = "ReaSetCL"
 local REPAIR_SEC = "ReaSetCLRepair"
 local CHUNK_SIZE = 800
-local MAX_CHUNKS = 256          -- ~51 KB: ample for one song
+local MAX_CHUNKS = 2048          -- authored document + previous version, escaped Unicode
 local HB_PERIOD  = 1.0
 local LOOP_RGN   = "ReaSet Loop"
 
@@ -241,6 +242,8 @@ local function build_json()
     local lyrics_json = table.concat(parts, ",")
 
     local _, document = reaper.GetProjExtState(0, "ReaSetSong", "song:" .. song.id .. ":document")
+    local _, previous = reaper.GetProjExtState(0, "ReaSetSong", "song:" .. song.id .. ":previous")
+    if previous=='' then previous='null' end
     local _, project = reaper.GetProjExtState(0, "ReaSet", "projectId")
     local chart_json = "null"
     if document ~= "" then
@@ -259,9 +262,9 @@ local function build_json()
     return string.format(
         '{"schema":1,"song":{"id":%d,"name":"%s","start":%.3f,"end":%.3f},'
         .. '"chords":[%s],"lyrics":[%s],'
-        .. '"document":%s,"project":"%s","repair":{"chords":%s,"lyrics":%s,'
+        .. '"document":%s,"previous_document":%s,"project":"%s","repair":{"chords":%s,"lyrics":%s,'
         .. '"reviewed":{"chords":%s,"lyrics":%s}}}',
-        song.id, jesc(song.name), song.s, song.e, chords_json, lyrics_json, chart_json, jesc(project),
+        song.id, jesc(song.name), song.s, song.e, chords_json, lyrics_json, chart_json, previous, jesc(project),
         anchors_json(ch_anchors), anchors_json(ly_anchors),
         load_reviewed(song.id, "chords") and "true" or "false",
         load_reviewed(song.id, "lyrics") and "true" or "false")
@@ -394,20 +397,21 @@ local function process_repair_command(want, song)
         return repair_reply(nonce, false,
             "Open the song you want to repair, then try again.")
     end
-    if action == "layout" or action == "cue" or action == "pagecue" or action == "offset" then
+    if action == "author" or action == "layout" or action == "cue" or action == "pagecue" or action == "offset" then
         local _,project=reaper.GetProjExtState(0,'ReaSet','projectId')
         if project~=f[5] then return repair_reply(nonce,false,'Project changed; reopen the chart.') end
         local key='song:'..song.id..':'
         local _,blob=reaper.GetProjExtState(0,'ReaSetSong',key..'document')
-        local doc=J.decode(blob)
+        local doc=blob~='' and J.decode(blob) or {schema=2,sections=J.array(),revision=''}
+        if action=='author' and (reaper.GetPlayState()~=0 or reaper.GetExtState('ReaSetRec','lock')==project)then return repair_reply(nonce,false,'Stop playback and choose Done in Recording before saving chart content.')end
         if doc.revision~=f[4] then return repair_reply(nonce,false,'Chart changed; reopen the editor before saving.') end
-        if #load_anchors(song.id,'lyrics')>0 or #load_anchors(song.id,'chords')>0 then
+        if action~='author' and (#load_anchors(song.id,'lyrics')>0 or #load_anchors(song.id,'chords')>0) then
             return repair_reply(nonce,false,'Replace old timing fixes in Song Library before editing this chart.')
         end
         local payload=f[6] or ''
         local count=tonumber(payload:match('^chunks:(%d+)$'))
         if count then
-            if count<1 or count>192 then return repair_reply(nonce,false,'Invalid chart edit size.') end
+            if count<1 or count>(action=='author' and 1024 or 192) then return repair_reply(nonce,false,'Invalid chart edit size.') end
             local chunks={}
             for i=0,count-1 do
                 local key='edit:'..nonce..':'..i
@@ -425,13 +429,21 @@ local function process_repair_command(want, song)
         local editor=dofile(dir..'ReaSet_ChartEdit.lua')
         local ok,result=pcall(editor.apply,doc,action,data,song.e-song.s)
         if not ok then return repair_reply(nonce,false,tostring(result)) end
+        local undo=ChartUndo
+        local undo_track=undo.prepare(song.id)
         result.revision='manual:'..nonce..':'..tostring(reaper.time_precise())
         reaper.Undo_BeginBlock()
+        if action=='author' then
+            reaper.SetProjExtState(0,'ReaSetSong',key..'previous',blob)
+            save_anchors(song.id,'lyrics',{})
+            save_anchors(song.id,'chords',{})
+        end
         reaper.SetProjExtState(0,'ReaSetSong',key..'document',J.encode(result))
         reaper.SetProjExtState(0,'ReaSetSong',key..'revision',result.revision)
+        undo.commit(song.id,undo_track)
         reaper.MarkProjectDirty(0)
         reaper.Undo_EndBlock('Edit chart '..action,-1)
-        repair_reply(nonce,true,action=='layout' and 'Sections saved. Chord positions preserved.' or action=='offset' and 'Whole-song offset saved.' or 'Page timing saved. Chart content preserved.')
+        repair_reply(nonce,true,action=='author' and 'Chart saved in REAPER. Save the project to keep it.' or action=='layout' and 'Sections saved. Chord positions preserved.' or action=='offset' and 'Whole-song offset saved.' or 'Page timing saved. Chart content preserved.')
         return true
     end
     if action == "section" then return section_command(f,song) end
@@ -535,6 +547,7 @@ local function main_loop()
                                           or reaper.GetCursorPosition()
     local song = song_at(pos)
     local song_id = song and song.id or nil
+    if reaper.GetProjectStateChangeCount(0)~=s_last_csc or reaper.EnumProjects(-1,'')~=s_last_proj then ChartUndo.sync_all() end
     local want = reaper.GetExtState(SEC, "want")
     if want ~= "" and want ~= s_last_want then
         s_last_want = want

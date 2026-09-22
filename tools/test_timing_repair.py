@@ -91,10 +91,10 @@ class ImporterContractTests(unittest.TestCase):
         importer = (TOOLS / "importer.html").read_text(encoding="utf-8")
         lua = (ROOT / "Requirements" / "ReaSet_ChordsLyrics.lua").read_text(
             encoding="utf-8")
-        self.assertTrue('id="chart-editor"' in html)
+        self.assertTrue('id="chart-author-core"' in html)
         self.assertTrue("This page starts now" in html)
         self.assertFalse('id="timing-repair"' in html)
-        self.assertTrue("Edit sections and page timing" in importer)
+        self.assertTrue("Edit chart and timing" in importer)
         self.assertTrue("Update whole library" in importer)
         self.assertIn('local REPAIR_SEC = "ReaSetCLRepair"', lua)
         self.assertIn("mapped_relative", lua)
