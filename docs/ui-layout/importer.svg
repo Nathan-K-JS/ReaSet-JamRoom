@@ -1,0 +1,208 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1320" height="840" viewBox="0 0 1320 840" role="img" aria-label="Proposed importer desktop review; static design, not implemented"><style>text{font-family:Segoe UI,Arial,sans-serif}.bold{font-weight:600}</style>
+<rect x="0" y="0" width="1320" height="840" rx="0" fill="#101419"/>
+<text x="24" y="30" font-size="14" fill="#74ddb0" class="bold">LAYOUT PROPOSAL / IMPORT REVIEW</text>
+<text x="891" y="30" font-size="13" fill="#9dafbc">Static design - no REAPER connection</text>
+<rect x="20" y="52" width="1280" height="756" rx="14" fill="#141a20" stroke="#34414b"/>
+<text x="40" y="89" font-size="20" fill="#eaf0f4" class="bold">Jam Room</text>
+<rect x="216" y="64" width="104" height="44" rx="8" fill="#74ddb0"/>
+<text x="230" y="92" font-size="14" fill="#10271e" class="bold">Imports</text>
+<rect x="328" y="64" width="142" height="44" rx="8" fill="#28343e"/>
+<text x="342" y="92" font-size="14" fill="#eaf0f4" class="bold">Song library</text>
+<rect x="478" y="64" width="174" height="44" rx="8" fill="#28343e"/>
+<text x="492" y="92" font-size="14" fill="#eaf0f4" class="bold">Exported recordings</text>
+<text x="1030" y="91" font-size="14" fill="#9dafbc">Connected  ·  Settings</text>
+<rect x="20" y="121" width="1280" height="1" rx="0" fill="#34414b"/>
+<text x="40" y="160" font-size="20" fill="#eaf0f4" class="bold">Your imports</text>
+<rect x="166" y="137" width="116" height="44" rx="8" fill="#74ddb0"/>
+<text x="180" y="165" font-size="14" fill="#10271e" class="bold">Add songs</text>
+<rect x="40" y="199" width="242" height="40" rx="7" fill="#11171d"/>
+<text x="54" y="225" font-size="14" fill="#9dafbc">Search your imports</text>
+<text x="40" y="269" font-size="13" fill="#a4f3d0">All 11   Ready 4   Attention 2</text>
+<rect x="304" y="122" width="1" height="1" rx="0" fill="#34414b"/>
+<rect x="32" y="290" width="260" height="62" rx="7" fill="#213d33"/>
+<text x="43" y="314" font-size="13" fill="#eaf0f4" class="bold">Toto - Africa</text>
+<text x="43" y="335" font-size="12" fill="#74ddb0">Ready to review</text>
+<rect x="32" y="360" width="260" height="62" rx="7" fill="#1c232b"/>
+<text x="43" y="384" font-size="13" fill="#eaf0f4" class="bold">Lenny Kravitz - Fly Away</text>
+<text x="43" y="405" font-size="12" fill="#a2b2bf">Splitting on Fadr</text>
+<rect x="32" y="430" width="260" height="62" rx="7" fill="#1c232b"/>
+<text x="43" y="454" font-size="13" fill="#eaf0f4" class="bold">Queen - Somebody To Love</text>
+<text x="43" y="475" font-size="12" fill="#74ddb0">Ready to review</text>
+<rect x="32" y="500" width="260" height="62" rx="7" fill="#1c232b"/>
+<text x="43" y="524" font-size="13" fill="#eaf0f4" class="bold">Paramore - Still Into You</text>
+<text x="43" y="545" font-size="12" fill="#a2b2bf">Resume available</text>
+<rect x="32" y="570" width="260" height="62" rx="7" fill="#1c232b"/>
+<text x="43" y="594" font-size="13" fill="#eaf0f4" class="bold">Fleetwood Mac - Dreams</text>
+<text x="43" y="615" font-size="12" fill="#a2b2bf">Queued</text>
+<rect x="32" y="640" width="260" height="62" rx="7" fill="#1c232b"/>
+<text x="43" y="664" font-size="13" fill="#eaf0f4" class="bold">Muse - Starlight</text>
+<text x="43" y="685" font-size="12" fill="#d7bb87">Needs attention</text>
+<text x="42" y="744" font-size="13" fill="#9dafbc">1 splitting · 5 queued</text>
+<rect x="40" y="759" width="242" height="44" rx="8" fill="#28343e"/>
+<text x="54" y="787" font-size="14" fill="#eaf0f4" class="bold">View all activity</text>
+<text x="330" y="163" font-size="25" fill="#eaf0f4" class="bold">Toto - Africa</text>
+<text x="330" y="191" font-size="14" fill="#9dafbc">8 stems  ·  Review saved  ·  Target: JamRoom.RPP</text>
+<rect x="330" y="211" width="114" height="44" rx="8" fill="#74ddb0"/>
+<text x="344" y="239" font-size="14" fill="#10271e" class="bold">Stems 8</text>
+<rect x="452" y="211" width="146" height="44" rx="8" fill="#28343e"/>
+<text x="466" y="239" font-size="14" fill="#eaf0f4" class="bold">Lyrics: timed</text>
+<rect x="606" y="211" width="184" height="44" rx="8" fill="#28343e"/>
+<text x="620" y="239" font-size="14" fill="#eaf0f4" class="bold">Chords: choose chart</text>
+<text x="330" y="290" font-size="18" fill="#eaf0f4" class="bold">Listen and assign</text>
+<text x="330" y="315" font-size="13" fill="#9dafbc">Only the selected stem opens its preview and display-name controls.</text>
+<text x="348" y="352" font-size="12" fill="#9dafbc" class="bold">STEM</text>
+<text x="855" y="352" font-size="12" fill="#9dafbc" class="bold">JAM ROOM GROUP</text>
+<text x="1140" y="352" font-size="12" fill="#9dafbc" class="bold">PREVIEW</text>
+<rect x="330" y="365" width="942" height="47" rx="5" fill="#1a222a"/>
+<text x="348" y="394" font-size="15" fill="#eaf0f4" class="bold">Drums</text>
+<text x="869" y="394" font-size="14" fill="#eaf0f4">Drums  v</text>
+<text x="1160" y="394" font-size="14" fill="#74ddb0">Play</text>
+<rect x="330" y="416" width="942" height="47" rx="5" fill="#202a33"/>
+<text x="348" y="445" font-size="15" fill="#eaf0f4" class="bold">Bass</text>
+<text x="869" y="445" font-size="14" fill="#eaf0f4">Bass  v</text>
+<text x="1160" y="445" font-size="14" fill="#74ddb0">Play</text>
+<rect x="330" y="467" width="942" height="47" rx="5" fill="#1a222a"/>
+<text x="348" y="496" font-size="15" fill="#eaf0f4" class="bold">Guitar 1</text>
+<text x="869" y="496" font-size="14" fill="#eaf0f4">Guitar 1  v</text>
+<text x="1160" y="496" font-size="14" fill="#74ddb0">Play</text>
+<rect x="330" y="518" width="942" height="47" rx="5" fill="#1a222a"/>
+<text x="348" y="547" font-size="15" fill="#eaf0f4" class="bold">Guitar 2</text>
+<text x="869" y="547" font-size="14" fill="#eaf0f4">Guitar 2  v</text>
+<text x="1160" y="547" font-size="14" fill="#74ddb0">Play</text>
+<rect x="330" y="569" width="942" height="47" rx="5" fill="#1a222a"/>
+<text x="348" y="598" font-size="15" fill="#eaf0f4" class="bold">Keys</text>
+<text x="869" y="598" font-size="14" fill="#eaf0f4">Keys  v</text>
+<text x="1160" y="598" font-size="14" fill="#74ddb0">Play</text>
+<rect x="330" y="630" width="942" height="85" rx="8" fill="#22382f"/>
+<text x="348" y="654" font-size="14" fill="#eaf0f4" class="bold">Bass preview</text>
+<text x="1064" y="654" font-size="12" fill="#b2c8bd">Display name: Bass</text>
+<rect x="351" y="679.0" width="3" height="6" rx="1" fill="#74ddb0"/>
+<rect x="357" y="670.5" width="3" height="23" rx="1" fill="#74ddb0"/>
+<rect x="363" y="676.5" width="3" height="11" rx="1" fill="#74ddb0"/>
+<rect x="369" y="668.0" width="3" height="28" rx="1" fill="#74ddb0"/>
+<rect x="375" y="674.0" width="3" height="16" rx="1" fill="#74ddb0"/>
+<rect x="381" y="665.5" width="3" height="33" rx="1" fill="#74ddb0"/>
+<rect x="387" y="671.5" width="3" height="21" rx="1" fill="#74ddb0"/>
+<rect x="393" y="677.5" width="3" height="9" rx="1" fill="#74ddb0"/>
+<rect x="399" y="669.0" width="3" height="26" rx="1" fill="#74ddb0"/>
+<rect x="405" y="675.0" width="3" height="14" rx="1" fill="#74ddb0"/>
+<rect x="411" y="666.5" width="3" height="31" rx="1" fill="#74ddb0"/>
+<rect x="417" y="672.5" width="3" height="19" rx="1" fill="#74ddb0"/>
+<rect x="423" y="678.5" width="3" height="7" rx="1" fill="#74ddb0"/>
+<rect x="429" y="670.0" width="3" height="24" rx="1" fill="#74ddb0"/>
+<rect x="435" y="676.0" width="3" height="12" rx="1" fill="#74ddb0"/>
+<rect x="441" y="667.5" width="3" height="29" rx="1" fill="#74ddb0"/>
+<rect x="447" y="673.5" width="3" height="17" rx="1" fill="#74ddb0"/>
+<rect x="453" y="665.0" width="3" height="34" rx="1" fill="#74ddb0"/>
+<rect x="459" y="671.0" width="3" height="22" rx="1" fill="#74ddb0"/>
+<rect x="465" y="677.0" width="3" height="10" rx="1" fill="#74ddb0"/>
+<rect x="471" y="668.5" width="3" height="27" rx="1" fill="#74ddb0"/>
+<rect x="477" y="674.5" width="3" height="15" rx="1" fill="#74ddb0"/>
+<rect x="483" y="666.0" width="3" height="32" rx="1" fill="#74ddb0"/>
+<rect x="489" y="672.0" width="3" height="20" rx="1" fill="#74ddb0"/>
+<rect x="495" y="678.0" width="3" height="8" rx="1" fill="#74ddb0"/>
+<rect x="501" y="669.5" width="3" height="25" rx="1" fill="#74ddb0"/>
+<rect x="507" y="675.5" width="3" height="13" rx="1" fill="#74ddb0"/>
+<rect x="513" y="667.0" width="3" height="30" rx="1" fill="#74ddb0"/>
+<rect x="519" y="673.0" width="3" height="18" rx="1" fill="#74ddb0"/>
+<rect x="525" y="679.0" width="3" height="6" rx="1" fill="#74ddb0"/>
+<rect x="531" y="670.5" width="3" height="23" rx="1" fill="#74ddb0"/>
+<rect x="537" y="676.5" width="3" height="11" rx="1" fill="#74ddb0"/>
+<rect x="543" y="668.0" width="3" height="28" rx="1" fill="#74ddb0"/>
+<rect x="549" y="674.0" width="3" height="16" rx="1" fill="#74ddb0"/>
+<rect x="555" y="665.5" width="3" height="33" rx="1" fill="#74ddb0"/>
+<rect x="561" y="671.5" width="3" height="21" rx="1" fill="#74ddb0"/>
+<rect x="567" y="677.5" width="3" height="9" rx="1" fill="#74ddb0"/>
+<rect x="573" y="669.0" width="3" height="26" rx="1" fill="#74ddb0"/>
+<rect x="579" y="675.0" width="3" height="14" rx="1" fill="#74ddb0"/>
+<rect x="585" y="666.5" width="3" height="31" rx="1" fill="#74ddb0"/>
+<rect x="591" y="672.5" width="3" height="19" rx="1" fill="#74ddb0"/>
+<rect x="597" y="678.5" width="3" height="7" rx="1" fill="#74ddb0"/>
+<rect x="603" y="670.0" width="3" height="24" rx="1" fill="#74ddb0"/>
+<rect x="609" y="676.0" width="3" height="12" rx="1" fill="#74ddb0"/>
+<rect x="615" y="667.5" width="3" height="29" rx="1" fill="#74ddb0"/>
+<rect x="621" y="673.5" width="3" height="17" rx="1" fill="#74ddb0"/>
+<rect x="627" y="665.0" width="3" height="34" rx="1" fill="#74ddb0"/>
+<rect x="633" y="671.0" width="3" height="22" rx="1" fill="#74ddb0"/>
+<rect x="639" y="677.0" width="3" height="10" rx="1" fill="#74ddb0"/>
+<rect x="645" y="668.5" width="3" height="27" rx="1" fill="#74ddb0"/>
+<rect x="651" y="674.5" width="3" height="15" rx="1" fill="#74ddb0"/>
+<rect x="657" y="666.0" width="3" height="32" rx="1" fill="#74ddb0"/>
+<rect x="663" y="672.0" width="3" height="20" rx="1" fill="#74ddb0"/>
+<rect x="669" y="678.0" width="3" height="8" rx="1" fill="#74ddb0"/>
+<rect x="675" y="669.5" width="3" height="25" rx="1" fill="#74ddb0"/>
+<rect x="681" y="675.5" width="3" height="13" rx="1" fill="#74ddb0"/>
+<rect x="687" y="667.0" width="3" height="30" rx="1" fill="#74ddb0"/>
+<rect x="693" y="673.0" width="3" height="18" rx="1" fill="#74ddb0"/>
+<rect x="699" y="679.0" width="3" height="6" rx="1" fill="#74ddb0"/>
+<rect x="705" y="670.5" width="3" height="23" rx="1" fill="#74ddb0"/>
+<rect x="711" y="676.5" width="3" height="11" rx="1" fill="#74ddb0"/>
+<rect x="717" y="668.0" width="3" height="28" rx="1" fill="#74ddb0"/>
+<rect x="723" y="674.0" width="3" height="16" rx="1" fill="#74ddb0"/>
+<rect x="729" y="665.5" width="3" height="33" rx="1" fill="#74ddb0"/>
+<rect x="735" y="671.5" width="3" height="21" rx="1" fill="#74ddb0"/>
+<rect x="741" y="677.5" width="3" height="9" rx="1" fill="#74ddb0"/>
+<rect x="747" y="669.0" width="3" height="26" rx="1" fill="#74ddb0"/>
+<rect x="753" y="675.0" width="3" height="14" rx="1" fill="#74ddb0"/>
+<rect x="759" y="666.5" width="3" height="31" rx="1" fill="#74ddb0"/>
+<rect x="765" y="672.5" width="3" height="19" rx="1" fill="#74ddb0"/>
+<rect x="771" y="678.5" width="3" height="7" rx="1" fill="#74ddb0"/>
+<rect x="777" y="670.0" width="3" height="24" rx="1" fill="#74ddb0"/>
+<rect x="783" y="676.0" width="3" height="12" rx="1" fill="#74ddb0"/>
+<rect x="789" y="667.5" width="3" height="29" rx="1" fill="#74ddb0"/>
+<rect x="795" y="673.5" width="3" height="17" rx="1" fill="#74ddb0"/>
+<rect x="801" y="665.0" width="3" height="34" rx="1" fill="#74ddb0"/>
+<rect x="807" y="671.0" width="3" height="22" rx="1" fill="#74ddb0"/>
+<rect x="813" y="677.0" width="3" height="10" rx="1" fill="#74ddb0"/>
+<rect x="819" y="668.5" width="3" height="27" rx="1" fill="#74ddb0"/>
+<rect x="825" y="674.5" width="3" height="15" rx="1" fill="#74ddb0"/>
+<rect x="831" y="666.0" width="3" height="32" rx="1" fill="#74ddb0"/>
+<rect x="837" y="672.0" width="3" height="20" rx="1" fill="#74ddb0"/>
+<rect x="843" y="678.0" width="3" height="8" rx="1" fill="#74ddb0"/>
+<rect x="849" y="669.5" width="3" height="25" rx="1" fill="#74ddb0"/>
+<rect x="855" y="675.5" width="3" height="13" rx="1" fill="#74ddb0"/>
+<rect x="861" y="667.0" width="3" height="30" rx="1" fill="#74ddb0"/>
+<rect x="867" y="673.0" width="3" height="18" rx="1" fill="#74ddb0"/>
+<rect x="873" y="679.0" width="3" height="6" rx="1" fill="#74ddb0"/>
+<rect x="879" y="670.5" width="3" height="23" rx="1" fill="#74ddb0"/>
+<rect x="885" y="676.5" width="3" height="11" rx="1" fill="#74ddb0"/>
+<rect x="891" y="668.0" width="3" height="28" rx="1" fill="#74ddb0"/>
+<rect x="897" y="674.0" width="3" height="16" rx="1" fill="#74ddb0"/>
+<rect x="903" y="665.5" width="3" height="33" rx="1" fill="#74ddb0"/>
+<rect x="909" y="671.5" width="3" height="21" rx="1" fill="#74ddb0"/>
+<rect x="915" y="677.5" width="3" height="9" rx="1" fill="#74ddb0"/>
+<rect x="921" y="669.0" width="3" height="26" rx="1" fill="#74ddb0"/>
+<rect x="927" y="675.0" width="3" height="14" rx="1" fill="#74ddb0"/>
+<rect x="933" y="666.5" width="3" height="31" rx="1" fill="#74ddb0"/>
+<rect x="939" y="672.5" width="3" height="19" rx="1" fill="#74ddb0"/>
+<rect x="945" y="678.5" width="3" height="7" rx="1" fill="#74ddb0"/>
+<rect x="951" y="670.0" width="3" height="24" rx="1" fill="#74ddb0"/>
+<rect x="957" y="676.0" width="3" height="12" rx="1" fill="#74ddb0"/>
+<rect x="963" y="667.5" width="3" height="29" rx="1" fill="#74ddb0"/>
+<rect x="969" y="673.5" width="3" height="17" rx="1" fill="#74ddb0"/>
+<rect x="975" y="665.0" width="3" height="34" rx="1" fill="#74ddb0"/>
+<rect x="981" y="671.0" width="3" height="22" rx="1" fill="#74ddb0"/>
+<rect x="987" y="677.0" width="3" height="10" rx="1" fill="#74ddb0"/>
+<rect x="993" y="668.5" width="3" height="27" rx="1" fill="#74ddb0"/>
+<rect x="999" y="674.5" width="3" height="15" rx="1" fill="#74ddb0"/>
+<rect x="1005" y="666.0" width="3" height="32" rx="1" fill="#74ddb0"/>
+<rect x="1011" y="672.0" width="3" height="20" rx="1" fill="#74ddb0"/>
+<rect x="1017" y="678.0" width="3" height="8" rx="1" fill="#74ddb0"/>
+<rect x="1023" y="669.5" width="3" height="25" rx="1" fill="#74ddb0"/>
+<rect x="1029" y="675.5" width="3" height="13" rx="1" fill="#74ddb0"/>
+<rect x="1035" y="667.0" width="3" height="30" rx="1" fill="#74ddb0"/>
+<rect x="1041" y="673.0" width="3" height="18" rx="1" fill="#74ddb0"/>
+<text x="1091" y="688" font-size="13" fill="#b2c8bd">0:32 / 4:00</text>
+<rect x="314" y="734" width="974" height="64" rx="8" fill="#1c2830"/>
+<text x="334" y="774" font-size="14" fill="#d7bb87">Saved  ·  Chord chart not chosen</text>
+<rect x="937" y="744" width="144" height="44" rx="8" fill="#28343e"/>
+<text x="951" y="772" font-size="14" fill="#eaf0f4" class="bold">Close review</text>
+<rect x="1091" y="744" width="184" height="44" rx="8" fill="#74ddb0"/>
+<text x="1105" y="772" font-size="14" fill="#10271e" class="bold">Add to REAPER</text>
+<text x="251" y="335" font-size="12" fill="#74ddb0">Open</text>
+<text x="251" y="405" font-size="12" fill="#74ddb0">Open</text>
+<text x="251" y="475" font-size="12" fill="#74ddb0">Open</text>
+<text x="251" y="545" font-size="12" fill="#74ddb0">Open</text>
+<text x="251" y="615" font-size="12" fill="#74ddb0">Open</text>
+<text x="251" y="685" font-size="12" fill="#74ddb0">Open</text>
+</svg>

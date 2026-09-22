@@ -3,6 +3,9 @@
 Recording reliability, per-part levels and solo overdubs are available in v3.16.
 See [release details and verification](RECORDING_PARTS.md).
 
+Proposed next UI redesign: [workflow review and visual layouts](WORKSPACE_LAYOUT_PLAN.md).
+This proposal does not change the setup instructions below.
+
 The recording controller automatically creates and saves the track template below
 once per saved Jam Room setlist. Run the updated `Requirements/ReaSet_Startup.lua`
 in REAPER (normally your startup action), open the setlist, and stop playback.
