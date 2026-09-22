@@ -28,6 +28,7 @@ local function leave()
     controller:stop_preview()
     if controller.db.active then reaper.Main_OnCommand(1016,0);controller:finish(true)
     else controller:park()end
+    controller:release_device()
     reaper.SelectProjectInstance(active)
   end
 end

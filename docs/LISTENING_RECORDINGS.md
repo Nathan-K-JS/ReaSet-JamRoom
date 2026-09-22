@@ -1,11 +1,12 @@
 # Leave with a listening recording
 
-Status: delivered in v3.11; simplified to MP3-only sharing in v3.11.1.
+Status: delivered in v3.11; MP3-only since v3.11.1. Version 3.16 adds saved
+part levels and combined overdub arrangements to the exported mix.
 
 ## Using it
 
 Keep **JamRoom Importer.bat** open on the room PC. In ReaSet's Record tab,
-stop a take, choose instrument mutes, then **Export recording**. Confirm
+stop a take, choose part levels/mutes, then **Export recording**. Confirm
 whether to include backing. **Exported recordings** shows queued work and completed
 copies; open a ready copy to listen, download the MP3, or show its room-Wi-Fi QR.
 Saved and exported takes have the same action. Making a copy does not clear the
@@ -23,8 +24,8 @@ the local link requires the same Wi-Fi and a running room PC/service.
 ## Implementation and limits
 
 - REAPER freezes each request beside the setlist in `.RPP.recordings/Listening/`.
-  Its snapshot captures one take, backing choices, item timing/pitch/gain and
-  recording mutes. Current backing item settings and parent mutes are captured
+  Its snapshot captures the selected arrangement (including added parts), saved
+  part levels, backing choices, item timing/pitch/gain and recording mutes. Current backing item settings and parent mutes are captured
   when that song is still in place; otherwise its recording-time snapshot is used.
 - The service discovers roots through REAPER's published recording index. Its
   registry and private worker configuration live in `imports/.listening/`.
@@ -39,9 +40,10 @@ the local link requires the same Wi-Fi and a running room PC/service.
   Existing discard/export cleanup retains source files, so it cannot invalidate
   pending requests. Never change recording cleanup to erase those files without
   adding coordination with these jobs.
-- A flat dry stereo mix avoids double-summing the room's folder buses. Its saved
-  template, `imports/.listening/mix-template.json`, starts at unity/centre for all
-  14 inputs and is frozen per request. Stereo pairs stay stereo. Room/IEM faders
+- A flat dry stereo mix avoids double-summing the room's folder buses. New requests
+  freeze the selected arrangement's saved part levels and mutes. The legacy
+  `imports/.listening/mix-template.json` remains a fallback for older requests.
+  Stereo pairs stay stereo. Room/IEM faders
   and desk processing are not captured. Custom sends, active automation, FX or
   layered/section-source items produce an explicit manual-mix message instead of
   silently losing processing. Audition this starting balance with real room takes;

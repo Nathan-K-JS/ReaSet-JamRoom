@@ -35,7 +35,7 @@ local function cleanup(ok,why)
     if scratch and reaper.ValidatePtr(scratch,'ReaProject*')then
       reaper.SelectProjectInstance(scratch)
       reaper.Main_OnCommand(1016,0)
-      if core then core:stop_preview();core:restore_options();core:park()end
+      if core then core:stop_preview();core:restore_options();core:park();core:release_device()end
       reaper.Main_SaveProjectEx(scratch,folder..'/scratch.RPP',8)
       reaper.Main_OnCommand(40860,0)
     end
@@ -106,14 +106,14 @@ local function run()
       -- its track output. This does not claim to verify physical X32 inputs.
       reaper.GetNumAudioInputs=function()return 16 end
       local arm=core.arm
-      core.arm=function(self)local n=arm(self);for _,id in ipairs({'1','2'})do reaper.SetMediaTrackInfo_Value(M.tracks()[id],'I_RECMODE',1)end;return n end
+      core.arm=function(self,take)local n=arm(self,take);for _,tr in pairs(M.tracks())do reaper.SetMediaTrackInfo_Value(tr,'I_RECMODE',1)end;return n end
       checks[#checks+1]='No hardware inputs: using native track-output capture'
     end
     reaper.SetEditCurPos(10,false,false)
     reaper.SetExtState('ReaSetRec','lock',core.id,false)
     reaper.CSurf_OnPlayRateChange(.8)
     core:begin(songs[1].key)
-    check(core.mode=='countin' and reaper.GetPlayState()==0,'Audible count-in leaves the setlist transport stopped')
+    check(core.mode=='countin' and (reaper.GetPlayState()&4)==4,'Capture is running before the first count-in beat')
     core:command({project=core.id,op='stop'})
     check(core.mode=='idle' and core:state().pending==0 and not core:state().notice,'Cancelled count-in returns to setup without an export reminder')
     check(#M.J.decode(M.read(core.root..'/index.json')).sessions==0,'Empty count-in cleanup is durable')
@@ -229,7 +229,7 @@ local function run()
     -- channels even on a development audio device without the physical X32.
     core=M.new();reaper.GetNumAudioInputs=function()return 32 end
     local arm=core.arm
-    core.arm=function(self)local n=arm(self);for _,tr in pairs(M.tracks())do reaper.SetMediaTrackInfo_Value(tr,'I_RECMODE',1)end;return n end
+    core.arm=function(self,take)local n=arm(self,take);for _,tr in pairs(M.tracks())do reaper.SetMediaTrackInfo_Value(tr,'I_RECMODE',1)end;return n end
     for i,c in ipairs(core.db.inputs)do c.selected=i<=4 end
     core.db.countin=true;core.db.recordMode='freejam'
     core:jam_settings({bpm=137,beats=3,click=true})
@@ -237,7 +237,7 @@ local function run()
     core:command({project=core.id,revision=core.revision,op='record'})
     local s=core:session(core.selected)
     check(s.song.free and s.rate==1 and s.semis==0 and #s.takes[1].inputs==4,'Free jam records four selected mics at normal speed')
-    check(core.mode=='countin' and reaper.GetPlayState()==0,'Free jam supports independent two-bar count-in')
+    check(core.mode=='countin' and (reaper.GetPlayState()&4)==4,'Free jam starts capture before its two-bar count-in')
     check(core.jamClick and reaper.GetMediaItemInfo_Value(core.jamClick,'B_LOOPSRC')==1,'Free jam creates a transport-synchronised looping click')
     check(reaper.GetMediaItemInfo_Value(reaper.GetTrackMediaItem(reaper.GetTrack(0,0),0),'B_MUTE')==1,'Free jam silences library media')
     stage=20;started=reaper.time_precise()
@@ -282,7 +282,7 @@ local function run()
     core.mode='idle';core.db.countin=true;core:jam_settings({bpm=240,beats=2,click=false})
     for i,c in ipairs(core.db.inputs)do c.selected=i==5 or i==6 or i==9 or i==10 end
     local arm=core.arm
-    core.arm=function(self)local n=arm(self);for _,tr in pairs(M.tracks())do reaper.SetMediaTrackInfo_Value(tr,'I_RECMODE',1)end;return n end
+    core.arm=function(self,take)local n=arm(self,take);for _,tr in pairs(M.tracks())do reaper.SetMediaTrackInfo_Value(tr,'I_RECMODE',1)end;return n end
     core:begin('freejam')
     check(core.mode=='countin' and not core.jamClick,'Band jam can use count-in without continuous click')
     stage=25;started=reaper.time_precise()
@@ -305,6 +305,46 @@ local function run()
     check(#t.items==count and count>0,'Discard retains recorded audio for recovery')
     core:command({project=core.id,revision=core.revision,op='restoreTake',session=s.id,take=t.id})
     check(t.status=='kept','Discarded take can be restored')
+    core:command({project=core.id,revision=core.revision,op='overdub',session=s.id,take=t.id})
+    check(not core.db.inputs[1].selected,'Add part clears the previous armed-input selection')
+    core:command({project=core.id,revision=core.revision,op='select',input='1',value=true})
+    core:command({project=core.id,revision=core.revision,op='recordPart',stopAtEnd=false})
+    stage=28;started=reaper.time_precise()
+  elseif stage==28 and reaper.time_precise()-started>.6 then
+    core:command({project=core.id,op='stop'})
+    local s,t=M.mix_take(core)
+    check(#t.layers==5 and #t.items==1,'Overdub adds one independently captured part to the four-part arrangement')
+    core:command({project=core.id,revision=core.revision,op='partMix',part=t.dest['1'],gain=.25})
+    check(reaper.GetMediaTrackInfo_Value(M.tracks()[t.dest['1']],'D_VOL')==.25*(s.parts[t.dest['1']].baseGain or 1),'Recorded part slider changes native playback level')
+    core:command({project=core.id,revision=core.revision,op='overdub',session=s.id,take=t.id})
+    core:command({project=core.id,revision=core.revision,op='select',input='1',value=true})
+    core:command({project=core.id,revision=core.revision,op='recordPart',stopAtEnd=false})
+    local _,next=M.mix_take(core)
+    check(next.dest['1']~=t.dest['1'],'Same microphone records onto a different part track')
+    check(reaper.GetMediaTrackInfo_Value(M.tracks()[t.dest['1']],'I_RECARM')==0,'Older vocal stays disarmed during harmony capture')
+    local audible=false
+    local tr=M.tracks()[t.dest['1']]
+    for n=0,reaper.CountTrackMediaItems(tr)-1 do local it=reaper.GetTrackMediaItem(tr,n);if M.ext(it,'ReaSetRecPreview')~='' and reaper.GetMediaItemInfo_Value(it,'B_MUTE')==0 then audible=true end end
+    check(audible,'Previous vocal plays as accompaniment on its own track')
+    stage=29;started=reaper.time_precise()
+  elseif stage==29 and reaper.time_precise()-started>.6 then
+    core:command({project=core.id,op='stop'})
+    local s,t=M.mix_take(core);local parent=core:session(s.id).takes[#s.takes-1]
+    check(#t.layers==6 and t.mix[parent.dest['1']].gain==.25 and t.mix[t.dest['1']].gain==1,'Harmony inherits saved mix with independent gain')
+    core:command({project=core.id,revision=core.revision,op='discard',session=s.id,take=t.id})
+    check(core.mode=='review' and core.take==t.parent and #parent.layers==5,'Discard new part restores the complete previous arrangement')
+    core:command({project=core.id,revision=core.revision,op='restoreTake',session=s.id,take=t.id})
+    core:review(s.id,t.id);core:save(true)
+    local sid,tid=s.id,t.id;local trackCount=reaper.CountTracks(0)
+    core=M.new();s=core:session(sid);core:review(sid,tid);local _,restored=M.mix_take(core)
+    check(#restored.layers==6 and reaper.CountTracks(0)==trackCount,'Restart preserves arrangement without duplicate part tracks')
+    M.make_listening(core,{session=sid,take=tid,backing=false,nonce='overdub-proof'})
+    local request=M.J.decode(M.read(core.root..'/Listening/overdub-proof/request.json'))
+    check(#request.items==6 and request.mix[parent.dest['1']].gain==.25*(s.parts[parent.dest['1']].baseGain or 1),'MP3 request snapshots all selected parts and gains')
+    core:park();M.export(core,s)
+    reaper.Main_OnCommand(40859,0);reaper.Main_openProject('noprompt:'..s.exported)
+    check(reaper.CountMediaItems(0)==6,'Multitrack project retains all six arranged performances')
+    reaper.Main_OnCommand(40860,0);reaper.SelectProjectInstance(scratch)
     cleanup(true);return
   end
   reaper.defer(function()local ok,err=xpcall(run,debug.traceback);if not ok then cleanup(false,err)end end)
@@ -315,7 +355,7 @@ local ok,err=xpcall(run,debug.traceback);if not ok then cleanup(false,err)end
     script = folder / 'verify.lua'; script.write_text(source, encoding='utf-8')
     subprocess.Popen(['C:/Program Files/REAPER (x64)/reaper.exe', '-nonewinst', str(script)])
     result = folder / 'result.json'
-    for _ in range(450):
+    for _ in range(900):
         if result.exists(): break
         time.sleep(.2)
     if not result.exists(): raise RuntimeError('No REAPER result; inspect ' + str(folder))

@@ -21,7 +21,7 @@ ROOT = Path(__file__).resolve().parent.parent
 def main():
     folder = Path(tempfile.mkdtemp(prefix='reaset-listening-'))
     t = np.arange(48000 * 6) / 48000
-    for name, freqs in [('voice', [440]), ('band', [550, 660]), ('backing', [770]), ('click', [1800])]:
+    for name, freqs in [('voice', [440]), ('harmony', [990]), ('band', [550, 660]), ('backing', [770]), ('click', [1800])]:
         values = np.array([np.sin(2 * np.pi * f * t) * .06 for f in freqs]).T
         with wave.open(str(folder / (name + '.wav')), 'wb') as f:
             f.setparams((len(freqs), 2, 48000, 0, 'NONE', 'not compressed'))
@@ -62,13 +62,24 @@ for i,id in ipairs({'1','9'})do
  local _,guid=reaper.GetSetMediaItemInfo_String(it,'GUID','',false);local _,chunk=reaper.GetItemStateChunk(it,'',false)
  take.items[#take.items+1]={guid=guid,track=id,chunk=chunk}
 end
+M.parts(core,s,take)
 core:save(true)
 local before=reaper.GetProjectStateChangeCount(0)
 M.make_listening(core,{session=s.id,take=take.id,backing=true,nonce='with-backing'})
-assert(reaper.CountTracks(0)==17 and reaper.GetPlayState()==0,'Snapshot altered transport or tracks')
+assert(reaper.CountTracks(0)==19 and reaper.GetPlayState()==0,'Snapshot altered transport or tracks')
 M.make_listening(core,{session=s.id,take=take.id,backing=false,nonce='without-backing'})
-core.selected=s.id;core.take=take.id;core.mode='review';core.recMutes={['9']=true};core.recordingOn=true;core.stemMutes={}
+core:review(s.id,take.id);take.mix[take.dest['9']].muted=true;core:save(false)
 M.make_listening(core,{session=s.id,take=take.id,backing=false,nonce='only-voice'})
+take.mix[take.dest['9']].muted=false;take.mix[take.dest['1']].gain=.25
+M.make_listening(core,{session=s.id,take=take.id,backing=false,nonce='balanced-parts'})
+local harmony={id='harmony',number=2,status='kept',duration=4,inputs={'1'},items=M.J.array()}
+M.parts(core,s,harmony,take);s.takes[#s.takes+1]=harmony
+local it=item(M.tracks()[harmony.dest['1']],'harmony',true)
+M.ext(it,'ReaSetRec','session/harmony');reaper.SetMediaItemInfo_Value(it,'B_MUTE',1)
+local _,guid=reaper.GetSetMediaItemInfo_String(it,'GUID','',false);local _,chunk=reaper.GetItemStateChunk(it,'',false)
+harmony.items[1]={guid=guid,track=harmony.dest['1'],chunk=chunk}
+core:save(true);core:review(s.id,harmony.id)
+M.make_listening(core,{session=s.id,take=harmony.id,backing=false,nonce='overdub-mix'})
 M.export(core,s)
 M.make_listening(core,{session=s.id,take=take.id,backing=true,nonce='after-export'})
 M.write(folder..'/fixture.json',M.J.encode({root=core.root..'/Listening',project=core.id,original_changes=changes,original_cursor=cursor}))
@@ -93,6 +104,7 @@ M.write(folder..'/setup-result.json',M.J.encode({ok=ok and unchanged,error=tostr
     service.data['roots'][fixture['project']] = fixture['root']
     service.discover()
     before = requests.get('http://localhost:8080/_/TRANSPORT', timeout=5).text
+    ratios={}
     for key in service.data['jobs']:
         service.process(key)
         row = service.data['jobs'][key]
@@ -105,13 +117,18 @@ M.write(folder..'/setup-result.json',M.J.encode({ok=ok and unchanged,error=tostr
         def power(freq, channel=0):
             sample = audio[24000:120000, channel]; axis = np.arange(len(sample))/48000
             return abs(np.sum(sample * np.exp(-2j*np.pi*freq*axis)))/len(sample)
-        assert power(440) > .005, (row['id'], 'voice missing')
+        ratios[row['id']]=power(440)/max(power(550),1e-10)
+        if row['id']=='overdub-mix': assert power(990)>.005, 'Same-input harmony missing'
+        assert power(440) > .003, (row['id'], 'voice missing')
         assert power(1800) < .001, (row['id'], 'click leaked')
         if row['id'] == 'only-voice': assert power(550) < .001
         else: assert power(550, 0) > .005 and power(660, 1) > .005
         if row['id'] in ('with-backing', 'after-export'): assert power(770) > .005
         else: assert power(770) < .001
         print(row['id'], 'PASS', row['duration'], 'seconds', row['files'], flush=True)
+    assert abs(ratios['balanced-parts']/ratios['without-backing']-.25)<.03, ratios
+    assert abs(ratios['overdub-mix']/ratios['without-backing']-.25)<.03, ratios
+    print('Saved part levels and same-input harmony verified in rendered MP3 audio.',flush=True)
     after = requests.get('http://localhost:8080/_/TRANSPORT', timeout=5).text
     assert before == after, (before, after)
     print('Original transport unchanged throughout all worker renders.', flush=True)

@@ -45,7 +45,7 @@ function self:begin()error('Discard must not start recording')end
                 lua=LuaRuntime(unpack_returned_tuples=True)
                 lua.execute('''
 M={tracks=function()return {}end,owned_items=function()end}
-reaper={EnumerateFiles=function()return nil end}
+reaper={EnumerateFiles=function()return nil end,SetEditCurPos=function()end}
 take={id='take',number=1,items={},inputs={'1'},before={}}
 session={id='session',song={free=true,start=100,finish=100},takes={take},folder='unused'}
 self={mode='countin',db={active={session='session',take='take'},sessions={session}}}
@@ -60,6 +60,7 @@ function self:recover_audio()end
                 elif scenario=='unresolved':lua.execute('take.unresolved=true')
                 elif scenario=='unknown_file':lua.execute("reaper.EnumerateFiles=function()return 'interrupted.aiff' end")
                 elif scenario=='recovered_audio':lua.execute("function self:recover_audio()take.items={{guid='recovered'}} end")
+                lua.execute((ROOT/'Requirements/ReaSet_RecordingParts.lua').read_text(encoding='utf-8'))(lua.globals().M)
                 lua.execute(functions);lua.execute('self:finish()')
                 if scenario in ('empty','previous_take'):
                     self.assertEqual(lua.eval('self.mode'),'idle')

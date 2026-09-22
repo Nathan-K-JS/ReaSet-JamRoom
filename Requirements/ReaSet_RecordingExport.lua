@@ -10,6 +10,8 @@ function M.export(self,s)
   local kept=0
   for _,t in ipairs(s.takes)do if t.status~='discarded' then assert(not t.unresolved,'Recover interrupted audio in REAPER before exporting');kept=kept+#t.items end end
   assert(kept>0,'No recorded media to export')
+  assert(reaper.GetPlayState()==0,'Stop playback before export')
+  self:park()
   local original=reaper.EnumProjects(-1,'')
   local folder=self.root..'/Exports/'..s.id..'-'..M.guid():sub(1,6)
   reaper.RecursiveCreateDirectory(folder..'/Media',0)
@@ -33,17 +35,24 @@ function M.export(self,s)
       else reaper.SetMediaItemInfo_Value(it,'D_POSITION',reaper.GetMediaItemInfo_Value(it,'D_POSITION')-s.song.start)end
     end
     -- Keep the original bus tree/FX/routing, with only this song's media.
+    local chosen
+    for _,t in ipairs(s.takes)do if t.id==s.selected and t.status~='discarded' then chosen=t end end
+    if not chosen then for _,t in ipairs(s.takes)do if t.status~='discarded' then chosen=t end end end
+    local _,audible=M.arrangement(self,s,chosen)
+    for id,tr in pairs(M.tracks())do if id:sub(1,5)=='part_' and not (s.parts or {})[id] and reaper.CountTrackMediaItems(tr)==0 then reaper.DeleteTrack(tr)end end
+    for _,p in pairs(s.parts or {})do M.part_track(self,p)end
     local tracks=M.tracks();local latest
     for _,t in ipairs(s.takes)do if t.status~='discarded' then latest=t.id end end
-    for _,t in ipairs(s.takes)do if t.status~='discarded' then
+    for _,t in ipairs(s.takes)do if t.status~='discarded' or (function()for _,id in pairs(t.dest or {})do if audible[id]then return true end end end)() then
       for _,r in ipairs(t.items)do
         local tr=assert(tracks[r.track],'Recording track missing from backing snapshot')
         local it=reaper.AddMediaItemToTrack(tr)
         assert(reaper.SetItemStateChunk(it,r.chunk,false),'Could not recreate recorded take')
         reaper.SetMediaItemInfo_Value(it,'D_POSITION',reaper.GetMediaItemInfo_Value(it,'D_POSITION')-s.song.start)
-        reaper.SetMediaItemInfo_Value(it,'B_MUTE',t.id==latest and 0 or 1)
+        reaper.SetMediaItemInfo_Value(it,'B_MUTE',audible[r.track] and not (chosen.mix[r.track] or {}).muted and chosen.recordingOn~=false and 0 or 1)
         local tk=reaper.GetActiveTake(it)
         if tk then reaper.GetSetMediaItemTakeInfo_String(tk,'P_NAME',t.name and t.name~='' and t.name or 'Take '..t.number,true)end
+        reaper.SetMediaTrackInfo_Value(tr,'D_VOL',((chosen.mix[r.track] or {}).gain or 1)*((s.parts[r.track] or {}).baseGain or 1))
         reaper.SetMediaTrackInfo_Value(tr,'I_RECARM',0)
         reaper.SetMediaTrackInfo_Value(tr,'I_RECMON',0)
       end
@@ -93,6 +102,8 @@ function M.export(self,s)
     reaper.GetSetProjectInfo_String(0,'RECORD_PATH','Media',true)
     reaper.GetSetProjectInfo_String(0,'RECORD_PATH_SECONDARY','',true)
     reaper.GetSetRepeat(0);reaper.SetEditCurPos(0,false,false)
+    reaper.SetProjExtState(0,'ReaSetRec','arrangement',M.J.encode({selected=chosen.id,parts=s.parts,mix=chosen.mix}))
+    for _,r in ipairs(M.P.items({start=0,finish=s.song.finish-s.song.start,free=s.song.free},false))do if chosen.backingOn==false or (chosen.stemMutes or {})[r.slot] then reaper.SetMediaItemInfo_Value(r.item,'B_MUTE',1)end end
     reaper.Main_SaveProjectEx(0,exported,8)
     assert(M.read(exported),'Export project was not saved')
     reaper.Main_openProject('noprompt:'..exported)

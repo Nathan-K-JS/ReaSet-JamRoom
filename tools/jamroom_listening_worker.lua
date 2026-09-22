@@ -11,7 +11,7 @@ local ok,why=xpcall(function()
   assert(reaper.GetResourcePath():gsub('\\','/'):lower()==LISTEN_RESOURCE:lower(),'Worker resource isolation failed')
   local yes,device=reaper.GetAudioDeviceInfo('MODE');assert(yes and device=='Dummy Audio','Worker must use Dummy Audio')
   local request=J.decode(read(folder..'/request.json'))
-  assert(request.version==1 and request.duration>0 and request.rate>0,'Invalid listening request')
+  assert((request.version==1 or request.version==2) and request.duration>0 and request.rate>0,'Invalid listening request')
   local renderProject=folder..'/Listening.RPP'
   local cached=io.open(renderProject,'rb')
   if cached then cached:close();reaper.Main_openProject('noprompt:'..renderProject)
@@ -60,6 +60,10 @@ local ok,why=xpcall(function()
       end
     end
     local cfg={};for _,v in ipairs(request.inputs)do cfg[v.id]=v end
+    for id,p in pairs(request.parts or {})do if not recording[id]then
+      reaper.InsertTrackAtIndex(reaper.CountTracks(0),false);local tr=reaper.GetTrack(0,reaper.CountTracks(0)-1)
+      recording[id]=tr;reaper.GetSetMediaTrackInfo_String(tr,'P_EXT:ReaSetRec',id,true)
+    end end
     for _,r in ipairs(request.items)do
       if request.recording and not request.recMutes[r.track] then
         local tr=assert(recording[r.track],'Recording track missing from snapshot')

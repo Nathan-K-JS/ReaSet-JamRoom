@@ -6,8 +6,9 @@ independent two-bar count-in before recording. Default: 100 BPM, 4 beats, click 
 No backing song is required. Only selected hardware inputs are captured.
 
 Reuse native recording, pause/resume, keep/retry, recovery and verified export.
-A free jam has no automatic song-end stop. Each new jam has its own session;
-Keep/retry uses that session's fixed tempo and click choice. Done starts a new jam.
+An initial free jam has no automatic song-end stop. Added parts default to
+stopping at the arrangement end; switch Stop at end off to extend it. Each new jam has its own session;
+Keep/retry uses that session's fixed tempo; click can be changed before an overdub. Done starts a new jam.
 The generated click follows REAPER transport, including pause, through the
 existing PB CLICK output and level. It is not included as a recorded input.
 Export contains recorded takes and the chosen tempo/meter, without library stems.
@@ -63,3 +64,7 @@ items, so changing the export tempo grid preserves recorded audio alignment.
 Update with `JamRoom Update.bat`, restart REAPER and refresh ReaSet with Ctrl+F5.
 Song-level loudness matching was subsequently delivered in v3.9; see
 [volume matching](SONG_VOLUME_MATCHING.md).
+
+In v3.16, **Add another part** layers a new selected-input pass onto a kept jam.
+Each part has its own saved playback level, including repeated performances through
+one input. See [recording parts](RECORDING_PARTS.md) for timing and export details.

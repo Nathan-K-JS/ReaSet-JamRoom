@@ -76,6 +76,30 @@ class BrowserTests(unittest.TestCase):
           document.getElementById('recording-panel').classList.add('open');recRender();
         }''')
 
+    def test_part_mix_and_overdub_controls_are_independent_and_responsive(self):
+        self.recording_state()
+        self.page.evaluate("""g_recState.mode='review';g_recState.selected='s';g_recState.take='t';
+          g_recState.sessions=[{id:'s',song:{free:true,name:'Harmony'},takes:[{id:'t',number:2,parent:'first',duration:30,inputs:['1']}]}];
+          g_recState.parts=[{id:'lead',name:'Vox 1',gain:.5,muted:false},{id:'harmony',name:'Vox 1 (2)',gain:1,muted:false,new:true}];recRender()""")
+        for width in (320,768):
+            self.page.set_viewport_size({'width':width,'height':800})
+            self.assertTrue(self.page.evaluate('document.documentElement.scrollWidth<=innerWidth'))
+        self.assertTrue(self.page.locator('#rec-part-lead').is_visible())
+        self.page.locator('#rec-part-harmony').fill('-6')
+        self.page.locator('#rec-part-harmony').dispatch_event('change')
+        command=json.loads(self.page.evaluate("decodeURIComponent(sent.at(-1)).split('/want/')[1]"))
+        self.assertEqual((command['op'],command['part']),('partMix','harmony'))
+        self.assertAlmostEqual(command['gain'],.501187,places=5)
+        self.page.evaluate('g_recPending=null;recRender()')
+        self.page.get_by_role('button',name='Keep & add another part',exact=True).click()
+        self.assertEqual(self.page.evaluate('g_recPending.op'),'overdub')
+        self.page.evaluate("g_recPending=null;g_recState.overdub={session:'s',take:'t'};recRender()")
+        self.assertTrue(self.page.get_by_role('button',name='Record part',exact=True).is_visible())
+        self.page.locator('#rec-part-stop').uncheck()
+        self.page.get_by_role('button',name='Record part',exact=True).click()
+        command=json.loads(self.page.evaluate("decodeURIComponent(sent.at(-1)).split('/want/')[1]"))
+        self.assertEqual(command['op'],'recordPart');self.assertFalse(command['stopAtEnd'])
+
     def test_review_groups_switches_discard_and_phone_layout(self):
         self.recording_state()
         self.page.evaluate("""g_recState.mode='review';g_recState.selected='s';g_recState.take='t';

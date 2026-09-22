@@ -4,6 +4,7 @@ local J=dofile(dir..'ReaSet_JSON.lua')
 local P=dofile(dir..'ReaSet_Playback.lua')
 local M={J=J,P=P}
 dofile(dir..'ReaSet_Listening.lua')(M)
+dofile(dir..'ReaSet_RecordingParts.lua')(M)
 function M.read(path)
   local f=io.open(path,'rb');if not f then return nil end
   local s=f:read('*a');f:close();return s
@@ -68,12 +69,15 @@ function M.new()
       local raw=M.read(self.root..suffix)
       if raw then
         found=true;local ok,db=pcall(J.decode,raw)
-        if ok and db.version==1 and db.project==id then self.db=db;loaded=true;break end
+        if ok and (db.version==1 or db.version==2) and db.project==id then self.db=db;loaded=true;break end
       end
     end
     assert(not found or loaded,'Recording index needs recovery; original files retained')
+    if loaded and self.db.version==1 and not M.read(self.root..'/index.v1.json')then M.write(self.root..'/index.v1.json',J.encode(self.db))end
   end
   dofile(dir..'ReaSet_FreeJam.lua')(self,M)
+  dofile(dir..'ReaSet_RecordingReady.lua')(self,M)
+  dofile(dir..'ReaSet_RecordingTimeline.lua')(self,M)
   function self:save(project)
     assert(self.root,'Save the REAPER setlist project before recording')
     M.write(self.root..'/index.json',J.encode(self.db))
@@ -96,6 +100,7 @@ function M.new()
     error('Song changed; cue it again')
   end
   function self:park()
+    self:clear_timeline()
     self:jam_clear_click()
     M.owned_items(function(it)reaper.SetMediaItemInfo_Value(it,'B_MUTE',1)end)
     for _,tr in pairs(M.tracks()) do reaper.SetMediaTrackInfo_Value(tr,'I_RECARM',0);reaper.SetMediaTrackInfo_Value(tr,'I_RECMON',0)end
@@ -175,14 +180,17 @@ function M.new()
     self.message='Recording tracks created and saved. Check the X32 inputs, then select instruments to record.'
     return true
   end
-  function self:arm()
+  function self:arm(take)
+    if self.deviceState~='ready' then self:prepare_device();self:device_tick()end
     local tracks=M.tracks();local count=0
+    for _,tr in pairs(tracks)do reaper.SetMediaTrackInfo_Value(tr,'I_RECARM',0)end
     for _,cfg in ipairs(self.db.inputs)do
       assert(tracks[cfg.id],'Set up recording tracks first')
       if cfg.selected then assert(cfg.input+(cfg.stereo and 2 or 1)<=reaper.GetNumAudioInputs(),cfg.name..' input unavailable')end
     end
     for _,cfg in ipairs(self.db.inputs) do
-      local tr=tracks[cfg.id]
+      local tr=tracks[take and take.dest[cfg.id] or cfg.id]
+      if not tr then tr=tracks[cfg.id]end
       assert(tr,'Set up recording tracks first')
       if cfg.selected then
         assert(cfg.input+(cfg.stereo and 2 or 1)<=reaper.GetNumAudioInputs(),cfg.name..' input unavailable')
@@ -218,7 +226,7 @@ function M.new()
     assert((reaper.GetPlayState()&4)==4,'REAPER did not start recording; check the audio device')
     self.mode='recording'
   end
-  function self:begin(key)
+  function self:begin(key,parentId,sessionId)
     assert(self.root,'Save the REAPER setlist project before recording')
     assert(self.mode=='idle' or self.mode=='review','Stop the current take first')
     assert(reaper.GetPlayState()==0,'Stop playback before recording')
@@ -228,14 +236,15 @@ function M.new()
       local tr=reaper.GetTrack(0,i)
       assert(reaper.GetMediaTrackInfo_Value(tr,'I_RECARM')==0 or M.ext(tr,'ReaSetRec',nil,true)~='','Disarm other REAPER tracks before recording')
     end
-    self:park();assert(self:arm()>0,'Select at least one instrument')
+    self:park();assert(self:arm()>0,'Select at least one instrument');assert(self.deviceState=='ready','Recording inputs are still connecting; wait for Ready or use Reconnect inputs')
     local rate=reaper.Master_GetPlayRate(0)
     local _,tk=reaper.GetExtState('ReaSetTK','state'):match('^([^|]+)|([^|]+)')
     local semis=tonumber(tk) or 0
     if song.free then rate=1;semis=0 end
-    local session
+    local session=sessionId and self:session(sessionId) or nil
+    if session then assert(not session.deleted and not session.exported and session.song.key==key,'Choose a live recording session');rate=session.rate;semis=session.semis end
     for _,s in ipairs(self.db.sessions)do
-      if s.song.key==key and not s.deleted and not s.exported and math.abs(s.rate-rate)<.00001 and s.semis==semis then session=s end
+      if not session and s.song.key==key and not s.deleted and not s.exported and math.abs(s.rate-rate)<.00001 and s.semis==semis then session=s end
     end
     if not session then
       local sid=os.date('%Y%m%d-%H%M%S')..'-'..M.guid():sub(1,8)
@@ -253,20 +262,26 @@ function M.new()
       self.db.sessions[#self.db.sessions+1]=session
     end
     assert(math.abs(session.song.start-song.start)<.001 and math.abs(session.song.finish-song.finish)<.001,'Song boundaries changed; export this session before recording again')
+    local parent
+    if parentId then for _,v in ipairs(session.takes)do if v.id==parentId then parent=v end end;assert(parent and parent.status~='discarded','Choose a kept take to build on')end
     local take={id=M.guid(),number=#session.takes+1,items=J.array(),started=os.date('%Y-%m-%d %H:%M'),status='recording',inputs=J.array(),before={},trackNames={}}
     for _,cfg in ipairs(self.db.inputs) do if cfg.selected then take.inputs[#take.inputs+1]=cfg.id end end
+    session.takes[#session.takes+1]=take
+    self.db.active={session=session.id,take=take.id}
+    M.parts(self,session,take,parent)
+    self:arm(take)
     for id,tr in pairs(M.tracks()) do
       local _,name=reaper.GetTrackName(tr);take.trackNames[id]=name
+      for input,dest in pairs(take.dest)do if dest==id then take.trackNames[input]=name end end
       for i=0,reaper.CountTrackMediaItems(tr)-1 do local it=reaper.GetTrackMediaItem(tr,i);local _,g=reaper.GetSetMediaItemInfo_String(it,'GUID','',false);take.before[g]=true end
     end
-    session.takes[#session.takes+1]=take
     local _,path=reaper.GetSetProjectInfo_String(0,'RECORD_PATH','',false)
     local _,secondary=reaper.GetSetProjectInfo_String(0,'RECORD_PATH_SECONDARY','',false)
     self.db.options={path=path,secondary=secondary,prompt=reaper.SNM_GetIntConfigVar('promptendrec',0),metro=reaper.SNM_GetIntConfigVar('projmetroen',0),recmode=reaper.SNM_GetIntConfigVar('projrecmode',0),repeatMode=reaper.GetSetRepeat(-1)}
     for _,action in ipairs({41186,41330,42677})do if reaper.GetToggleCommandState(action)==1 then self.db.options.overlap=action end end
     self.db.options.lanes={}
     for _,action in ipairs({41329,42702})do self.db.options.lanes[tostring(action)]=reaper.GetToggleCommandState(action)end
-    if song.free then self.db.options.rate=reaper.Master_GetPlayRate(0)end
+    self.db.options.rate=reaper.Master_GetPlayRate(0)
     self.db.active={session=session.id,take=take.id}
     self.selected=session.id;self.take=take.id;self:save(true)
     reaper.GetSetProjectInfo_String(0,'RECORD_PATH',session.folder..'/'..take.id,true)
@@ -279,12 +294,9 @@ function M.new()
     reaper.Main_OnCommand(42677,0)
     reaper.GetSetRepeat(0)
     reaper.SetExtState('ReaSet','nativeLoop','off',false)
-    if song.free then
-      self:jam_silence();reaper.CSurf_OnPlayRateChange(1);self:jam_click(session)
-    end
-    reaper.SetEditCurPos(song.start,false,false)
-    self.mode='recording'
-    if self.db.countin then self:count_in(session) else self:start_native() end
+    reaper.CSurf_OnPlayRateChange(session.rate)
+    M.load_mix(self,take)
+    self:prepare_timeline(session,take)
   end
   function self:click_output()
     local output,volume=0,1
@@ -298,30 +310,6 @@ function M.new()
     assert((output&1023)<reaper.GetNumAudioOutputs(),'Click output unavailable; check PB CLICK routing')
     return output,volume
   end
-  function self:count_in(session)
-    assert(reaper.CF_CreatePreview,'Update SWS for the audible count-in, or turn count-in off')
-    local num,den,bpm=reaper.TimeMap_GetTimeSigAtTime(0,session.song.start)
-    local _,detected=reaper.GetProjExtState(0,'ReaSetTK','bpm:'..session.song.name)
-    bpm=tonumber(detected) or bpm
-    if session.song.free then num=session.song.beats;den=4;bpm=session.song.bpm end
-    local beat=60/(bpm*session.rate)*4/den
-    local duration=2*num*beat;assert(duration>0 and duration<60,'Unsupported count-in duration')
-    local samples=math.ceil(duration*24000);local data={}
-    for n=0,samples-1 do
-      local t=n/24000;local b=math.floor(t/beat);local dt=t-b*beat
-      local v=dt<.04 and math.sin(2*math.pi*(b%num==0 and 1500 or 1000)*dt)*math.exp(-dt*110)*.35 or 0
-      data[#data+1]=string.pack('<i2',math.floor(v*32767))
-    end
-    local pcm=table.concat(data);local file=session.folder..'/count-in.wav'
-    M.write(file,'RIFF'..string.pack('<I4',36+#pcm)..'WAVEfmt '..string.pack('<I4I2I2I4I4I2I2',16,1,1,24000,48000,2,16)..'data'..string.pack('<I4',#pcm)..pcm)
-    self.previewSource=assert(reaper.PCM_Source_CreateFromFile(file))
-    self.preview=assert(reaper.CF_CreatePreview(self.previewSource))
-    local output,volume=self:click_output()
-    reaper.CF_Preview_SetValue(self.preview,'I_OUTCHAN',output)
-    reaper.CF_Preview_SetValue(self.preview,'D_VOLUME',volume)
-    assert(reaper.CF_Preview_Play(self.preview),'Could not start count-in')
-    self.mode='countin';self.countEnd=reaper.time_precise()+duration
-  end
   function self:stop_preview()
     if self.preview then reaper.CF_Preview_Stop(self.preview);self.preview=nil end
     if self.previewSource then reaper.PCM_Source_Destroy(self.previewSource);self.previewSource=nil end
@@ -330,7 +318,8 @@ function M.new()
     if take.status~='empty' or take.unresolved or #take.items>0 then return false end
     -- Unknown/unfinished media must stay discoverable, even when REAPER did not
     -- create an item. Only a genuinely empty capture folder can be dismissed.
-    if reaper.EnumerateFiles(s.folder..'/'..take.id,0) then take.unresolved=true;return false end
+    if not take.leadOnly and reaper.EnumerateFiles(s.folder..'/'..take.id,0) then take.unresolved=true;return false end
+    if take.dest then M.remove_empty_parts(s,take.dest);for _,id in pairs(take.dest)do s.parts[id]=nil end end
     for i=#s.takes,1,-1 do if s.takes[i]==take then table.remove(s.takes,i)end end
     if #s.takes==0 then
       for i=#self.db.sessions,1,-1 do if self.db.sessions[i]==s then table.remove(self.db.sessions,i)end end
@@ -342,7 +331,7 @@ function M.new()
     local s=self:session(active.session);local take
     for _,t in ipairs(s.takes)do if t.id==active.take then take=t end end
     assert(take,'Missing active take')
-    local selected={};for _,id in ipairs(take.inputs)do selected[id]=true end
+    local selected={};for _,id in ipairs(take.inputs)do selected[(take.dest or {})[id] or id]=true end
     local known={};for _,r in ipairs(take.items)do known[r.guid]=r end
     for id,tr in pairs(M.tracks()) do
       if selected[id] then for i=0,reaper.CountTrackMediaItems(tr)-1 do
@@ -351,27 +340,32 @@ function M.new()
         local file=tk and reaper.GetMediaSourceFileName(reaper.GetMediaItemTake_Source(tk),'') or ''
         local owned_path=file:gsub('\\','/'):sub(1,#s.folder+#take.id+2)==s.folder..'/'..take.id..'/'
         if not take.before[guid] and (known[guid] or owned_path) then
+          if self:align_capture(s,take,it) then
           M.ext(it,'ReaSetRec',s.id..'/'..take.id)
           if s.song.free then reaper.SetMediaItemInfo_Value(it,'C_BEATATTACHMODE',0)end
           reaper.SetMediaItemInfo_Value(it,'B_MUTE',1)
           local ok,chunk=reaper.GetItemStateChunk(it,'',false);assert(ok,'Cannot capture recording metadata')
           if known[guid] then known[guid].chunk=chunk else take.items[#take.items+1]={guid=guid,track=id,chunk=chunk}end
+          else take.leadOnly=true;M.ext(it,'ReaSetRecPreview',take.id)end
         end
       end end
     end
-    if recovered or #take.items==0 then self:recover_audio(s,take)end
+    if #take.items>0 then take.leadOnly=nil end
+    if not take.leadOnly and (recovered or #take.items==0) then self:recover_audio(s,take)end
     take.status=#take.items==0 and not take.unresolved and 'empty' or (recovered and 'recovered' or 'kept')
     take.duration=0
     M.owned_items(function(it,_,tag)if tag==s.id..'/'..take.id then take.duration=math.max(take.duration,reaper.GetMediaItemInfo_Value(it,'D_POSITION')+reaper.GetMediaItemInfo_Value(it,'D_LENGTH')-s.song.start)end end)
+    take.duration=math.max(take.duration,take.limit or 0)
     if s.song.free then s.song.finish=math.max(s.song.finish,s.song.start+take.duration)end
-    self:restore_options();self:park()
+    self:restore_options();self:park();reaper.SetEditCurPos(s.song.start,false,false)
     if self:drop_empty_take(s,take) then
       self.db.active=nil;self.mode='idle';self.selected=nil;self.take=nil
       self:arm();self:save(true);self.message='No audio captured — ready to record again'
       return
     end
     self.db.active=nil;self.mode='review';self.selected=s.id;self.take=take.id
-    self.backingOn=true;self.recordingOn=true;self.recMutes={};self.stemMutes={}
+    M.load_mix(self,take)
+    s.selected=take.id
     self:save(true);self.message=take.unresolved and ('Recovered audio needs review in REAPER: '..s.folder..'/'..take.id) or (#take.items==0 and 'No audio captured' or (recovered and 'Recovered — check take' or 'Saved in session'))
   end
   function self:review(sid,tid)
@@ -382,8 +376,8 @@ function M.new()
     for _,t in ipairs(s.takes) do if t.id==tid then take=t end end
     assert(take and take.status~='discarded','Select a kept take')
     assert(not take.unresolved,'Some interrupted media needs recovery in REAPER: '..s.folder..'/'..take.id)
-    self.selected=sid;self.take=tid;self.mode='review'
-    self.backingOn=true;self.recordingOn=true;self.recMutes={};self.stemMutes={}
+    self.selected=sid;self.take=tid;self.mode='review';self.overdub=nil;s.selected=tid
+    M.load_mix(self,take)
     self.auditionOptions={rate=reaper.Master_GetPlayRate(0),pitches={}}
     for _,r in ipairs(P.items(s.song,true))do
       for n=0,reaper.CountTakes(r.item)-1 do
@@ -402,10 +396,11 @@ function M.new()
   end
   function self:audition_mix()
     local s=self:session(self.selected)
-    local tag=s.id..'/'..self.take
+    local _,take=M.mix_take(self);local _,allowed=M.arrangement(self,s,take)
     M.owned_items(function(it,tr,owner)
-      local id=M.ext(tr,'ReaSetRec',nil,true)
-      reaper.SetMediaItemInfo_Value(it,'B_MUTE',owner==tag and self.recordingOn~=false and not (self.recMutes or {})[id] and 0 or 1)
+      local id=M.ext(tr,'ReaSetRec',nil,true);local mix=(take.mix or {})[id] or {gain=1}
+      reaper.SetMediaItemInfo_Value(it,'B_MUTE',allowed[id] and self.recordingOn~=false and not mix.muted and 0 or 1)
+      if allowed[id] then reaper.SetMediaTrackInfo_Value(tr,'D_VOL',(s.parts[id].baseGain or 1)*mix.gain)end
     end)
     for _,r in ipairs(P.items(s.song,true))do
       local _,g=reaper.GetSetMediaItemInfo_String(r.item,'GUID','',false)
@@ -425,9 +420,10 @@ function M.new()
       end
     end)
     M.owned_items(function(it,tr,tag)if tag:sub(1,#s.id+1)==s.id..'/' then reaper.DeleteTrackMediaItem(tr,it) end end)
-    self:park();self.mode='idle';self:save(true)
+    self:park();self.mode='idle';for _,t in ipairs(s.takes)do M.remove_empty_parts(s,t.dest)end;self:save(true)
   end
   function self:restore_session(s)
+    for _,p in pairs(s.parts or {})do M.part_track(self,p)end
     local tracks=M.tracks();local present={}
     M.owned_items(function(it)local _,g=reaper.GetSetMediaItemInfo_String(it,'GUID','',false);present[g]=true end)
     for _,take in ipairs(s.takes)do for _,row in ipairs(take.items)do
@@ -446,6 +442,8 @@ function M.new()
       local _,g=reaper.GetSetMediaItemInfo_String(it,'GUID','',false);present[g]=true
       for n=0,reaper.CountTakes(it)-1 do local tk=reaper.GetTake(it,n);files[reaper.GetMediaSourceFileName(reaper.GetMediaItemTake_Source(tk),''):gsub('\\','/')]=true end
     end)
+    if take.leadOnly then return end
+    if take.dest then for _,id in pairs(take.dest)do M.part_track(self,s.parts[id])end end
     local tracks=M.tracks()
     for _,r in ipairs(take.items)do
       if not present[r.guid] and tracks[r.track] then
@@ -470,20 +468,23 @@ function M.new()
       end
     end
     for id,list in pairs(candidates)do
-      if #list~=1 or not tracks[id] then take.unresolved=true
+      local dest=(take.dest or {})[id] or id
+      if #list~=1 or not tracks[dest] then take.unresolved=true
       else
         local source=reaper.PCM_Source_CreateFromFile(list[1])
         local length=source and reaper.GetMediaSourceLength(source) or 0
-        if length>0 then
-          local it=reaper.AddMediaItemToTrack(tracks[id]);local tk=reaper.AddTakeToMediaItem(it)
+        if take.leadin and length>0 and length*s.rate<=take.leadin then take.leadOnly=true;reaper.PCM_Source_Destroy(source)
+        elseif length>0 then
+          local it=reaper.AddMediaItemToTrack(tracks[dest]);local tk=reaper.AddTakeToMediaItem(it)
           reaper.SetMediaItemTake_Source(tk,source)
           if s.song.free then reaper.SetMediaItemInfo_Value(it,'C_BEATATTACHMODE',0)end
           reaper.SetMediaItemInfo_Value(it,'D_POSITION',s.song.start)
-          reaper.SetMediaItemInfo_Value(it,'D_LENGTH',length*s.rate)
+          reaper.SetMediaItemInfo_Value(it,'D_LENGTH',math.max(0,length*s.rate-(take.leadin or 0)))
+          reaper.SetMediaItemTakeInfo_Value(tk,'D_STARTOFFS',(take.leadin or 0)/s.rate)
           reaper.SetMediaItemTakeInfo_Value(tk,'D_PLAYRATE',1/s.rate)
           reaper.SetMediaItemInfo_Value(it,'B_MUTE',1);M.ext(it,'ReaSetRec',s.id..'/'..take.id)
           local _,guid=reaper.GetSetMediaItemInfo_String(it,'GUID','',false);local _,chunk=reaper.GetItemStateChunk(it,'',false)
-          take.items[#take.items+1]={guid=guid,track=id,chunk=chunk}
+          take.items[#take.items+1]={guid=guid,track=dest,chunk=chunk}
         else take.unresolved=true;if source then reaper.PCM_Source_Destroy(source)end end
       end
     end
@@ -506,11 +507,12 @@ function M.new()
     end
     assert(self.mode~='recording' and self.mode~='countin','Stop recording first')
     if c.op=='setup' then self:setup()
-    elseif c.op=='ready' then assert(reaper.GetPlayState()==0,'Stop playback first');self:park();self.mode='idle';self:arm()
+    elseif c.op=='ready' or c.op=='reconnect' then assert(reaper.GetPlayState()==0,'Stop playback first');self:prepare_device();self.deviceArm=true
+      if self.mode=='idle' then self:park()end
     elseif c.op=='select' then
       assert(reaper.GetPlayState()==0,'Stop playback first')
       for _,cfg in ipairs(self.db.inputs)do if cfg.id==c.input then cfg.selected=c.value==true end end
-      self:arm();self:save(false)
+      if reaper.GetNumAudioInputs()>0 then self:arm()end;self:save(false)
     elseif c.op=='configure' then
       assert(reaper.GetPlayState()==0,'Stop playback first')
       for _,cfg in ipairs(self.db.inputs)do if cfg.id==c.input then
@@ -532,6 +534,26 @@ function M.new()
       assert(self.mode=='idle' and reaper.GetPlayState()==0,'Finish the current take first')
       self:jam_settings(c);self:save(false)
     elseif c.op=='countin' then self.db.countin=c.value==true;self:save(false)
+    elseif c.op=='overdub' then
+      self:review(c.session,c.take)
+      self.overdub={session=c.session,take=c.take,stopAtEnd=true}
+      for _,cfg in ipairs(self.db.inputs)do cfg.selected=false end
+      self:prepare_device();self:save(false)
+    elseif c.op=='jamClick' then
+      assert(reaper.GetPlayState()==0,'Stop playback first');local s=M.mix_take(self);assert(s.song.free,'Free-jam click only');s.song.click=c.value==true;self:save(false)
+    elseif c.op=='recordPart' then
+      assert(self.overdub,'Choose Add another part first')
+      local s,t=M.mix_take(self)
+      assert(self:song(s.song.key).start==s.song.start,'Song moved; export this recording first')
+      assert(math.abs(reaper.Master_GetPlayRate(0)-s.rate)<.00001,'Return to the recording tempo first')
+      self:begin(s.song.key,t.id,s.id)
+      local _,new=M.mix_take(self);new.stopAtEnd=c.stopAtEnd~=false;self.overdub=nil;self:save(false)
+    elseif c.op=='partMix' then
+      local s,t=M.mix_take(self);local mix=t.mix[c.part];assert(mix,'Part is not in this arrangement')
+      if c.gain~=nil then assert(type(c.gain)=='number' and c.gain==c.gain and c.gain>=0 and c.gain<=4,'Invalid part volume');mix.gain=c.gain end
+      if c.muted~=nil then mix.muted=c.muted==true end
+      if c.name~=nil then assert(type(c.name)=='string' and #c.name<=100,'Name must be at most 100 characters');s.parts[c.part].name=c.name end
+      self:audition_mix();self:save(false)
     elseif c.op=='record' then
       if self.db.recordMode=='freejam' and c.jam then self:jam_settings(c.jam)end
       self:begin(self.db.recordMode=='freejam' and 'freejam' or c.song)
@@ -539,17 +561,19 @@ function M.new()
     elseif c.op=='review' then self:review(c.session,c.take)
     elseif c.op=='listen' then
       local same=self.selected==c.session and self.take==c.take and self.mode=='review'
+      local overdub=self.overdub
       local backing,recording,inputs,stems=self.backingOn,self.recordingOn,self.recMutes,self.stemMutes
       self:review(c.session,c.take)
-      if same then self.backingOn=backing;self.recordingOn=recording;self.recMutes=inputs;self.stemMutes=stems;self:audition_mix()end
+      if same then self.overdub=overdub;self.backingOn=backing;self.recordingOn=recording;self.recMutes=inputs;self.stemMutes=stems;self:audition_mix()end
       reaper.Main_OnCommand(1007,0);self.mode='audition'
     elseif c.op=='mix' then
       assert(self.selected,'Select a take');if c.group=='backing' then self.backingOn=c.value==true
       elseif c.group=='recording' then self.recordingOn=c.value==true
       elseif c.group=='stem' then self.stemMutes=self.stemMutes or {};self.stemMutes[c.input]=c.value==true
       else self.recMutes=self.recMutes or {};self.recMutes[c.input]=c.value==true end
-      self:audition_mix()
-    elseif c.op=='done' then assert(reaper.GetPlayState()==0,'Stop playback first');self:park();self.mode='idle';self:save(true)
+      if c.group=='input' then local s,t=M.mix_take(self);for _,id in ipairs(t.layers)do if s.parts[id].input==c.input then t.mix[id].muted=c.value==true end end end
+      self:audition_mix();M.save_mix(self)
+    elseif c.op=='done' then assert(reaper.GetPlayState()==0,'Stop playback first');self:park();self.mode='idle';self.overdub=nil;self:release_device();self:save(true)
     elseif c.op=='later' then self.later=true
     elseif c.op=='open' then
       assert(reaper.GetPlayState()==0,'Stop playback before opening a recording project')
@@ -588,17 +612,29 @@ function M.new()
       elseif c.op=='discard' then t.status='discarded'
       elseif c.op=='retry' then assert(t==s.takes[#s.takes],'Only retry the latest take');t.status='discarded' end
       self:park();self:save(true)
-      if c.op=='discard' then self.mode='idle';self.selected=nil;self.take=nil;self.message='Take discarded. Restore it from Saved recordings if needed.' end
-      if c.op=='keep' or c.op=='retry' then self.mode='idle';self:begin(s.song.key)end
+      if c.op=='discard' then
+        if t.parent then self:review(s.id,t.parent)else self.mode='idle';self.selected=nil;self.take=nil end
+        self.message='New recording discarded. Restore it from Saved recordings if needed.'
+      end
+      if c.op=='keep' or c.op=='retry' then
+        for _,cfg in ipairs(self.db.inputs)do cfg.selected=false;for _,id in ipairs(t.inputs)do if cfg.id==id then cfg.selected=true end end end
+        self.mode='idle';self:begin(s.song.key,c.op=='retry' and t.parent or nil,s.id)
+      end
     else error('Unknown recording command')end
   end
   function self:tick()
-    if self.mode=='countin' and reaper.time_precise()>=self.countEnd then
-      self:stop_preview();self.mode='recording';self:start_native()
-    elseif self.mode=='recording' then
-      local s=self:session(self.db.active.session);local state=reaper.GetPlayState()
+    self:device_tick()
+    if self.deviceArm and self.deviceState=='ready' and reaper.GetPlayState()==0 then self.deviceArm=nil;self:arm()end
+    if self.mode=='countin' or self.mode=='recording' then
+      local s,t=M.mix_take(self);local state=reaper.GetPlayState()
+      if reaper.GetNumAudioInputs()==0 then
+        reaper.Main_OnCommand(1016,0);self:finish(true);self.deviceState='unavailable';self.error='Recording inputs disconnected. Captured audio has been retained.';return
+      end
+      local origin=t.origin or s.song.start
+      if self.mode=='countin' and reaper.GetPlayPosition()>=origin then self.mode='recording'end
       if s.song.free then self:jam_extend(s)end
-      if not s.song.free and (state&1)==1 and reaper.GetPlayPosition()>=s.song.finish then reaper.Main_OnCommand(1016,0);self:finish()
+      local finish=origin+(s.song.free and (t.limit or 0) or (s.song.finish-s.song.start))
+      if (not s.song.free or t.parent and t.stopAtEnd~=false) and (state&1)==1 and reaper.GetPlayPosition()>=finish then reaper.Main_OnCommand(1016,0);self:finish()
       elseif state==0 then self:finish()end
     elseif self.mode=='audition' then
       local s=self:session(self.selected);local finish=s.song.finish
@@ -613,6 +649,7 @@ function M.new()
     local inputs=J.array();local tracks=M.tracks()
     for _,cfg in ipairs(self.db.inputs)do
       local tr=tracks[cfg.id];local row={}
+      if self.db.active then local _,t=M.mix_take(self);tr=tracks[(t.dest or {})[cfg.id]] or tr end
       for k,v in pairs(cfg)do row[k]=v end
       row.exists=tr~=nil;row.available=cfg.input+(cfg.stereo and 2 or 1)<=reaper.GetNumAudioInputs()
       row.armed=tr and reaper.GetMediaTrackInfo_Value(tr,'I_RECARM')==1 or false
@@ -624,12 +661,14 @@ function M.new()
     local sessions=J.array();local pending=0
     for _,s in ipairs(self.db.sessions) do
       local row={id=s.id,song=s.song,created=s.created,deleted=s.deleted,exported=s.exported,takes=J.array()}
-      for _,t in ipairs(s.takes)do row.takes[#row.takes+1]={id=t.id,name=t.name,number=t.number,status=t.unresolved and 'Needs recovery' or t.status,duration=t.duration or 0,favourite=t.favourite,inputs=t.inputs}end
+      for _,t in ipairs(s.takes)do row.takes[#row.takes+1]={id=t.id,name=t.name,number=t.number,status=t.unresolved and 'Needs recovery' or t.status,duration=t.duration or 0,favourite=t.favourite,inputs=t.inputs,parent=t.parent}end
       if not s.deleted and not s.exported then pending=pending+1 end
       sessions[#sessions+1]=row
     end
+    local parts=J.array()
+    if self.selected and self.take then local s,t=M.mix_take(self);for _,id in ipairs(t.layers or {})do local p=s.parts[id];parts[#parts+1]={id=id,name=p.name,stereo=p.stereo,input=p.input,new=p.take==t.id,gain=(t.mix[id] or {}).gain or 1,muted=(t.mix[id] or {}).muted==true}end end
     local songs=P.songs();for _,s in ipairs(songs)do s.gain=P.gain(s);s.level=P.level(s)end
-    return {project=self.id,revision=self.revision,mode=self.mode,paused=(reaper.GetPlayState()&2)==2,inputs=inputs,sessions=sessions,songs=J.array(songs),pending=pending,notice=pending>0 and not self.later,recordMode=self.db.recordMode or 'song',jam=self.db.jam,countin=self.db.countin,selected=self.selected,take=self.take,message=self.message,error=self.error,ack=self.ack,ready=self.root~=nil,backingOn=self.backingOn~=false,recordingOn=self.recordingOn~=false,recMutes=self.recMutes or {},stemMutes=self.stemMutes or {}}
+    return {elapsed=self.db.active and math.max(0,reaper.GetPlayPosition()-(self.db.active.origin or 0)) or 0,device=self.deviceState,overdub=self.overdub,parts=parts,project=self.id,revision=self.revision,mode=self.mode,paused=(reaper.GetPlayState()&2)==2,inputs=inputs,sessions=sessions,songs=J.array(songs),pending=pending,notice=pending>0 and not self.later,recordMode=self.db.recordMode or 'song',jam=self.db.jam,countin=self.db.countin,selected=self.selected,take=self.take,message=self.message,error=self.error,ack=self.ack,ready=self.root~=nil,backingOn=self.backingOn~=false,recordingOn=self.recordingOn~=false,recMutes=self.recMutes or {},stemMutes=self.stemMutes or {}}
   end
   -- Restore preview overrides before ordinary rehearsal playback is available.
   local _,raw=reaper.GetProjExtState(0,'ReaSetRec','audition')
@@ -637,6 +676,11 @@ function M.new()
   local _,opts=reaper.GetProjExtState(0,'ReaSetRec','auditionOptions')
   if opts~='' then local ok,v=pcall(J.decode,opts);if ok then self.auditionOptions=v end end
   if reaper.GetPlayState()==0 then
+    self:release_device()
+    local migration=J.encode(self.db)
+    for _,s in ipairs(self.db.sessions)do for _,t in ipairs(s.takes)do M.parts(self,s,t,nil,s.deleted or s.exported)end end
+    self.db.version=2
+    if self.root and not self.db.active and migration~=J.encode(self.db)then self:save(true)end
     if self.db.active then self:finish(true) else
       local before=J.encode(self.db);local changes=reaper.GetProjectStateChangeCount(0)
       self:restore_options();self:park()

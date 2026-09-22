@@ -89,7 +89,7 @@ return function(self,M)
   function self:jam_extend(s)
     if self.jamClick and reaper.ValidatePtr(self.jamClick,'MediaItem*')then
       local length=reaper.GetMediaItemInfo_Value(self.jamClick,'D_LENGTH')
-      local elapsed=reaper.GetPlayPosition()-s.song.start
+      local elapsed=reaper.GetPlayPosition()-((self.db.active or {}).origin or s.song.start)
       if elapsed>length-60 then reaper.SetMediaItemInfo_Value(self.jamClick,'D_LENGTH',elapsed+300)end
     end
   end

@@ -1,7 +1,7 @@
 # Initial recording setup
 
-For the proposed input-readiness, count-in and overdub improvements, see the
-[recording upgrades plan](RECORDING_UPGRADES_PLAN.md). Those changes are not yet implemented.
+Recording reliability, per-part levels and solo overdubs are available in v3.16.
+See [release details and verification](RECORDING_PARTS.md).
 
 The recording controller automatically creates and saves the track template below
 once per saved Jam Room setlist. Run the updated `Requirements/ReaSet_Startup.lua`
@@ -132,3 +132,35 @@ The review screen separates **Playback**, **Next take**, and **Export**:
 For further editing, use **Saved recordings > Export multitrack & clear from
 setlist**. This exports the session's kept takes with the original stems to a
 REAPER project and clears the recordings only after export verification.
+
+## Building a recording yourself (v3.16)
+
+1. Open Record and wait for the inputs to connect. Select instruments, choose
+   Song or Free jam, click/count-in settings, and record the first pass.
+2. Stop and listen. Each recorded part has its own Hear switch and volume slider.
+   Levels save when you release the slider; Reset returns to its original level.
+3. Choose **Add another part** (or **Keep & add another part** after an overdub).
+   Select the inputs for this pass. You can reuse Vox 1 or Guitar 1 as many times
+   as needed: previous performances remain separate playback parts.
+4. Balance/mute your accompaniment above. The summary names the recording inputs
+   and playing parts. Choose count-in; for free jams, choose click and Stop at end.
+5. Press **Record part**. After Stop, listen to the combined arrangement.
+   **Redo new parts** retries only this pass; **Discard new parts** returns to the
+   previous arrangement. Kept earlier parts remain safe.
+6. **Export recording** makes an MP3 of the chosen combination and saved balance.
+   Multitrack export preserves separate tracks and kept alternatives for REAPER.
+
+**Keep & record another** still records an independent alternative take, without
+playing the earlier take. Choose an earlier saved take to build a different version.
+Overdubs start from the beginning; punch-ins, comping and effects remain native
+REAPER work. Live monitoring still comes from the X32, not REAPER input monitoring.
+
+The count-in now runs on the same REAPER timeline as capture. REAPER's native
+record indicator lights before the first count-in click; that is intentional.
+The lead-in is hidden from normal review and export while raw audio remains on disk.
+Recording uses temporary items beyond the setlist, then returns aligned recordings
+and the cursor to the session's song location. Original songs are not moved.
+
+If inputs cannot connect, check the X32 USB cable, REAPER audio driver and enabled
+input range, then choose **Reconnect inputs**. You no longer need to play a song
+first. Device availability and silence are separate: a quiet input can still be Ready.

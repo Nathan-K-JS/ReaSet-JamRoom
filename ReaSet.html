@@ -3401,6 +3401,8 @@
         .rec-actions{display:flex;gap:10px;flex-wrap:wrap;margin:12px 0}
         .rec-btn{width:auto;min-height:44px;margin:0;padding:10px 16px;border:1px solid #485464;background:#252c35;color:#eef2f7;border-radius:10px;cursor:pointer;font:inherit}
         .rec-btn.primary{background:#b22c46;border-color:#e64a64;font-weight:700}.rec-btn:disabled{opacity:.4;cursor:default}
+        .rec-part{border-top:1px solid #343b44;padding:10px 0}.rec-part-head,.rec-part-level{display:flex;align-items:center;gap:8px}.rec-part-head label{flex:1;min-width:0;font-weight:650;overflow-wrap:anywhere}.rec-part small{color:#70dba6}.rec-part .rec-btn{padding:6px 8px;font-size:12px}.rec-part-level input[type=range]{flex:1;width:0;min-width:60px;min-height:44px;accent-color:#70dba6}.rec-part output{min-width:60px;font-size:12px;color:#aeb8c5}
+
         .rec-review h3{overflow-wrap:anywhere}
         .rec-review-section{border-top:1px solid #343b44;padding:16px 0 8px}
         .rec-review-section .rec-btn.primary{background:#70dba6;border-color:#70dba6;color:#132b22}
@@ -5507,7 +5509,7 @@
         syncLeadSlider();
         tkRenderPanel();             // paints the performance chips on load
         // Shown in the sidebar so a stale cached page is obvious after a deploy.
-        var REASET_VERSION = "v3.15 - Import resume and lifecycle";
+        var REASET_VERSION = "v3.16 - Recording parts and reliable count-in";
         var _rv = document.getElementById("reasetVer");
         if (_rv) _rv.textContent = REASET_VERSION;
         (function () { var t = localStorage.getItem("reasetlist_theme") || "dark"; setTheme(t, true); })();
@@ -8960,7 +8962,7 @@
             return g_recState && Date.now()-g_recHb.at<4000 && (!g_stableId || g_recState.project===g_stableId);
         }
         function recLocked() {
-            return !!(g_recPending && ['record','retry','keep','listen'].indexOf(g_recPending.op)>=0 ||
+            return !!(g_recPending && ['record','recordPart','retry','keep','listen'].indexOf(g_recPending.op)>=0 ||
                 g_recState && (!g_stableId || g_recState.project===g_stableId) && g_recState.mode && g_recState.mode!=='idle');
         }
         function recSong() {
@@ -8979,7 +8981,7 @@
         }
         function recCanStart(){
             var s=g_recState,inputs=s&&(s.inputs||[]).filter(function(c){return c.selected;});
-            return recOnline()&&s.ready&&s.mode==='idle'&&!g_recPending&&!isPlaying&&inputs.length>0&&inputs.every(function(c){return c.exists&&c.available;})&&(s.recordMode==='freejam'||recSong());
+            return recOnline()&&s.ready&&s.device!=='connecting'&&s.device!=='unavailable'&&s.mode==='idle'&&!g_recPending&&!isPlaying&&inputs.length>0&&inputs.every(function(c){return c.exists&&c.available;})&&(s.recordMode==='freejam'||recSong());
         }
         function recStart(){
             if(!recCanStart())return;
@@ -9010,7 +9012,7 @@
             var command=Object.assign({op:op,project:g_recState.project,revision:g_recState.revision,nonce:nonce},extra||{});
             g_recProbe=null;
             g_recPending={nonce:nonce,op:op,at:Date.now()};g_recError='';
-            if (['record','retry','keep','listen'].indexOf(op)>=0) { cancelTransportActions();queuedRegion=null;_reaperNativeLoopOff(); }
+            if (['record','recordPart','retry','keep','listen'].indexOf(op)>=0) { cancelTransportActions();queuedRegion=null;_reaperNativeLoopOff(); }
             wwr_req('SET/EXTSTATE/ReaSetRec/want/'+encodeURIComponent(JSON.stringify(command)));
             recRender();
             return nonce;
@@ -9028,7 +9030,7 @@
             dialog.style.cssText='width:min(480px,calc(100vw - 32px));max-height:calc(100dvh - 32px);overflow:auto;background:#172334;color:#edf4ff;border:1px solid #536079;border-radius:16px;padding:24px;box-sizing:border-box';
             dialog.innerHTML='<h2 style="margin-top:0">Export recording</h2><p style="overflow-wrap:anywhere">'+trEsc(session.song.name)+' · '+trEsc(take.name||'Take '+take.number)+'</p>'
                 +(session.song.free?'':'<label style="display:flex;gap:12px;align-items:center;min-height:48px"><input id="rec-copy-backing" type="checkbox" '+(state.selected!==sid||state.take!==tid||state.backingOn?'checked':'')+'> Include backing</label>')
-                +'<p>One take, using your selected instrument mutes. Click and count-in are excluded. Room and IEM levels stay separate from this stereo mix.</p><p class="rec-sub">Keep JamRoom Importer open to export the recording and share it with phones on the room Wi-Fi. If it is closed, the export will wait for next time.</p><div class="rec-actions"><button class="rec-btn primary" id="rec-copy-go">Export recording</button><button class="rec-btn" id="rec-copy-cancel">Cancel</button></div>';
+                +'<p>Your selected recorded parts, using their saved levels and mutes. Click and count-in are excluded. Room and IEM levels stay separate from this stereo mix.</p><p class="rec-sub">Keep JamRoom Importer open to export the recording and share it with phones on the room Wi-Fi. If it is closed, the export will wait for next time.</p><div class="rec-actions"><button class="rec-btn primary" id="rec-copy-go">Export recording</button><button class="rec-btn" id="rec-copy-cancel">Cancel</button></div>';
             document.body.appendChild(dialog);dialog.showModal();
             dialog.querySelector('#rec-copy-cancel').onclick=function(){dialog.close();dialog.remove();};
             dialog.querySelector('#rec-copy-go').onclick=function(){
@@ -9132,11 +9134,12 @@
             else{
                 html+='<div class="rec-actions"><button class="rec-btn" onclick="recCopies()">Exported recordings</button></div>';
                 if(state.notice)html+='<div class="rec-card"><h3>Recordings to tidy up</h3><p>'+state.pending+' recording sessions awaiting export. Saved takes stay silent during rehearsal.</p>'+recButton('Later','later')+'</div>';
+                if(!busy&&(!review||state.overdub))html+='<p class="rec-sub">'+(state.device==='connecting'?'Connecting recording inputs...':state.device==='unavailable'?'Recording device unavailable. Check the X32 USB connection and REAPER audio device.':state.device==='ready'?'Recording inputs ready':'Recording inputs')+'</p><div class="rec-actions">'+recButton('Reconnect inputs','reconnect',{},mode==='audition')+'</div>';
                 if(!busy&&!review)html+='<div class="rec-actions">'+recButton((!free?'✓ ':'')+'Song','recordMode',{value:'song'})+recButton((free?'✓ ':'')+'Free jam','recordMode',{value:'freejam'})+'</div>';
                 html+='<div class="rec-card"><h2>'+trEsc(busy||review?session&&session.song.name||'Recording':free?'Free jam':song?song.name:'Cue a song to record')+'</h2>';
                 if((busy||review)&&session&&session.song.free)html+='<div class="rec-sub">'+session.song.bpm+' BPM · '+session.song.beats+'/4 · '+(session.song.click?'Click on during recording':'No recording click')+'</div>';
                 if(busy){
-                    html+='<div class="rec-sub">'+(mode==='countin'?'Two-bar count-in':state.paused?'Paused — same take':'Recording · '+trTime(Math.max(0,currentPos-(session?session.song.start:0))))+'</div><div class="rec-actions">'
+                    html+='<div class="rec-sub">'+(mode==='countin'?'Two-bar count-in':state.paused?'Paused — same take':'Recording · '+trTime(state.elapsed||0))+'</div><div class="rec-actions">'
                         +recButton(state.paused?'Resume':'Pause','pause',{},mode==='countin')+recButton('Stop','stop',{},false,true)+'</div>';
                     (state.inputs||[]).filter(function(c){return c.selected;}).forEach(function(c){
                         html+='<div class="rec-input"><span>'+trEsc(c.name)+'</span><div class="rec-meter'+(c.stereo?' stereo':'')+'" data-rec-meter="'+trEsc(c.id)+'"><i></i>'+(c.stereo?'<i></i>':'')+'</div></div>';
@@ -9146,8 +9149,20 @@
                     html+='<section class="rec-review-section" aria-label="Playback"><h4>Playback</h4><div class="rec-actions">'
                         +recButton(mode==='audition'?'Stop listening':'Listen',mode==='audition'?'stop':'listen',{session:session.id,take:take.id},false,true)+'</div><div class="rec-actions">'
                         +recMixToggle('Recorded instruments',state.recordingOn,{group:'recording',value:!state.recordingOn})
-                        +(session.song.free?'':recMixToggle('Original backing',state.backingOn,{group:'backing',value:!state.backingOn}))+'</div><details id="rec-review-instruments"><summary>Instrument playback</summary><p class="rec-sub">Recorded instruments</p><div class="rec-actions">';
-                    (state.inputs||[]).forEach(function(c){if((take.inputs||[]).indexOf(c.id)>=0)html+=recMixToggle(c.name,!(state.recMutes||{})[c.id],{group:'input',input:c.id,value:!(state.recMutes||{})[c.id]});});
+                        +(session.song.free?'':recMixToggle('Original backing',state.backingOn,{group:'backing',value:!state.backingOn}))+'</div><details id="rec-review-instruments" '+(state.parts&&state.parts.length?'open':'')+'><summary>Instrument playback</summary><p class="rec-sub">Recorded instruments</p><div class="rec-actions">';
+                    if(state.parts && state.parts.length){
+                        html+='</div><div class="rec-parts">';
+                        state.parts.forEach(function(p){
+                            var db=p.gain>0?Math.max(-60,20*Math.log10(p.gain)):-61;
+                            html+='<div class="rec-part"><div class="rec-part-head"><label for="rec-part-'+trEsc(p.id)+'">'+trEsc(p.name)+(p.new?' <small>New</small>':'')+'</label>'
+                                +recMixToggle('Hear',!p.muted,{group:'part',part:p.id,muted:!p.muted}).replace('role="switch"','role="switch" aria-label="Hear '+trEsc(p.name)+'"')
+                                +recButton('Rename','partMix',{part:p.id,rename:true},mode==='audition')+'</div><div class="rec-part-level">'
+                                +'<input type="range" id="rec-part-'+trEsc(p.id)+'" data-rec-part="'+trEsc(p.id)+'" min="-61" max="12" step="0.5" value="'+db+'" '+(g_recPending?'disabled':'')+'><output>'+ (p.gain===0?'Silent':db.toFixed(1)+' dB')+'</output>'
+                                +recButton('Reset','partMix',{part:p.id,gain:1})+'</div></div>';
+                        });
+                    }else{
+                        (state.inputs||[]).forEach(function(c){if((take.inputs||[]).indexOf(c.id)>=0)html+=recMixToggle(c.name,!(state.recMutes||{})[c.id],{group:'input',input:c.id,value:!(state.recMutes||{})[c.id]});});
+                    }
                     html+='</div>';
                     if(!session.song.free){
                         html+='<p class="rec-sub">Original backing</p><div class="rec-actions">';
@@ -9155,10 +9170,20 @@
                         html+='</div>';
                     }
                     html+='</details></section><section class="rec-review-section" aria-label="Take actions"><h4>Next take</h4><div class="rec-actions">'
+                        +recButton(take.parent?'Keep & add another part':'Add another part','overdub',{session:session.id,take:take.id},mode==='audition')
                         +recButton('Keep & record another','keep',{session:session.id,take:take.id},mode==='audition')+'</div><div class="rec-actions rec-discard">'
-                        +recButton('Discard & re-record','retry',{session:session.id,take:take.id},mode==='audition'||take!==session.takes[session.takes.length-1])
-                        +recButton('Discard take','discard',{session:session.id,take:take.id},mode==='audition')+'</div><p class="rec-sub">Discarded takes can be restored from Saved recordings.</p></section>';
-                    html+='<section class="rec-review-section" aria-label="Export"><h4>Export</h4><p class="rec-sub">An MP3 to play, download and share with friends.</p><div class="rec-actions">'
+                        +recButton(take.parent?'Redo new parts':'Discard & re-record','retry',{session:session.id,take:take.id},mode==='audition'||take!==session.takes[session.takes.length-1])
+                        +recButton(take.parent?'Discard new parts':'Discard take','discard',{session:session.id,take:take.id},mode==='audition')+'</div><p class="rec-sub">Discarded takes can be restored from Saved recordings.</p></section>';
+                    if(state.overdub){
+                        var selected=(state.inputs||[]).filter(function(c){return c.selected;});
+                        html+='<section class="rec-review-section" id="rec-next-part"><h4>Record next part</h4><p class="rec-sub">Record these inputs. Existing parts above are your accompaniment.</p><div class="rec-input-grid">';
+                        (state.inputs||[]).forEach(function(c){html+='<label class="rec-input"><input type="checkbox" data-rec-input="'+trEsc(c.id)+'" '+(c.selected?'checked':'')+' '+(g_recPending||mode==='audition'?'disabled':'')+'><span>'+trEsc(c.name)+'</span></label>';});
+                        html+='</div><p class="rec-sub">Recording: '+trEsc(selected.map(function(c){return c.name;}).join(', ')||'Select an input')+'. Playing: '+trEsc((state.recordingOn===false?[]:(state.parts||[]).filter(function(p){return !p.muted;}).map(function(p){return p.name;})).concat(!session.song.free&&state.backingOn!==false?['Original backing']:[]).join(', ')||'No accompaniment')+'</p><div class="rec-actions">'
+                            +recButton('Count-in: '+(state.countin?'2 bars':'off'),'countin',{value:!state.countin})
+                            +(session.song.free?recButton('Click: '+(session.song.click?'on':'off'),'jamClick',{value:!session.song.click},mode==='audition')+'<label><input id="rec-part-stop" type="checkbox" checked> Stop at end</label>':'')
+                            +recButton('Record part','recordPart',{},mode==='audition'||!selected.length||selected.some(function(c){return !c.exists||!c.available;})||state.device==='connecting'||state.device==='unavailable',true)+'</div></section>';
+                    }
+                    html+='<section class="rec-review-section" aria-label="Export"><h4>Export</h4><p class="rec-sub">An MP3 of these parts and their balance, to play, download and share.</p><div class="rec-actions">'
                         +recButton('Export recording','copy',{session:session.id,take:take.id},mode==='audition')+'</div><p class="rec-sub">For editing in REAPER, export the full multitrack session from Saved recordings below.</p></section><div class="rec-actions">'
                         +recButton('Done','done',{},mode==='audition')+'</div></div>';
                 }else{
@@ -9202,11 +9227,13 @@
                 html+=recButton('Create missing tracks','setup',{},busy||review)+recButton('Retry save','save',{},busy)+'</details>';
             }
             if(html!==g_recHtml){
-                var focused=document.activeElement, editing=host.contains(focused)&&focused.matches('input[type=number],input[type=text],textarea');
-                var draft=Array.from(host.querySelectorAll(editing?'.rec-setup-row input,.rec-jam input,.rec-jam select':'.rec-jam input,.rec-jam select')).map(function(e){return {id:e.id,value:e.value,checked:e.checked};});
+                var focused=document.activeElement, editing=host.contains(focused)&&focused.matches('input[type=number],input[type=text],input[type=range],textarea');
+                var draft=Array.from(host.querySelectorAll(editing?'.rec-setup-row input,.rec-jam input,.rec-jam select,.rec-part input,#rec-part-stop':'.rec-jam input,.rec-jam select,#rec-part-stop')).map(function(e){return {id:e.id,value:e.value,checked:e.checked};});
                 var focusId=editing?focused.id:null;
                 var open=Array.from(host.querySelectorAll('details[open]')).map(function(e){return e.id||e.querySelector('summary').textContent;});
+                var revealPart=state.overdub&&!document.getElementById('rec-next-part');
                 g_recHtml=html;host.innerHTML=html;
+                if(revealPart&&document.getElementById('rec-next-part'))document.getElementById('rec-next-part').scrollIntoView({block:'start'});
                 host.querySelectorAll('details').forEach(function(e){if(open.indexOf(e.id||e.querySelector('summary').textContent)>=0)e.open=true;});
                 draft.forEach(function(d){var e=document.getElementById(d.id);if(e){e.value=d.value;if(e.type==='checkbox')e.checked=d.checked;}});
                 if(focusId && document.getElementById(focusId))document.getElementById(focusId).focus({preventScroll:true});
@@ -9219,14 +9246,21 @@
             var c=JSON.parse(b.dataset.rec),op=c.op;delete c.op;
             if(op==='copy'){b.blur();recMakeCopy(c.session,c.take);return;}
             if(op==='record'){b.blur();recStart();return;}
+            if(op==='recordPart'){var end=document.getElementById('rec-part-stop');c.stopAtEnd=!end||end.checked;}
+            if(op==='mix'&&c.group==='part'){op='partMix';delete c.group;}
+            if(op==='partMix'&&c.rename){var partName=window.prompt('Name this part:','');if(partName===null)return;delete c.rename;c.name=partName;}
             if(op==='delete'){if(!window.confirm('Delete this recording session from the setlist? Its audio stays recoverable.'))return;c.confirm=c.session;}
             if(op==='deleteBatch'){if(!window.confirm('Delete '+c.sessions.length+' selected recording sessions? Their audio stays recoverable.'))return;c.confirm=c.sessions.join('|');}
             if(op==='rename'){var name=window.prompt('Take name (optional):','');if(name===null)return;c.name=name;}
             if(op==='configure'){c.channel=Number(document.getElementById('rec-in-'+c.input).value)-1;c.output=Number(document.getElementById('rec-out-'+c.input).value)-1;}
             b.blur();recSend(op,c);
         });
+        document.getElementById('recording-body').addEventListener('input',function(e){
+            if(e.target.dataset.recPart){var value=Number(e.target.value);e.target.nextElementSibling.textContent=value<=-61?'Silent':value.toFixed(1)+' dB';}
+        });
         document.getElementById('recording-body').addEventListener('change',function(e){
-            if(e.target.dataset.recSession){g_recSelected[e.target.dataset.recSession]=e.target.checked;e.target.blur();recRender();}
+            if(e.target.dataset.recPart){var db=Number(e.target.value);recSend('partMix',{part:e.target.dataset.recPart,gain:db<=-61?0:Math.pow(10,db/20)});}
+            else if(e.target.dataset.recSession){g_recSelected[e.target.dataset.recSession]=e.target.checked;e.target.blur();recRender();}
             else if(e.target.dataset.recInput){var input=e.target.dataset.recInput,value=e.target.checked;e.target.blur();recSend('select',{input:input,value:value});}
         });
         setInterval(function(){recRender();recUpdateGain();},500);

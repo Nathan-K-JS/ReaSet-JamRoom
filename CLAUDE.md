@@ -38,11 +38,14 @@ ancestry first; never force-push or overwrite divergent changes. Pushing only
 `feature/timing-repair` does not deliver an update to standard installations.
 
 Current architecture:
-- Recording upgrades requested 22 September are planned, not implemented; see
-  `docs/RECORDING_UPGRADES_PLAN.md`. Device readiness precedes native count-in
-  work. Establish independent part/arrangement/mix state before sliders and
-  Add another part overdubs. Preserve separate takes, same-input harmonies,
-  recovery and the simple local REAPER-controller scope.
+- v3.16 implements recording parts, saved gains and solo overdubs; see
+  `docs/RECORDING_PARTS.md`. Count-in is timeline audio in a temporary area beyond
+  library media, with native Record already running. Never restore the preview /
+  wall-clock Record handover. Journals store capture origin/lead-in for recovery.
+  Part IDs differ from physical input IDs; takes list arrangement parts and mixes.
+  Version-1 journals migrate with index.v1.json retained; both MP3 request versions
+  work. Readiness opens configured audio and scopes background-close preferences.
+  X32 hardware latency/cold-start acceptance must still be checked on the room PC.
 - v3.15 checks resumed import targets in the Apply flow and lets users explicitly
   select the current project, with a second identity check against tab changes.
   Unresolved Apply operations cannot be retargeted. A matching running importer

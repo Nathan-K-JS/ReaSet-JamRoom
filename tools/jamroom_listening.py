@@ -151,7 +151,7 @@ class Listening:
             if len(fields) >= 4 and fields[0] == 'PROJEXTSTATE':
                 index = Path(fields[-1])
                 db = json.loads(index.read_text(encoding='utf-8'))
-                if db.get('version') == 1 and db.get('project'):
+                if db.get('version') in (1, 2) and db.get('project'):
                     with self.guard:
                         root = str(index.parent / 'Listening')
                         if self.data['roots'].get(db['project']) != root:
@@ -167,7 +167,7 @@ class Listening:
                         continue
                     try:
                         req = json.loads(path.read_text(encoding='utf-8'))
-                        if req.get('project') != project or req.get('id') != path.parent.name or req.get('version') != 1:
+                        if req.get('project') != project or req.get('id') != path.parent.name or req.get('version') not in (1, 2):
                             continue
                         self.data['jobs'][key] = {'key': key, 'id': req['id'], 'project': project,
                             'folder': str(path.parent), 'title': req['title'], 'created': req['created'],

@@ -1,8 +1,7 @@
 # Playback and recording
 
-Planned next upgrades: [Recording reliability, playback balance and overdubs](RECORDING_UPGRADES_PLAN.md)
-covers native count-in timing, input readiness, recorded-part sliders and solo
-multitrack layering. This is a plan; the behaviour below describes delivered work.
+Delivered in v3.16: [recording parts, continuous count-in and input readiness](RECORDING_PARTS.md).
+The [original implementation plan](RECORDING_UPGRADES_PLAN.md) is retained for context.
 
 **Export recording** is available from saved takes: stereo MP3 downloads and
 room-Wi-Fi QR sharing for Android and iPhone. See
@@ -42,7 +41,7 @@ FX; this is a backing trim, not a final output limiter or automatic loudness mat
 
 The **Record** tab provides the approved X32 template, remembered input selection,
 meters, optional two-bar count-in, Record, Pause/Resume and Stop. Stop saves the
-whole pass automatically. Listen reviews one pass at a time; Backing/Recording
+whole pass automatically. Listen reviews the selected take and its added parts; Backing/Recording
 and expandable instrument mutes control audition. Keep & record another retains
 the pass; Discard & re-record parks that pass recoverably. Done returns to the
 normal song screen. Song changes, loop/seek automation and library mutations
@@ -88,13 +87,13 @@ takes. The result path and **Open in REAPER** button remain in Saved recordings.
 - Delete and discard clear/park project items recoverably; they do not erase raw
   audio from disk. No automatic expiry or disk-purge button is included. Exported
   folders contain their own media and can be copied as complete folders.
-- This records one selected song, with an automatic stop at its boundary. For
-  free-form jams, punch-ins, comping and detailed mixing, use native REAPER.
-- Count-in uses an SWS audio preview routed to the first PB CLICK hardware send
-  (or output 1 if that bus is absent), at the song's detected tempo and current
-  speed/signature. It does not play the preceding song. The transition into
-  recording is controller-timed, not a sample-accurate native preroll; count-in
-  can be disabled. Generated click audio itself is unchanged.
+- Record a selected song or a free jam; add overdub parts from review. Song-backed
+  passes stop at the song boundary. Free-jam overdubs can stop at the arrangement
+  end or extend it. Punch-ins, comping and detailed effects stay in native REAPER.
+- Count-in and recording use one running native transport in a temporary area
+  beyond the library. The first musical beat no longer waits on a Lua timer.
+  Original song positions stay unchanged; the captured lead-in is excluded from
+  normal playback/export. Count-in follows the PB CLICK output and level.
 - Export handles ordinary file-backed audio. Nested/section sources or missing
   media stop export with the original recordings retained. Detailed manual edits
   to managed recording items also stop automatic cleanup rather than losing edits.

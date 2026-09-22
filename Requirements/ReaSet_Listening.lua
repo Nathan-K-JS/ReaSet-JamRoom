@@ -13,18 +13,21 @@ function M.make_listening(self,c)
   local folder=self.root..'/Listening/'..c.nonce
   if M.read(folder..'/request.json') then return end -- durable idempotency
   local same=self.selected==s.id and self.take==take.id and self.mode=='review'
-  local request={version=1,id=c.nonce,project=self.id,session=s.id,take=take.id,
+  local items,allowed=M.arrangement(self,s,take)
+  local inputs=M.J.array();for _,id in ipairs(take.layers)do local p=s.parts[id];inputs[#inputs+1]={id=id,name=p.name,stereo=p.stereo}end
+  local request={version=2,id=c.nonce,project=self.id,session=s.id,take=take.id,
     title=s.song.name..' - '..(take.name and take.name~='' and take.name or 'Take '..take.number),
-    created=os.date('%Y-%m-%d %H:%M:%S'),song=s.song,rate=s.rate,items=take.items,
-    duration=take.duration,inputs=self.db.inputs,pitches=s.pitches or {},
-    backing=c.backing==true and not s.song.free,recording=not same or self.recordingOn~=false,
-    recMutes=same and self.recMutes or {},stemMutes=same and self.stemMutes or {},
+    created=os.date('%Y-%m-%d %H:%M:%S'),song=s.song,rate=s.rate,items=items,
+    duration=take.duration,inputs=inputs,parts=s.parts,mix=M.J.decode(M.J.encode(take.mix)),pitches=s.pitches or {},
+    backing=c.backing==true and not s.song.free,recording=take.recordingOn~=false,
+    recMutes={},stemMutes=take.stemMutes or {},
     stems=M.J.array()}
+  for id,mix in pairs(take.mix or {})do request.recMutes[id]=mix.muted==true;request.mix[id].gain=mix.gain*((s.parts[id] or {}).baseGain or 1)end
   guard(reaper.GetMasterTrack(0))
   if not s.exported then
     local captured={};request.items=M.J.array()
     M.owned_items(function(it,tr,tag)
-      if tag==s.id..'/'..take.id then
+      if allowed[M.ext(tr,'ReaSetRec',nil,true)] then
         guard(tr)
         local _,guid=reaper.GetSetMediaItemInfo_String(it,'GUID','',false)
         local yes,chunk=reaper.GetItemStateChunk(it,'',false);assert(yes,'Cannot snapshot recorded item')
@@ -32,7 +35,7 @@ function M.make_listening(self,c)
         captured[guid]=true
       end
     end)
-    for _,r in ipairs(take.items)do assert(captured[r.guid],'Recorded items changed or are missing; recover the take first')end
+    for _,r in ipairs(items)do assert(captured[r.guid],'Recorded items changed or are missing; recover the take first')end
   end
   -- Freeze current backing item settings when the original song is still here.
   -- Archived sessions whose song moved use their saved backing snapshot instead.

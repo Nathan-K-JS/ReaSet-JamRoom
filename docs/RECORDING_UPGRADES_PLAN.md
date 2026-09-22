@@ -1,6 +1,8 @@
 # Recording reliability, playback balance and overdubs
 
-Status: implementation plan, 22 September 2026. No runtime changes in this update.
+Status: implemented in v3.16; retained as the original design record. See
+[release details](RECORDING_PARTS.md) for the chosen timeline approach, verification
+and remaining physical X32 acceptance checks.
 This builds on the existing local REAPER controller, X32 input template,
 recoverable recording sessions and MP3 sharing service.
 
@@ -18,7 +20,7 @@ recoverable recording sessions and MP3 sharing service.
 6. Keep **Export recording** as the MP3 action. Export the selected arrangement,
    while multitrack export also preserves kept alternative takes for later editing.
 
-## What the current code establishes
+## Baseline findings before implementation
 
 | Area | Current behaviour | Consequence |
 | --- | --- | --- |
