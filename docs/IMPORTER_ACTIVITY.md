@@ -1,4 +1,4 @@
-# Importer activity — v3.12
+# Importer activity — v3.17 workspace
 
 The importer now has one persistent status bar and an Activity view. The bar
 stays visible when scrolling the library. View activity opens full details;
@@ -39,7 +39,7 @@ rows. Batch stage messages/logs are bounded and saved through the existing
 per-job logging context. Existing project identity, playback, recording and
 operation receipt guards remain in force.
 
-The Activity bar occupies normal layout space and sticks to the viewport top.
+The Activity bar occupies reserved layout space below the importer navigation.
 Scroll padding follows its actual height. Detailed activity uses a separate
 view, not an expanding overlay. Significant status changes have a polite live
 region; elapsed timers and full logs are not repeatedly announced.

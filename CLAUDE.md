@@ -38,11 +38,14 @@ ancestry first; never force-push or overwrite divergent changes. Pushing only
 `feature/timing-repair` does not deliver an update to standard installations.
 
 Current architecture:
-- A proposed task-based importer/recording layout redesign is documented in
-  `docs/WORKSPACE_LAYOUT_PLAN.md`, with static design boards in `docs/ui-layout/`.
-  It is a proposal, not an implemented or approved UI change. It replaces stacked
-  sections with bounded work areas and persistent context/actions, and includes
-  preparing New take/Redo before recording. Keep v3.16 behaviour until approved.
+- v3.17 implements the approved task-based importer/recording workspaces; see
+  `docs/WORKSPACE_LAYOUTS.md` and the original `docs/WORKSPACE_LAYOUT_PLAN.md`.
+  Import review has Stems/Lyrics/Chords tabs and persistent Apply; recording has
+  Prepare/Capture/Review views with reserved actions. New take/Redo prepare before
+  Record; Cancel does not create or discard audio. `ReaSet_RecordingPrepare.lua`
+  owns those transitions. Preparation preserves backing choices into capture.
+  Importer navigation is `tools/importer-workspace.js` plus its CSS; existing
+  journals, autosave, target guards and Activity remain the owners of task state.
 - v3.16 implements recording parts, saved gains and solo overdubs; see
   `docs/RECORDING_PARTS.md`. Count-in is timeline audio in a temporary area beyond
   library media, with native Record already running. Never restore the preview /

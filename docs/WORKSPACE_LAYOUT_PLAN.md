@@ -1,6 +1,8 @@
 # Import and recording workspace redesign
 
-Status: proposed, 22 September 2026. Application behaviour is unchanged.
+Status: approved and implemented in v3.17, 22 September 2026.
+See [released workspaces and verification](WORKSPACE_LAYOUTS.md). The design
+and original inspection findings below are retained as context.
 
 The v3.16 features work, but their controls accumulate vertically. The next
 iteration should reorganise complete tasks, including their empty, busy,

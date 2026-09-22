@@ -1,6 +1,7 @@
 # Playback and recording
 
-Delivered in v3.16: [recording parts, continuous count-in and input readiness](RECORDING_PARTS.md).
+Delivered in v3.17: [import and recording workspaces](WORKSPACE_LAYOUTS.md).
+The v3.16 audio changes remain: [recording parts, continuous count-in and input readiness](RECORDING_PARTS.md).
 The [original implementation plan](RECORDING_UPGRADES_PLAN.md) is retained for context.
 
 **Export recording** is available from saved takes: stereo MP3 downloads and
@@ -42,8 +43,8 @@ FX; this is a backing trim, not a final output limiter or automatic loudness mat
 The **Record** tab provides the approved X32 template, remembered input selection,
 meters, optional two-bar count-in, Record, Pause/Resume and Stop. Stop saves the
 whole pass automatically. Listen reviews the selected take and its added parts; Backing/Recording
-and expandable instrument mutes control audition. Keep & record another retains
-the pass; Discard & re-record parks that pass recoverably. Done returns to the
+and individual part mutes control audition. New take and Redo prepare before
+recording; Discard parks the selected pass recoverably. Done returns to the
 normal song screen. Song changes, loop/seek automation and library mutations
 are guarded while recording or reviewing. Native Stop also finalizes the take.
 

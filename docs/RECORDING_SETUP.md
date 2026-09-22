@@ -1,10 +1,8 @@
 # Initial recording setup
 
-Recording reliability, per-part levels and solo overdubs are available in v3.16.
-See [release details and verification](RECORDING_PARTS.md).
-
-Proposed next UI redesign: [workflow review and visual layouts](WORKSPACE_LAYOUT_PLAN.md).
-This proposal does not change the setup instructions below.
+Recording workspaces, per-part levels and solo overdubs are available in v3.17.
+See [current workflows and verification](WORKSPACE_LAYOUTS.md), and
+[audio reliability and recording parts](RECORDING_PARTS.md).
 
 The recording controller automatically creates and saves the track template below
 once per saved Jam Room setlist. Run the updated `Requirements/ReaSet_Startup.lua`
@@ -16,7 +14,7 @@ until the project is saved and recording/review is idle, and leaves other projec
 alone. If you save a new project after starting REAPER, setup picks it up then.
 It creates missing template tracks without changing existing recording routing or
 levels. Subsequent starts do not recreate tracks you intentionally removed;
-Record > Setup > Create missing tracks remains available for that.
+Record > Settings > Create missing tracks remains available for that.
 
 ## Confirmed live input list and default recording tracks
 
@@ -117,46 +115,48 @@ a take. Export creates a verified independent project; Delete and Discard remain
 recoverable and retain raw audio. See [Playback and recording](PLAYBACK_AND_RECORDING.md)
 for everyday operation, recovery and current limits.
 
-## After stopping a take (v3.14)
+## After stopping a take (v3.17)
 
-The review screen separates **Playback**, **Next take**, and **Export**:
+Stop saves the take. The review workspace shows recorded parts and their saved
+levels, with **Recorded parts / Backing** tabs for song recordings. **Listen**,
+**Add part**, **New take** and **Export recording** stay at the bottom while the
+mix scrolls. Use **Takes** to compare versions and **Sessions** for older work.
 
-- **Listen** auditions the take. Switch recorded instruments and original backing
-  on or off; expand **Instrument playback** for individual instruments.
-- **Keep & record another** saves the current take and starts another pass.
-- **Discard & re-record** discards the latest take and starts another pass.
-- **Discard take** discards only that take and returns to setup without recording.
-  Recover an accidental discard using **Saved recordings > Restore take**.
-- **Export recording** creates an MP3 to play, download and share. Find existing
-  exports under **Exported recordings**. The importer must be running to process
-  exports and serve downloads; queued exports resume when it starts again.
-- **Done** finishes review. Takes remain saved for later.
+- **New take** prepares an independent alternative. Change inputs and count-in,
+  then press **Record take**. Earlier recorded parts stay silent.
+- **Redo take / Redo latest** prepares a replacement for the latest pass. The old
+  pass is discarded only after recording starts. **Cancel** returns to review.
+- **Discard take / Discard latest** discards that pass without starting another.
+  A discarded addition returns to its parent arrangement. Restore is under
+  **Sessions > Discarded takes > Restore take**.
+- **Export recording** opens a focused confirmation. **Create MP3** opens the
+  selected export's progress, download and QR links; **Back to recording** returns
+  to ReaSet. **Exports** reopens existing exports. Keep the importer running for
+  processing and room-Wi-Fi downloads; queued exports resume when it starts again.
+- **Done** finishes review and releases the song for normal playback.
 
-For further editing, use **Saved recordings > Export multitrack & clear from
-setlist**. This exports the session's kept takes with the original stems to a
-REAPER project and clears the recordings only after export verification.
+**Sessions > Export multitrack project** exports kept takes with
+original stems into an independent REAPER project. Setlist recordings are cleared
+only after verification. An MP3 export does not clear the multitracks.
 
-## Building a recording yourself (v3.16)
+## Building a recording yourself
 
-1. Open Record and wait for the inputs to connect. Select instruments, choose
-   Song or Free jam, click/count-in settings, and record the first pass.
-2. Stop and listen. Each recorded part has its own Hear switch and volume slider.
-   Levels save when you release the slider; Reset returns to its original level.
-3. Choose **Add another part** (or **Keep & add another part** after an overdub).
-   Select the inputs for this pass. You can reuse Vox 1 or Guitar 1 as many times
-   as needed: previous performances remain separate playback parts.
-4. Balance/mute your accompaniment above. The summary names the recording inputs
-   and playing parts. Choose count-in; for free jams, choose click and Stop at end.
-5. Press **Record part**. After Stop, listen to the combined arrangement.
-   **Redo new parts** retries only this pass; **Discard new parts** returns to the
-   previous arrangement. Kept earlier parts remain safe.
-6. **Export recording** makes an MP3 of the chosen combination and saved balance.
-   Multitrack export preserves separate tracks and kept alternatives for REAPER.
+1. Open Record and wait for inputs to connect. Choose Song or Free jam, select
+   instruments, choose click/count-in, then Record.
+2. Stop and Listen. Each recorded part has a Hear switch and level slider; its
+   **More** menu contains Rename and Reset level. Levels save on slider release.
+3. Choose **Add part**. Select this pass's inputs. Reusing Vox 1 or Guitar 1 creates
+   a separate performance; the earlier recording remains available to hear.
+4. Desktop shows inputs beside accompaniment. Phone has **Inputs / Accompaniment**
+   tabs. Click/count-in and free-jam **Stop at end** sit above these panes.
+5. Press **Record part**. Stop opens the combined arrangement. **Redo latest**
+   prepares that addition again; **Discard latest** returns to the prior combination.
+6. Balance the parts and choose **Export recording** for the MP3. For another
+   version, choose an earlier take using **Takes**, then Add part.
 
-**Keep & record another** still records an independent alternative take, without
-playing the earlier take. Choose an earlier saved take to build a different version.
-Overdubs start from the beginning; punch-ins, comping and effects remain native
-REAPER work. Live monitoring still comes from the X32, not REAPER input monitoring.
+Overdubs start at the beginning; punch-ins, comping and effects remain REAPER work.
+Live monitoring comes from the X32, not REAPER input monitoring. **Settings**
+contains track creation, routing and device controls; routine sessions reuse them.
 
 The count-in now runs on the same REAPER timeline as capture. REAPER's native
 record indicator lights before the first count-in click; that is intentional.

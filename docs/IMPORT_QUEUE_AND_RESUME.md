@@ -6,24 +6,25 @@ and investigation are preserved below; this section describes the released contr
 ## Using the queue
 
 Run `JamRoom Update.bat`, close the old importer process, then launch
-`JamRoom Importer.bat` and reload its page. The badge should show **v3.6**.
+`JamRoom Importer.bat` and reload its page. The current badge should show **v3.17**. The queue and review now use
+[separate workspaces](WORKSPACE_LAYOUTS.md), with Stems/Lyrics/Chords tabs.
 
-- **Your imports** lists unfinished songs. Select a song to open its progress or
-  review. **Add song** remains available while other songs are processing.
+- **Your imports** lists unfinished songs. Use **Open** to see progress or
+  review. **Add songs** remains available while other songs are processing.
 - Stem routing, skipped stems, individual labels, lyric offset and chart/lyrics
   search fields autosave. Wait for **Saved**. Chosen lyrics and charts are saved
   too. Switching songs flushes pending edits first.
 - Closing the browser leaves processing running. After stopping the importer or
-  rebooting, reopen a saved review directly, or choose **Resume unfinished**.
+  rebooting, reopen a saved review directly, or choose **Settings > Resume unfinished**.
   Startup never submits new paid work automatically. Existing caches appear in
   **Completed and cached songs**; they are not assumed to be unfinished imports.
 - **Pause / continue queue** stops at stage boundaries. Already accepted remote
   tasks may continue. Queued songs also have **Move first** and **Pause** controls.
-  **Remove** hides the workspace but keeps its files; the Song library can reopen it.
+  **More > Remove from queue** hides the workspace but keeps its files; the Song library can reopen it.
   A workspace with an unresolved Fadr task must be checked first, because hiding
   it would leave a potentially running task blocking the remote processing budget.
-- Apply each reviewed song explicitly. Its target project is shown beside Apply;
-  **Use open REAPER project** deliberately changes that target before applying.
+- Apply each reviewed song explicitly. Its target project is shown in the task header;
+  **Review tools > Use open REAPER project** deliberately changes that target before applying.
   Finish recording/playback first. Save the REAPER project after a successful Apply.
 - An interrupted Apply uses **Check Apply** or **Check / retry Apply**. It keeps
   the same operation ID and freezes its review until reconciled, so a retry cannot

@@ -1,5 +1,8 @@
 # Recording parts and reliable starts — v3.16
 
+For the current v3.17 controls and layouts, see [Recording setup](RECORDING_SETUP.md)
+and [Workspaces](WORKSPACE_LAYOUTS.md). The audio changes below remain in place.
+
 Implemented from [the approved plan](RECORDING_UPGRADES_PLAN.md). See
 [Recording setup](RECORDING_SETUP.md) for X32 routing and the musician workflow.
 
