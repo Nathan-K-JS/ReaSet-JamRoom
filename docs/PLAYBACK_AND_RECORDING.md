@@ -1,6 +1,10 @@
 # Playback and recording
 
-Listening copies are available from saved takes: stereo MP3 downloads and
+Planned next upgrades: [Recording reliability, playback balance and overdubs](RECORDING_UPGRADES_PLAN.md)
+covers native count-in timing, input readiness, recorded-part sliders and solo
+multitrack layering. This is a plan; the behaviour below describes delivered work.
+
+**Export recording** is available from saved takes: stereo MP3 downloads and
 room-Wi-Fi QR sharing for Android and iPhone. See
 [Listening recordings](LISTENING_RECORDINGS.md) for workflow and setup.
 

@@ -38,6 +38,11 @@ ancestry first; never force-push or overwrite divergent changes. Pushing only
 `feature/timing-repair` does not deliver an update to standard installations.
 
 Current architecture:
+- Recording upgrades requested 22 September are planned, not implemented; see
+  `docs/RECORDING_UPGRADES_PLAN.md`. Device readiness precedes native count-in
+  work. Establish independent part/arrangement/mix state before sliders and
+  Add another part overdubs. Preserve separate takes, same-input harmonies,
+  recovery and the simple local REAPER-controller scope.
 - v3.15 checks resumed import targets in the Apply flow and lets users explicitly
   select the current project, with a second identity check against tab changes.
   Unresolved Apply operations cannot be retargeted. A matching running importer

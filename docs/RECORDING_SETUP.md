@@ -1,5 +1,8 @@
 # Initial recording setup
 
+For the proposed input-readiness, count-in and overdub improvements, see the
+[recording upgrades plan](RECORDING_UPGRADES_PLAN.md). Those changes are not yet implemented.
+
 The recording controller automatically creates and saves the track template below
 once per saved Jam Room setlist. Run the updated `Requirements/ReaSet_Startup.lua`
 in REAPER (normally your startup action), open the setlist, and stop playback.
