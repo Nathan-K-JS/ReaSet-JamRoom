@@ -1,4 +1,4 @@
-# Unified charts — v3.20
+# Unified charts — v3.21
 
 Import review now has **Stems** and **Chart**. Stem previews open together;
 collapsing one does not close the others. Only the selected audio plays.
@@ -11,6 +11,14 @@ Open **Chart** in ReaSet. **Scroll** shows the whole chart with surrounding
 sections and follows approximately. Scrolling or browsing pauses following;
 **Resume following** returns to playback. Pause, seeks and loops use REAPER's
 position. Text size is remembered on each device.
+
+Set section timings at the **actual musical start**, not early. The visible
+**Turn/scroll early** control brings the chart ahead by **2 seconds** by default;
+choose 0–4 seconds to taste. This is remembered on the browser/device and never
+changes the saved section timing. It applies to Pages and Scroll, including
+seeking. Long sections scroll through their full text span, keeping the estimated
+reading position near the upper third with more material visible below. This is
+approximate following between section markers, not individual lyric tracking.
 
 **Show chords** hides or restores chords on that same chart. It does not create
 different words or timing. The older Lyrics shortcut opens the chart with chords
@@ -27,7 +35,8 @@ Tagged source chords retain their identity even alongside chord-shape notation.
 - **Add section** inserts an empty section before or after the selected one.
 - **Split here** divides at a chord/lyric pair. **Merge previous/next** joins text.
 - Drag a divider between adjacent sections or use Move divider up/down.
-- Drag a waveform marker, enter a start time, or tap **Starts here**.
+- Drag a waveform marker, enter a start time, or tap **Starts here**. The marker's
+  pointed tip and vertical guide show the exact time; its rectangle is a handle.
 - **Next section starts now** advances the target while setting its start.
 - **Timing → Whole chart offset** shifts the chart together.
 - **Preview** uses the same Scroll/Pages renderer as ReaSet at the available size.
@@ -61,7 +70,12 @@ text; it cannot restore text missing from an earlier import.
 ## Installation and validation
 
 Run **JamRoom Update.bat**, restart REAPER and the importer, and refresh the
-browser. Confirm **v3.20**. The update does not silently regenerate your library.
+browser. Confirm **v3.21**. The update does not silently regenerate your library.
+
+v3.21 also removes the backing-control bridge's old 25.6 KB library limit. Larger
+libraries no longer lose every stem control when their published data exceeds it.
+Reads use small batches with retries; actual bridge errors appear in Backing
+instead of being labelled as songs without stems. No song re-import is needed.
 
 Validation includes the regression suite, browser checks at tablet and desktop
 sizes, conversion parity and retries, and 53 cached real chart cases from the

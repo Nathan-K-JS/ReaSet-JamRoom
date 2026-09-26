@@ -69,3 +69,20 @@ reaper={
             self.request(key, 0)
             self.assertEqual(self.lua.eval('tracks[2].items[1].B_MUTE'), 1)
 
+    def test_large_library_keeps_all_controls_and_cleans_published_chunks(self):
+        self.lua.execute('''
+reaper.EnumProjectMarkers2=function(_,i)
+ if i<200 then return 1,true,i*80,i*80+60,'Song '..i,i+1 end
+ return 0
+end
+tracks[2].items={{D_POSITION=0,D_LENGTH=16000,B_MUTE=0}}
+csc=csc+1;tick()
+''')
+        count = int(self.lua.globals().wire['ReaSetJR/meta'].split(':')[1])
+        self.assertGreater(count,32)
+        data=self.payload()
+        self.assertEqual(len(data['songs']),200)
+        self.assertEqual(data['songs']['200']['controls'][0]['pb'],'PB CLICK')
+        self.assertEqual(data['globalIssues'],[])
+        self.lua.execute('cleanup()')
+        self.assertTrue(all(self.lua.globals().wire[f'ReaSetJR/d{i}']=='' for i in range(count)))

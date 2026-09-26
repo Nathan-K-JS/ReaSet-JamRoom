@@ -48,6 +48,11 @@ ancestry first; never force-push or overwrite divergent changes. Pushing only
 `feature/timing-repair` does not deliver an update to standard installations.
 
 Current architecture:
+- v3.21 adds visible device-local Turn/scroll early (default 2 seconds). Author
+  section markers at actual musical starts; anticipation never edits timing.
+  Long-section following uses the full reading span in scroll-body coordinates.
+  The JamRoom bridge publishes all chunks without the old 32-chunk cap; browser
+  reads batches of 16 with missing-response retries. Do not restore the cap.
 - v3.20 uses one section timing model for full-chart Scroll, Pages and Show chords.
   Import review is Stems/Chart with expanded previews. The shared display is
   `tools/chart-display.js`, embedded with the editor by `embed_chart_author.py`.

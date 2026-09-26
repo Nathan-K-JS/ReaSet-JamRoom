@@ -27,7 +27,6 @@
 
 local SEC        = "ReaSetJR"
 local CHUNK_SIZE = 800
-local MAX_CHUNKS = 32
 local HB_PERIOD  = 1.0      -- seconds between heartbeat bumps
 local LOOP_RGN   = "ReaSet Loop"  -- temporary region created by ReaSet_NativeLoop.lua
 
@@ -305,11 +304,8 @@ local s_last_chunks = 0
 local function publish(json)
     s_generation = s_generation + 1
     local n = math.ceil(#json / CHUNK_SIZE)
-    if n > MAX_CHUNKS then
-        json = '{"schema":1,"songs":{},"globalIssues":[{"type":"payload_too_large",'
-            .. '"msg":"Project produced a payload too large to publish."}]}'
-        n = math.ceil(#json / CHUNK_SIZE)
-    end
+    -- Publish every song. The browser reads bounded batches, so a larger library
+    -- needs more chunks, not an empty replacement payload.
     for i = 0, n - 1 do
         local chunk = json:sub(i * CHUNK_SIZE + 1, (i + 1) * CHUNK_SIZE)
         reaper.SetExtState(SEC, "d" .. i, s_generation .. ":" .. chunk, false)
@@ -324,10 +320,11 @@ local function publish(json)
 end
 
 local function clear_all_keys()
+    local previous = tonumber(reaper.GetExtState(SEC, 'meta'):match(':(%d+)$')) or 0
     reaper.SetExtState(SEC, "clickWant", "", false)
     reaper.SetExtState(SEC, "meta", "", false)
     reaper.SetExtState(SEC, "heartbeat", "", false)
-    for i = 0, MAX_CHUNKS - 1 do
+    for i = 0, math.max(s_last_chunks, previous) - 1 do
         reaper.SetExtState(SEC, "d" .. i, "", false)
     end
 end

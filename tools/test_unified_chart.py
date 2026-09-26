@@ -130,6 +130,73 @@ class DisplayTests(unittest.TestCase):
         self.page.evaluate('currentPos=0;renderChordsView()')
         self.assertEqual(host.locator('.uc-select').input_value(),'0')
 
+    def test_page_anticipation_is_visible_persisted_and_does_not_edit_timing(self):
+        self.load();host=self.page.locator('#chords-live')
+        before=self.page.evaluate('JSON.stringify(g_clData.document)')
+        host.get_by_role('button',name='Pages',exact=True).click()
+        self.page.evaluate('currentPos=g_clData.document.sections[1].start-2.1;isPlaying=true;renderChordsView()')
+        self.assertEqual(host.locator('.uc-select').input_value(),'0')
+        self.page.evaluate('currentPos+=.2;renderChordsView()')
+        self.assertEqual(host.locator('.uc-select').input_value(),'1')
+        host.locator('.uc-lead').select_option('0')
+        self.assertEqual(host.locator('.uc-select').input_value(),'0')
+        self.assertEqual(self.page.evaluate('JSON.stringify(g_clData.document)'),before)
+        self.page.evaluate("ChartDisplay.dispose(document.getElementById('chords-live'));renderChordsView()")
+        self.assertEqual(host.locator('.uc-lead').input_value(),'0')
+
+    def test_long_section_keeps_estimated_reading_position_above_bottom(self):
+        self.load();d=document()
+        d['revision']='long-test'
+        d['sections'][0]['rows']=[{'id':'long-'+str(i),'text':'Line '+str(i)+' of the opening passage','chord_line':'C    G','anchors':[{'symbol':'C','offset':0},{'symbol':'G','offset':5}]} for i in range(24)]
+        self.page.evaluate('d=>{g_clData.document=d;isPlaying=true;renderChordsView()}',d)
+        for w,h in [(1024,768),(1366,768)]:
+            self.page.set_viewport_size({'width':w,'height':h})
+            for fraction in [.25,.5,.75,.9]:
+                self.page.evaluate('f=>{currentPos=g_clData.document.sections[0].end*f-2;renderChordsView()}',fraction)
+                result=self.page.evaluate('''f=>{const b=document.querySelector('#chords-live .uc-scroll'),ls=b.querySelectorAll('[data-section="0"] .uc-line'),r=b.getBoundingClientRect();const y=ls[0].getBoundingClientRect().top+(ls[ls.length-1].getBoundingClientRect().bottom-ls[0].getBoundingClientRect().top)*f;return (y-r.top)/b.clientHeight;}''',fraction)
+                self.assertGreater(result,.15)
+                self.assertLess(result,.5)
+        self.page.evaluate('isPlaying=false;renderChordsView()')
+        top=self.page.locator('#chords-live .uc-scroll').evaluate('(b)=>b.scrollTop')
+        self.page.evaluate('renderChordsView();renderChordsView()')
+        self.assertEqual(self.page.locator('#chords-live .uc-scroll').evaluate('(b)=>b.scrollTop'),top)
+
+    def test_stem_chunks_are_batched_retried_and_large_library_can_mute(self):
+        self.load()
+        result=self.page.evaluate('''() => {
+          const songs={};for(let i=0;i<150;i++)songs[i]={name:'Song '+i,start:i*80,end:i*80+60,controls:[{pb:'PB BASS',label:'Bass',order:1}]};
+          const raw=JSON.stringify({songs,globalIssues:[]}),chunks=raw.match(/.{1,800}/g);
+          sent=[];g_jrHb={val:'1',changedAt:Date.now()};jrHandleExtState(['EXTSTATE','ReaSetJR','meta','large:'+chunks.length]);
+          const first=sent[0];g_jrFetch.at=0;jrHandleExtState(['EXTSTATE','ReaSetJR','meta','large:'+chunks.length]);
+          const retried=sent[1]===first;
+          chunks.forEach((c,i)=>jrHandleExtState(['EXTSTATE','ReaSetJR','d'+i,'large:'+c]));
+          currentPos=149*80;g_jrTracks={'PB BASS':{idx:7,muted:false}};renderTracksPanel();jrTapControl('PB BASS');
+          return {retried,count:Object.keys(g_jrData.songs).length,max:Math.max(...sent.map(s=>s.split(';').length)),mute:sent.at(-1),text:document.getElementById('jr-body').innerText};
+        }''')
+        self.assertTrue(result['retried']);self.assertEqual(result['count'],150)
+        self.assertLessEqual(result['max'],16)
+        self.assertEqual(result['mute'],'SET/TRACK/7/MUTE/1')
+        self.assertIn('Bass',result['text'])
+
+    def test_stem_bridge_error_is_not_reported_as_missing_stems(self):
+        self.load()
+        self.page.evaluate("g_jrHb={val:'1',changedAt:Date.now()};g_jrData={songs:{},globalIssues:[{type:'bridge_error',msg:'Discovery failed'}]};renderTracksPanel()")
+        text=self.page.locator('#jr-body').inner_text()
+        self.assertIn('Discovery failed',text)
+        self.assertNotIn('No backing stems',text)
+
+    def test_marker_tip_drag_preserves_grab_offset(self):
+        self.load();self.page.evaluate('chartEditorOpen()')
+        marker=self.page.locator('.ca-marker').nth(1)
+        tip=marker.evaluate("b=>({position:getComputedStyle(b,'::after').left,width:b.clientWidth,border:getComputedStyle(b,'::after').borderTopWidth})")
+        self.assertEqual(tip['border'],'8px')
+        box=marker.bounding_box();wave=self.page.locator('.ca-timeline').bounding_box()
+        start=self.page.evaluate('ChartAuthor.active.getDocument().sections[1].start')
+        x=box['x']+box['width']/2+6;y=box['y']+8
+        self.page.mouse.move(x,y);self.page.mouse.down();self.page.mouse.move(x+24,y);self.page.mouse.up()
+        end=self.page.evaluate('ChartAuthor.active.getDocument().sections[1].start')
+        self.assertAlmostEqual(end,start+24/wave['width']*90,places=2)
+
     def test_add_and_split_have_one_marker_and_survive_reopening(self):
         self.load();self.page.evaluate('chartEditorOpen()')
         self.page.get_by_role('button',name='Add section',exact=True).click()
