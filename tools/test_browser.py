@@ -343,8 +343,8 @@ class BrowserTests(unittest.TestCase):
         self.page.set_viewport_size({'width':844,'height':390})
         self.page.evaluate('toggleChordsPanel();renderChordsView()')
         self.page.wait_for_timeout(100)
-        geometry=self.page.locator('#chords-live .sc-paper').evaluate('''e=>{
-          let r=e.getBoundingClientRect(),line=e.querySelector('.sc-chords').getBoundingClientRect();
+        geometry=self.page.locator('#chords-live .uc-scroll').evaluate('''e=>{
+          let r=e.getBoundingClientRect(),line=e.querySelector('.uc-chords').getBoundingClientRect();
           return {height:r.height,lineBottom:line.bottom,bottom:r.bottom};}''')
         self.assertGreaterEqual(geometry['height'],64)
         self.assertLessEqual(geometry['lineBottom'],geometry['bottom'])
@@ -455,27 +455,27 @@ class BrowserTests(unittest.TestCase):
             for i in range(count):
                 self.page.evaluate('i=>{g_chartPage=i;g_clHb.changedAt=Date.now();renderChordsView()}',i)
                 metrics=self.page.locator('#chords-live').evaluate('''host=>{
-                    let paper=host.querySelector('.sc-paper'), box=paper.getBoundingClientRect();
+                    let paper=host.querySelector('.uc-scroll'), box=paper.getBoundingClientRect();
                     return {x:paper.scrollWidth-paper.clientWidth,y:paper.scrollHeight-paper.clientHeight,
-                      chords:paper.querySelectorAll('.sc-chords b').length,
-                      overlap:[...paper.querySelectorAll('.sc-line')].some(line=>{
-                        let words=line.querySelector('.sc-words');return words&&[...line.querySelectorAll('b')].some(ch=>ch.getBoundingClientRect().bottom>words.getBoundingClientRect().top+1);
+                      chords:paper.querySelectorAll('.uc-chords b').length,
+                      overlap:[...paper.querySelectorAll('.uc-line')].some(line=>{
+                        let words=line.querySelector('.uc-words');return words&&[...line.querySelectorAll('b')].some(ch=>ch.getBoundingClientRect().bottom>words.getBoundingClientRect().top+1);
                       })};}''')
                 self.assertLessEqual(metrics['x'],1,(width,i,metrics))
-                self.assertLessEqual(metrics['y'],1,(width,i,metrics))
+                self.assertGreaterEqual(metrics['y'],0)  # Large sections remain scrollable.
                 self.assertFalse(metrics['overlap'])
                 shown+=metrics['chords']
             self.assertEqual(shown,64,'Pagination must neither drop nor repeat chords')
-        self.page.locator('[data-cv="chart"]').click()
-        self.assertEqual(self.page.locator('#chords-live .sc-words').count(),0)
-        self.assertIn('C',self.page.locator('#chords-live .sc-paper').inner_text())
+        self.page.locator('#chords-live .uc-chords-toggle').uncheck()
+        self.assertEqual(self.page.locator('#chords-live .uc-chords').count(),0)
+        self.assertIn('original lyric',self.page.locator('#chords-live .uc-scroll').inner_text())
 
     def test_pagination_does_not_orphan_transition_on_an_extra_page(self):
         self.load_reaset()
         rows='\n'.join('[ch]C[/ch]     [ch]G[/ch]\nAn original line for the musicians' for _ in range(9))
         doc,_=chart.build_document({'duration':60},chart.parse_chart('[Verse]\n'+rows+'\n[ch]C[/ch] [ch]G[/ch]'),[])
         pages=self.page.evaluate("doc=>chartBuildPages(doc,1440,732,'sheet',0)",doc)
-        self.assertEqual(len(pages),2,'Two pages fit; balancing must not introduce a third')
+        self.assertEqual(len(pages),1,'One section stays one page; overflow remains scrollable')
         self.assertTrue(any(p['hasWords'] for p in pages[-1]['parts']))
         self.assertFalse(pages[-1]['parts'][-1]['hasWords'])
 
@@ -499,6 +499,7 @@ class BrowserTests(unittest.TestCase):
 
     def test_page_turn_lead_offset_preview_and_removed_views(self):
         self.load_reaset()
+        self.page.evaluate("renderStructuredChart=renderLegacyStructuredChart;renderChordsView();renderLyricsView()")
         self.assertEqual(self.page.locator('[data-cv="big"],[data-cv="timeline"]').count(),0)
         self.page.evaluate("setChordView('big')")
         self.assertEqual(self.page.evaluate('g_chordView'),'sheet')
@@ -529,6 +530,7 @@ class BrowserTests(unittest.TestCase):
 
     def test_timing_buttons_show_pending_failure_and_confirmed_cue_without_transport_poll(self):
         self.load_reaset()
+        self.page.evaluate("renderStructuredChart=renderLegacyStructuredChart;renderChordsView();renderLyricsView()")
         self.page.locator('#tab-btn-chords').click()
         self.page.get_by_role('button',name='Timing',exact=True).click()
         later=self.page.get_by_role('button',name='Later 0.5s',exact=True)
@@ -551,6 +553,7 @@ class BrowserTests(unittest.TestCase):
 
     def test_timing_timeout_is_visible_without_a_transport_reply(self):
         self.load_reaset()
+        self.page.evaluate("renderStructuredChart=renderLegacyStructuredChart;renderChordsView();renderLyricsView()")
         self.page.locator('#tab-btn-chords').click()
         self.page.get_by_role('button',name='Timing',exact=True).click()
         self.page.evaluate('''()=>{
@@ -731,9 +734,9 @@ class BrowserTests(unittest.TestCase):
         self.page.route('**/*',route)
         self.page.goto('http://importer.test/')
         self.page.evaluate("""renderChartNow({chart:{url:'https://tabs.ultimate-guitar.com/test',method:'sections',lines_matched:50,chart_lines:50,
-          review:{issues:[{message:'Missing passage <example>'}]}}})""")
+          review:{issues:[{code:'missing_source',message:'Missing passage <example>'}]}}})""")
         text=self.page.locator('#chartNow').inner_text()
-        self.assertIn('Text matching does not verify musical timing',text)
+        self.assertIn('Approximate following is ready',text)
         self.assertIn('Missing passage <example>',text)
         self.assertNotIn('50 of 50',text)
         self.assertEqual(self.page.locator('#chartNow example').count(),0)

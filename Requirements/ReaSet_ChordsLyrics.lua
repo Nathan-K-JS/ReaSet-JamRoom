@@ -249,12 +249,14 @@ local function build_json()
     if document ~= "" then
         local doc = J.decode(document)
         -- Legacy checkpoint repairs apply consistently to the displayed words.
-        for _, section in ipairs(doc.sections or {}) do
+        for _, section in ipairs(doc.schema~=3 and doc.sections or {}) do
             section.start = mapped_relative(section.start,ly_anchors,song.e-song.s)
             section["end"] = mapped_relative(section["end"],ly_anchors,song.e-song.s)
             for _, row in ipairs(section.rows or {}) do
                 if row.start then row.start = mapped_relative(row.start, ly_anchors, song.e-song.s) end
                 if row["end"] then row["end"] = mapped_relative(row["end"], ly_anchors, song.e-song.s) end
+                if row.cue then row.cue = mapped_relative(row.cue, ly_anchors, song.e-song.s) end
+                for col,t in pairs(row.page_cues or {})do row.page_cues[col]=mapped_relative(t,ly_anchors,song.e-song.s)end
             end
         end
         chart_json = J.encode(doc)
@@ -445,6 +447,10 @@ local function process_repair_command(want, song)
         reaper.Undo_EndBlock('Edit chart '..action,-1)
         repair_reply(nonce,true,action=='author' and 'Chart saved in REAPER. Save the project to keep it.' or action=='layout' and 'Sections saved. Chord positions preserved.' or action=='offset' and 'Whole-song offset saved.' or 'Page timing saved. Chart content preserved.')
         return true
+    end
+    local _,current_document=reaper.GetProjExtState(0,'ReaSetSong','song:'..song.id..':document')
+    if current_document~='' and J.decode(current_document).schema==3 then
+        return repair_reply(nonce,false,'This chart uses section timing. Refresh the browser and open Edit chart.')
     end
     if action == "section" then return section_command(f,song) end
     local _,project=reaper.GetProjExtState(0,"ReaSet","projectId")

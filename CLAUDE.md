@@ -3,6 +3,16 @@
 Read this file at the start of every session. It contains durable facts about this
 project so they don't need to be re-explained in every prompt.
 
+## Product philosophy
+
+Prioritize usability and quick plug-and-play for friends in a jam room, not
+live-stage precision. Forgiving, approximately timed charts with readable context
+are preferable to brittle tracking that appears exact but misses. Timing review
+and refinement must be optional; default workflows should get people playing
+with minimal setup. Keep transport/save state truthful and protect recordings
+and user edits: those reliability requirements are distinct from estimated chart
+alignment. The current chart plan is `docs/UNIFIED_CHART_WORKFLOW_PLAN.md`.
+
 ## What this repo is
 
 **ReaSet** is an existing, working, open-source browser-based control surface for the
@@ -38,6 +48,14 @@ ancestry first; never force-push or overwrite divergent changes. Pushing only
 `feature/timing-repair` does not deliver an update to standard installations.
 
 Current architecture:
+- v3.20 uses one section timing model for full-chart Scroll, Pages and Show chords.
+  Import review is Stems/Chart with expanded previews. The shared display is
+  `tools/chart-display.js`, embedded with the editor by `embed_chart_author.py`.
+  Schema 3 has no editable page cues; Python/browser migration preserves explicit
+  old cues as sections or retains the legacy reader on conflicts. Explicit local
+  library conversion preserves media and effective legacy timing. See
+  `docs/UNIFIED_CHARTS.md`. Do not restore separate lyric review, automatic gap
+  splitting, or screen-size-dependent page timestamps.
 - v3.19 preserves quiet/sparse/unmapped stems in Extras; only measured digital
   silence is auto-excluded. `stem_destination()` is shared by review and mixdown.
   Audition uses validated PCM, not original Fadr MP3 metadata. Profile caches are

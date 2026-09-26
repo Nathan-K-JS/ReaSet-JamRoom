@@ -18,10 +18,10 @@ from jamroom_import_queue import ImportQueue, Conflict
 
 
 def document():
-    return {'schema':2,'revision':'original','duration':60,'sections':[
+    return {'schema':3,'revision':'original','duration':60,'sections':[
         {'id':'s1','label':'Verse','start':0,'end':30,'timing_status':'matched','rows':[
             {'id':'r1','text':'We sing together','chord_line':'C    Am7','anchors':[{'symbol':'C','offset':0,'width':1},{'symbol':'Am7','offset':5,'width':3}],'cue':0},
-            {'id':'r2','text':'A new day','chord_line':'F    G/B','anchors':[{'symbol':'F','offset':0,'width':1},{'symbol':'G/B','offset':5,'width':3}],'cue':10,'page_cues':{'0':10}}]},
+            {'id':'r2','text':'A new day','chord_line':'F    G/B','anchors':[{'symbol':'F','offset':0,'width':1},{'symbol':'G/B','offset':5,'width':3}],'cue':10}]},
         {'id':'s2','label':'Solo','start':30,'end':60,'rows':[{'id':'r3','text':'','chord_line':'| Am | F | x2','anchors':[{'symbol':'Am','offset':2,'width':2},{'symbol':'F','offset':7,'width':1}]}]}]}
 
 
@@ -70,7 +70,7 @@ class AuthorValidationTests(unittest.TestCase):
         d=document();d['sections'][1]['start']=5
         checked=author.validate(d,60)
         self.assertNotIn('cue',checked['sections'][0]['rows'][1])
-        self.assertEqual(checked['sections'][0]['rows'][1]['page_cues'],{})
+        self.assertNotIn('page_cues',checked['sections'][0]['rows'][1])
 
     def test_reaper_import_payload_uses_authored_words(self):
         job={'duration':60,'region_name':'Example','authored_chart':document(),'lyrics':{'lines':[{'time':0,'text':'wrong source words'}],'plain':'wrong source words'},'slots':[]}
@@ -179,7 +179,7 @@ class AuthorBrowserTests(unittest.TestCase):
     def test_split_merge_keep_lines_and_timing_drag_does_not_reorder_text(self):
         self.editor();text=self.page.get_by_role('textbox',name='Chart text')
         text.evaluate("e=>e.setSelectionRange(e.value.indexOf('F    G/B'),e.value.indexOf('F    G/B'))")
-        self.page.get_by_role('button',name='Start section here',exact=True).click()
+        self.page.get_by_role('button',name='Split here',exact=True).click()
         d=self.page.evaluate('ChartAuthor.active.getDocument()')
         self.assertEqual(len(d['sections']),3)
         self.assertEqual(d['sections'][1]['rows'][0]['text'],'A new day')

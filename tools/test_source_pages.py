@@ -43,7 +43,8 @@ class SourceChartTests(unittest.TestCase):
             {'time':30,'text':'The second original line'},{'time':40,'text':''}]}}
         doc,_=chart.build_document(job,templates,[])
         gaps=[s for s in doc['sections'] if s.get('missing_source_chords')]
-        self.assertEqual([(s['start'],s['end']) for s in gaps],[(0,10),(20,30),(40,50)])
+        self.assertEqual(gaps,[])
+        self.assertEqual([(s['start'],s['end']) for s in doc['sections']],[(0,50)])
         self.assertTrue(all(not s['rows'] and not s['progression'] for s in gaps))
         self.assertEqual([r['id'] for s in doc['sections'] for r in s['rows']],['source-0-0','source-0-1'])
         chart.validate_document(doc)
@@ -93,16 +94,16 @@ class SourceChartTests(unittest.TestCase):
         templates=chart.parse_chart('[Chorus]\n'+chorus+'\n[Instrumental]\n[ch]F[/ch]\n\n'+chorus)
         before=copy.deepcopy(templates)
         doc,_=chart.build_document({'duration':60},templates,[])
-        self.assertEqual([s['label'] for s in doc['sections']],['Chorus','Instrumental','Chorus'])
+        self.assertEqual([s['label'] for s in doc['sections']],['Chorus','Instrumental'])
         fields=lambda sections:[(r['id'],r['text'],r['anchors']) for s in sections for r in s['rows']]
         self.assertEqual(fields(templates),fields(doc['sections']))
         self.assertEqual(templates,before)
-        self.assertEqual(doc['review']['status'],'needs_review')
+        self.assertEqual(doc['review']['status'],'ready')
 
     def test_unknown_vocals_are_not_arbitrarily_named_chorus(self):
         templates=chart.parse_chart('[Solo]\n[ch]C[/ch]\nThese are some entirely new words\n[ch]G[/ch]\nWith another line to sing')
         doc,_=chart.build_document({'duration':30},templates,[])
-        self.assertEqual(doc['sections'][0]['label'],'Vocal section')
+        self.assertEqual(doc['sections'][0]['label'],'Solo')
 
     def test_zero_instrumental_gap_does_not_make_a_flashing_page(self):
         templates=chart.parse_chart('[Verse]\n[ch]C[/ch]\nHere we are now\n[Instrumental]\n[ch]D[/ch]\n[Chorus]\n[ch]G[/ch]\nThere we go again')
@@ -111,9 +112,9 @@ class SourceChartTests(unittest.TestCase):
         self.assertEqual(len(doc['sections']),3)
         self.assertEqual([r['id'] for s in doc['sections'] for r in s['rows']],['source-0-0','source-1-0','source-2-0'])
         self.assertEqual(doc['sections'][-1]['start'],15)
-        self.assertTrue(any(i['code']=='unresolved_instrumental_boundary' for i in doc['review']['issues']))
+        self.assertTrue(all(s['end']-s['start']>2 for s in doc['sections']))
         self.assertEqual(doc['alignment']['matched_rows'],2)
-        self.assertEqual(doc['review']['status'],'needs_review','Perfect text match is not musical verification')
+        self.assertEqual(doc['review']['timing'],'estimated','Ready to use does not claim exact timing')
 
     def test_missing_recording_passage_is_flagged_even_if_all_chart_words_match(self):
         templates=chart.parse_chart('[Verse]\n[ch]C[/ch]\nHere we are now')
@@ -126,9 +127,9 @@ class SourceChartTests(unittest.TestCase):
         templates=chart.parse_chart(source)
         job={'duration':60,'lyrics':{'synced':True,'lines':[{'time':10,'text':'Touch the sky, touch the sea'}, {'time':20,'text':'Keep the light on'}, {'time':30,'text':'La la la'}]}}
         doc,_=chart.build_document(job,templates,[])
-        self.assertEqual([s['label'] for s in doc['sections']],['Intro','Pre-Chorus','Chorus','Post-Chorus'])
-        self.assertEqual(len(doc['sections'][1]['rows']),2)
-        for expected,actual in zip(templates,doc['sections'][1:]):
+        self.assertEqual([s['label'] for s in doc['sections']],['Pre-Chorus','Chorus','Post-Chorus'])
+        self.assertEqual(len(doc['sections'][0]['rows']),2)
+        for expected,actual in zip(templates,doc['sections']):
             for a,b in zip(expected['rows'],actual['rows']):
                 self.assertEqual(a['text'],b['text'])
                 self.assertEqual(a['anchors'],b['anchors'])
@@ -192,6 +193,7 @@ class ChartEditTests(unittest.TestCase):
         with self.assertRaises(Exception):self.edit('cue',{'section':2,'time':61})
 
     def test_page_cue_preserves_authored_columns(self):
+        self.doc['schema']=2  # Retained legacy editor compatibility.
         row=self.doc['sections'][1]['rows'][0]
         result=self.edit('pagecue',{'section':2,'time':10,'row':row['id'],'column':0})
         self.assertEqual(result['sections'][1]['rows'][0]['anchors'],row['anchors'])

@@ -735,52 +735,8 @@ def relyric_song(name, record_id=None, offset=None):
     base_revision = chart_revision(sys.modules[__name__], cfg, song)
     if base_revision.startswith('manual:'):
         raise ValueError('This chart has manual edits. Preview replacement lyrics before installing them.')
-    if not job.get("chords_detected"):
-        job["chords_detected"] = ji.detected_chords(job, job_dir)
-    if record_id is not None:
-        ji.lyrics_use_record(job, job_dir, record_id, persist=False)
-    if offset is not None:
-        # A stated shift overrides the automatic alignment entirely, and is
-        # remembered, so nudging the words does not fight the analyser.
-        job.setdefault("lyrics", {})["offset_override"] = float(offset)
-        _ui_log(f"Lyric timing shifted by {float(offset):+.2f}s by hand.")
-    ly = job.get("lyrics") or {}
-    if not ly.get("synced"):
-        raise RuntimeError("That lyric record has no timings, so it cannot "
-                           "place anything. Pick one marked as timed.")
-    lines = ji.lyric_lines_shifted(job)
-    _ui_log(f"Lyrics replaced: {len(lines)} timed lines from {ly.get('source')}.")
+    raise ValueError('Separate lyric replacement is retired. Use Edit chart for shared words and section timing.')
 
-    song_len = float(song["end"]) - float(song["start"])
-    job["duration"] = song_len
-    lyric_items = ji.chart_model.lyric_items(dict(job, duration=song_len))
-
-    # Re-place the chords against the new words, if a chart was chosen.
-    chords = None
-    url = (job.get("chart") or {}).get("url")
-    if url:
-        res = ji.build_chart_chords(job, url, job_dir=job_dir, key_offset=(job.get("chart") or {}).get("key_override"))
-        chords = res["chords"]
-        job["chords"] = chords
-        job["chart"]["method"] = res["method"]
-        job["chart"]["lines_matched"] = res.get("lines_matched")
-        _ui_log(f"Chords re-placed against the new lyrics: {len(chords)} chords, "
-                f"{res.get('lines_matched')} of {res.get('chart_lines')} chart "
-                f"lines matched.")
-    else:
-        _ui_log("No chart is linked to this song yet, so only the lyrics were "
-                "replaced. Use “Fix chords…” to take chords from a chart.")
-    ji.prepare_chart_document(job, job_dir)
-    result = _push_song_items(cfg, name, song, chords=job["chords"],
-                              lyric_lines=lyric_items, document=job["chart_document"], expected_revision=base_revision)
-    ji.save_job(job_dir, job)
-    # These checkpoints describe the old source timestamps. Applying them to
-    # newly selected lyric timings would double-correct the song. Chord timing
-    # is only cleared when the chords were re-placed as part of this operation.
-    scopes = ["lyrics"] + (["chords"] if chords is not None else [])
-    # Repair invalidation is part of the REAPER transaction, including undo.
-    return {"result": result, "lines": len(lyric_items),
-            "chords": len(chords or []), "source": ly.get("source")}
 
 
 
@@ -1091,6 +1047,7 @@ class Handler(BaseHTTPRequestHandler):
                 self._send(200, {"id": UPDATES.start(body.get("ids"),
                     resume=bool(body.get("resume")), restore=bool(body.get("restore")),
                     clicks_only=bool(body.get('clicks_only')),
+                    convert_charts=bool(body.get('convert_charts')),
                     levels_only=bool(body.get('levels_only')), replace_levels=bool(body.get('replace_levels')),
                     approve_click=body.get('approve_click'),
                     replace_edits=bool(body.get("replace_edits")), target_project=body.get("project"))})

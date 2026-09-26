@@ -15,7 +15,7 @@ def validate(value, duration):
         raise ValueError('Chart is too large (192 KB limit)')
     doc = copy.deepcopy(value)
     sections = doc.get('sections')
-    if doc.get('schema') != 2 or not isinstance(sections, list) or not 1 <= len(sections) <= 256:
+    if doc.get('schema') not in (2, 3) or not isinstance(sections, list) or not 1 <= len(sections) <= 256:
         raise ValueError('Choose between 1 and 256 sections')
     if any(not isinstance(s, dict) for s in sections): raise ValueError('Invalid chart sections')
     offset = doc.get('timing_offset', 0)
@@ -73,7 +73,11 @@ def validate(value, duration):
                 row.pop('cue', None); row.pop('cue_confidence', None)
             cues = row.get('page_cues', {})
             if not isinstance(cues, dict): raise ValueError('Invalid page cues')
+            if doc['schema'] == 3 and cues:
+                raise ValueError('This chart uses section timing. Refresh the editor before saving.')
             row['page_cues'] = {k: v for k, v in cues.items() if str(k).isdigit() and int(k) <= 8192 and number(v) and start <= v < end}
+            if doc['schema'] == 3:
+                row.pop('page_cues', None)
         s['missing_source_chords'] = not s['progression'] and s['kind'] == 'instrumental'
     doc.update(duration=duration, authored=True, manual=True, source_preserved=False)
     return doc
@@ -83,6 +87,6 @@ def lyric_items(doc):
     """Fallback display uses authored words; evidence stays in the source job."""
     result = []
     for s in doc['sections']:
-        text = '\n'.join(r.get('text', '') for r in s['rows'] if r.get('text', '').strip())
+        text = '\n'.join(r.get('text', '') for r in s['rows'] if r.get('text', '').strip() and r.get('kind','lyric') == 'lyric')
         if text: result.append({'start': s['start'], 'end': s['end'], 'text': text})
     return result

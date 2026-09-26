@@ -1,5 +1,9 @@
 # Chart authoring — v3.18
 
+For the current controls and shared Scroll/Pages workflow, see
+[Unified charts — v3.20](UNIFIED_CHARTS.md). The separate Lyrics/Chords navigation
+and page-timing controls described below are retained here as historical context.
+
 Open **Edit chart** from Lyrics or Chords in ReaSet. In an import review, open
 **Chords → Review / edit chart**. A song without a chart offers **Create chart**;
 existing legacy words are copied into the draft when available.

@@ -156,7 +156,7 @@ local function run()
       end
     end
     if job.document then
-      local doc=J.decode(job.document); assert(doc.schema==2 and type(doc.sections)=="table","Invalid chart document")
+      local doc=J.decode(job.document); assert((doc.schema==2 or doc.schema==3) and type(doc.sections)=="table","Invalid chart document")
     end
   end
   write(job.before,J.encode(before)) -- durable before any project mutation
@@ -234,6 +234,11 @@ local function run()
         reaper.SetProjExtState(0,'ReaSetSong',prefix..'previous',old_document)
         reaper.SetProjExtState(0,"ReaSetSong",prefix .. "document",job.document)
         reaper.SetProjExtState(0,"ReaSetSong",prefix .. "revision",job.revision or "")
+        if J.decode(job.document).schema==3 then
+          for _,field in ipairs({'lyrics','chords','lyrics:reviewed','chords:reviewed'})do
+            reaper.SetProjExtState(0,'ReaSetCLRepair',prefix..field,'')
+          end
+        end
       end
       if job.click then
         local track=C.track(true)

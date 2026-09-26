@@ -59,6 +59,7 @@ function M.apply(doc,action,data,duration)
     if previous then previous['end']=t end
     -- No stretching rows or moving a single chord relative to a word.
   elseif action=='pagecue' then
+    require_ok(doc.schema~=3,'This chart uses section timing. Refresh the browser.')
     local s=doc.sections[tonumber(data.section) or 0]
     local t,col=data.time,data.column
     require_ok(s and finite(t) and t>=s.start and t<s['end'],'Page cue must be inside its section')

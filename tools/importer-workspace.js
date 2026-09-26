@@ -48,7 +48,7 @@ window.ImportWorkspace=(function(){
   const tabs=node('nav','workspaceReviewTabs');tabs.setAttribute('aria-label','Song review');
   const panes=node('div','workspaceReviewPanes');
   const stems=node('section','workspace-stems',panes),lyrics=node('section','workspace-lyrics',panes),chords=node('section','workspace-chords',panes);
-  stems.dataset.reviewTab='stems';lyrics.dataset.reviewTab='lyrics';chords.dataset.reviewTab='chords';
+  stems.dataset.reviewTab='stems';lyrics.dataset.reviewTab='retired';lyrics.hidden=true;lyrics.inert=true;chords.dataset.reviewTab='chart';
   let target=stems;const apply=$('applyBtn'),cancel=review.querySelector('button[onclick="doCancel()"]');
   for(const n of Array.from(review.children)){
     if(n===apply||n===cancel)continue;
@@ -57,7 +57,7 @@ window.ImportWorkspace=(function(){
     target.append(n);
   }
   const footer=node('footer','workspaceReviewFooter');const save=node('div','workspaceSave',footer);footer.append(apply,cancel);
-  for(const name of ['stems','lyrics','chords']){const b=button(name[0].toUpperCase()+name.slice(1),()=>chooseTab(name),tabs);b.dataset.reviewTab=name;}
+  for(const name of ['stems','chart']){const b=button(name[0].toUpperCase()+name.slice(1),()=>chooseTab(name),tabs);b.dataset.reviewTab=name;}
   review.replaceChildren(tabs,reviewTools,panes,footer);
   stems.querySelector('h2').hidden=true;
   const stemHelp=stems.querySelector('.note'),fullHelp=node('p',null,reviewTools);
@@ -84,6 +84,8 @@ window.ImportWorkspace=(function(){
     root.dataset.pane='queue';
   }
   function chooseTab(name){
+    if(name==='lyrics'||name==='chords')name='chart';if(!['stems','chart'].includes(name))name='stems';
+    document.querySelectorAll('audio').forEach(a=>a.pause());
     tab=name;if(selected)localStorage.setItem('jamroom-review-tab:'+selected.id,name);
     for(const p of panes.children)p.hidden=p.dataset.reviewTab!==name;
     for(const b of tabs.children)b.setAttribute('aria-pressed',String(b.dataset.reviewTab===name));
@@ -98,22 +100,22 @@ window.ImportWorkspace=(function(){
     $('workspaceJobState').textContent={done:'Added to REAPER',failed:'This import needs attention',interrupted:'Ready to resume',queued:'Waiting in the queue',preparing:'Preparing your song',applying:'Adding to REAPER',cached:'Saved source files available',paused:'Paused'}[row.state]||row.stage||row.state;
     $('workspaceJobSummary').textContent=row.summary||(row.state==='done'?'Save the REAPER project. You can review the next ready song.':'Work and review choices are saved. Open Activity for detailed progress.');
     tabs.children[0].textContent='Stems'+(row.review?' ('+row.review.stems.length+')':'');
-    tabs.children[1].textContent='Lyrics'+(row.review?(row.review.lyrics.synced?' / timed':row.review.lyrics.plain?' / plain':' / none'):'');
-    tabs.children[2].textContent='Chords'+(row.review?(row.review.chart?.url?' / chosen':' / choose'):'');
+    tabs.children[1].textContent='Chart';
   }
   function compactStems(){
     for(const row of $('stemList').children){
-      const preview=node('button');preview.type='button';preview.textContent='Preview';preview.className='stem-preview';preview.setAttribute('aria-expanded','false');
-      const body=node('div');body.className='stem-preview-body';body.hidden=true;
+      if(row.querySelector('.stem-preview-body'))continue;
+      const preview=node('button');preview.type='button';preview.textContent='Hide preview';preview.className='stem-preview';preview.setAttribute('aria-expanded','true');
+      const body=node('div');body.className='stem-preview-body';body.hidden=false;
       for(const child of Array.from(row.children))if(!child.matches('.stemname,select'))body.append(child);
       row.append(preview,body);
-      preview.onclick=()=>{const opening=body.hidden;for(const other of $('stemList').querySelectorAll('.stem-preview-body')){other.hidden=true;other.querySelector('audio')?.pause();other.previousElementSibling.setAttribute('aria-expanded','false');}body.hidden=!opening;preview.setAttribute('aria-expanded',String(opening));};
+      preview.onclick=()=>{body.hidden=!body.hidden;preview.setAttribute('aria-expanded',String(!body.hidden));preview.textContent=body.hidden?'Show preview':'Hide preview';};
     }
   }
   function mountQueue(card){side.append(card);const controls=$('queueControls');if(controls)settings.append(controls);if($('queueRecovery'))recoveryHost.append($('queueRecovery'));if($('queueMessage'))content.before($('queueMessage'));}
   function tools(bar){reviewTools.append(bar);for(const id of ['queueSaved','queueTarget'])if($(id))save.append($(id));}
   function updated(){library.dataset.view='updates';updateFoot.hidden=false;show('library');}
-  function selection(){const n=window.updateSongs?.filter(s=>window.updateSelection[s.id]&&($('updateScope').value==='all'||!window.updateScopeIds||window.updateScopeIds.includes(s.id))).length||0;$('workspaceSelection').textContent=n+' selected / '+({both:'Charts, click & levels',levels:'Volume matching',clicks:'Click tracks'}[$('updateMode').value])+($('replaceTiming').checked?' / Replace edits':'')+($('replaceLevels').checked?' / Replace manual levels':'');if(!window.updateLoading&&!window.updateStarting)$('updateStart').textContent='Update '+n+' selected songs';}
+  function selection(){const n=window.updateSongs?.filter(s=>window.updateSelection[s.id]&&($('updateScope').value==='all'||!window.updateScopeIds||window.updateScopeIds.includes(s.id))).length||0;$('workspaceSelection').textContent=n+' selected / '+({both:'Charts, click & levels',convert:'Convert chart display',levels:'Volume matching',clicks:'Click tracks'}[$('updateMode').value])+($('replaceTiming').checked?' / Replace edits':'')+($('replaceLevels').checked?' / Replace manual levels':'');if(!window.updateLoading&&!window.updateStarting)$('updateStart').textContent='Update '+n+' selected songs';}
   chooseTab('stems');show(window.g_source==='man'?'library':'add');
   if(!$('updatesBox').classList.contains('hide'))updated();
   function checks(c){connection.hidden=!!c&&!['ytdlp','ffmpeg','key','reaper'].some(k=>c[k]===false);}

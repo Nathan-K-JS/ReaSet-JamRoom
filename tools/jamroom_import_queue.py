@@ -424,6 +424,9 @@ class ImportQueue:
                 raise ValueError('Invalid lyric offset')
             if draft.get('chart_document'):
                 from jamroom_chart_author import validate
+                existing = (row.get('draft') or {}).get('chart_document') or (row.get('review') or {}).get('document') or {}
+                if existing.get('schema') == 3 and draft['chart_document'].get('schema') != 3:
+                    raise Conflict('Chart format changed. Refresh the importer before saving.')
                 draft['chart_document'] = validate(draft['chart_document'], ji.load_job(self.folder(ident))['duration'])
             row['draft'] = copy.deepcopy(draft)
             row['apply_prepared'] = False

@@ -115,13 +115,13 @@ class Updates:
             else: values.pop(str(song_id), None)
             write(root / "settings.json", values)
 
-    def start(self, ids=None, resume=False, restore=False, replace_edits=False, target_project=None, clicks_only=False, approve_click=None, levels_only=False, replace_levels=False):
+    def start(self, ids=None, resume=False, restore=False, replace_edits=False, target_project=None, clicks_only=False, approve_click=None, levels_only=False, replace_levels=False, convert_charts=False):
         if not self.busy.acquire(blocking=False):
             raise ValueError("Another import or change is running")
         try:
             if self.state["state"] in ("preparing", "review", "applying"):
                 raise ValueError("Finish the current import first")
-            if clicks_only and levels_only: raise ValueError('Choose one update mode')
+            if sum(bool(x) for x in (clicks_only, levels_only, convert_charts)) > 1: raise ValueError('Choose one update mode')
             listing = self.listing()
             cfg, project, root = self.context()
             if listing["project"] != project or (target_project and target_project != project):
@@ -138,10 +138,11 @@ class Updates:
                 if approve_click and (len(ids)!=1 or not clicks_only or restore):
                     raise ValueError('Review one click at a time')
                 chosen = [s for s in listing["songs"] if s["id"] in ids and
-                          (restore or approve_click or levels_only and (s['level_eligible'] or replace_levels and s.get('folder')) or clicks_only and s['click_eligible'] or not levels_only and not clicks_only and not s["protected"] and (s['eligible'] or replace_edits or replace_levels))]
+                          (restore or approve_click or convert_charts and s.get('folder') and not s['protected'] or levels_only and (s['level_eligible'] or replace_levels and s.get('folder')) or clicks_only and s['click_eligible'] or not convert_charts and not levels_only and not clicks_only and not s["protected"] and (s['eligible'] or replace_edits or replace_levels))]
                 batch = {"id": uuid.uuid4().hex, "project": project, "status": "running",
                          "restore": bool(restore), "replace_edits": bool(replace_edits),
                          "clicks_only":bool(clicks_only), "levels_only":bool(levels_only), "replace_levels":bool(replace_levels),
+                         "convert_charts":bool(convert_charts),
                          "approve_click":approve_click,
                          "songs": [dict(s, status="pending", message="") for s in chosen]}
                 if not batch["songs"]: raise ValueError("Selected songs are protected, already current, or unavailable")
@@ -184,7 +185,7 @@ class Updates:
                     message = self.update_one(cfg, root, batch, item)
                     item.update(status="done", message=message or ("Restored" if batch["restore"] else "Updated"))
                     installed = ji.load_job(Path(item['folder'])).get('click') or {}
-                    if installed.get('review') and not batch.get('levels_only'):
+                    if installed.get('review') and not batch.get('levels_only') and not batch.get('convert_charts'):
                         item['message'] += ' — '+installed['review']+(' (click muted)' if installed.get('muted') else '')
                 except Exception as e:
                     item.update(status="failed", message=str(e))
@@ -230,6 +231,8 @@ class Updates:
             if previous_installation: previous_installation["after"] = str(op / "after.json")
             write(installed_path, previous_installation)
             return
+        if batch.get('convert_charts'):
+            return self.convert_chart(cfg, folder, op, installed_path, installed, item)
         levels_only = batch.get('levels_only') or (not batch.get('clicks_only') and item.get('current') and item.get('click_current') and not batch.get('replace_edits'))
         preserve_chart = levels_only or batch.get('clicks_only') or ((item.get('manual_edits') or 'Timing adjusted' in item.get('review_status','')) and not batch['replace_edits'])
         candidate_path = op / "candidate.json"
@@ -291,6 +294,49 @@ class Updates:
                               "installation_before": str(op / "installation-before.json"),
                               "revision": candidate.get("chart_document",{}).get("revision","")})
         return result
+
+    def convert_chart(self, cfg, folder, op, installed_path, installed, item):
+        """Explicit local conversion uses the project's current saved chart, not a stale cache."""
+        from jamroom_chart_migrate import convert, effective_document
+        from jamroom_chart_author import validate, lyric_items
+        candidate_path = op / 'conversion.json'
+        if candidate_path.exists():
+            candidate = read(candidate_path)
+        else:
+            key = f"song:{item['id']}:"
+            fields = [('ReaSetSong', key+'document'), ('ReaSetSong', key+'revision'),
+                      ('ReaSetCLRepair', key+'lyrics'), ('ReaSetCLRepair', key+'chords')]
+            response = requests.get(ji_url(cfg)+'/_/'+';'.join('GET/PROJEXTSTATE/'+sec+'/'+name for sec,name in fields), timeout=15)
+            response.raise_for_status()
+            values = {(f[1], f[2]): f[3] if len(f)>3 else '' for line in response.text.splitlines()
+                      if len(f := line.split('\t')) >= 3 and f[0]=='PROJEXTSTATE'}
+            blob = values.get(fields[0])
+            if not blob:
+                raise ValueError('No saved chart document. Open Edit chart in ReaSet to create one from this song.')
+            original = json.loads(blob)
+            if original.get('schema') == 3:
+                return 'Chart already uses shared section timing'
+            original['duration'] = item['end']-item['start']
+            document = convert(effective_document(original, values.get(fields[2], ''), values.get(fields[3], '')))
+            if document.get('migration_issue'):
+                raise ValueError(document['migration_issue']+' Existing chart retained.')
+            document = validate(document, item['end']-item['start'])
+            document['revision'] = 'manual:convert:'+uuid.uuid4().hex
+            candidate = {'document':document, 'expected_revision':values.get(fields[1], '')}
+            write(op/'job-before.json', ji.load_job(folder))
+            write(op/'installation-before.json', installed)
+            write(candidate_path, candidate)
+        document = candidate['document']
+        result = self.push(cfg, item['name'], item, document=document, lyric_lines=lyric_items(document),
+                           expected_revision=candidate['expected_revision'], operation_dir=op)
+        job = read(op/'job-before.json', {})
+        job.update(authored_chart=document, chart_document=document,
+                   generation={'generator':ji.chart_model.GENERATOR, 'revision':document['revision']})
+        ji.save_job(folder, job)
+        write(installed_path, {'before':str(op/'before.json'), 'after':str(op/'after.json'),
+                              'job_before':str(op/'job-before.json'), 'installation_before':str(op/'installation-before.json'),
+                              'revision':document['revision']})
+        return result or 'Chart display converted; text, timing and audio kept'
 
 
 def ji_url(cfg):

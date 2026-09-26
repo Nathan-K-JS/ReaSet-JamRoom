@@ -40,7 +40,7 @@ import jamroom_loudness as level_model
 # what is on disk — the importer server holds its modules in memory, so this is
 # how you tell "did the update take effect?" from "is the old process still up?"
 # BUMP THIS whenever the importer changes, and quote it when handing over.
-BUILD = "v3.19"
+BUILD = "v3.20"
 BUILD_DATE = "2026-09-23"
 
 # Fadr's S3 throttles each connection independently, so several transfers at
@@ -1745,7 +1745,8 @@ def prepare_chart_document(job, job_dir):
     """Shared generation path for fresh imports, repairs and bulk upgrades."""
     if job.get("authored_chart"):
         from jamroom_chart_author import validate
-        job["chart_document"] = validate(job["authored_chart"], job["duration"])
+        from jamroom_chart_migrate import convert
+        job["chart_document"] = validate(convert(job["authored_chart"]), job["duration"])
         job["generation"] = {"generator": chart_model.GENERATOR, "revision": job["chart_document"].get("revision", "authored")}
         return job["chart_document"]
     url = (job.get("chart") or {}).get("url")
@@ -1914,7 +1915,7 @@ def stage_lyrics(job, job_dir, force):
 
     def try_get(params, what):
         try:
-            r = requests.get(f"{LRCLIB_API}/get", params=params, headers=hdr, timeout=30)
+            r = requests.get(f"{LRCLIB_API}/get", params=params, headers=hdr, timeout=10)
             if r.status_code == 200:
                 return r.json()
         except requests.RequestException as e:
@@ -1929,12 +1930,22 @@ def stage_lyrics(job, job_dir, force):
         try:
             r = requests.get(f"{LRCLIB_API}/search",
                              params={"artist_name": band, "track_name": title},
-                             headers=hdr, timeout=30)
+                             headers=hdr, timeout=10)
             cands = r.json() if r.status_code == 200 else []
         except requests.RequestException:
             cands = []
+        if not cands:
+            try:
+                r = requests.get(f"{LRCLIB_API}/search", params={'q':f'{band} {title}'}, headers=hdr, timeout=10)
+                cands = r.json() if r.status_code == 200 else []
+            except requests.RequestException:
+                cands = []
+        def identity(value):
+            return re.sub(r'^the\s+', '', chart_model.norm(value))
         cands = [c for c in cands
                  if abs((c.get("duration") or 0) - dur) <= 4 and
+                 identity(c.get('artistName', '')) == identity(band) and
+                 difflib.SequenceMatcher(None, identity(c.get('trackName', '')), identity(title)).ratio() >= .9 and
                  (c.get("syncedLyrics") or c.get("plainLyrics"))]
         cands.sort(key=lambda c: (not c.get("syncedLyrics"),
                                   abs((c.get("duration") or 0) - dur)))
@@ -2333,16 +2344,17 @@ def write_reaper_job(job, job_dir):
         shift = ly["offset_override"]
     L.append("  lyrics_lines = {")
     written_lines = ly.get('lines', [])
-    if job.get('authored_chart'):
-        shift = 0
+    if job.get('chart_document'):
+        from jamroom_chart_author import lyric_items as display_items
+        shift = job['chart_document'].get('timing_offset', 0)
         written_lines = []
-        for section in chart_model.lyric_items(job):
+        for section in display_items(job['chart_document']):
             written_lines.extend([{'time':section['start'],'text':section['text']},{'time':section['end'],'text':''}])
     for ln in written_lines:
         L.append(f"    {{ t = {max(0.0, round(ln['time'] + shift, 3))}, "
                  f"text = {lua_quote(ln['text'])} }},")
     L.append("  },")
-    if ly.get("plain") and not job.get('authored_chart'):
+    if ly.get("plain") and not job.get('chart_document'):
         L.append(f"  lyrics_plain = {lua_quote(ly['plain'])},")
     L.append("}")
     with open(job_dir / "job_for_reaper.lua", "w", encoding="utf-8") as f:

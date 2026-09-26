@@ -43,9 +43,9 @@ class ChartTests(unittest.TestCase):
         templates = model.parse_chart('[Intro]\n[ch]Am[/ch] [ch]F[/ch] x2\n\n[Verse]\n[ch]C[/ch]    [ch]G[/ch]\nFirst example line\n\n[Solo]\n[ch]Dm[/ch] [ch]E[/ch]\n\n[Chorus]\n[ch]F[/ch]\nSecond example line')
         doc, events = model.build_document(self.job(), templates, [])
         model.validate_document(doc)
-        self.assertEqual([s["label"] for s in doc["sections"]], ['Intro', 'Verse', 'Solo', 'Chorus', 'Outro'])
+        self.assertEqual([s["label"] for s in doc["sections"]], ['Intro', 'Verse', 'Solo', 'Chorus'])
         verse = doc["sections"][1]
-        self.assertEqual((verse["start"], verse["end"]), (10,12))
+        self.assertEqual((verse["start"], verse["end"]), (10,20))
         self.assertEqual(doc["sections"][2]["progression"], ['Dm','E'])
         self.assertEqual(events, [], 'Unknown chord timing must not become fabricated events')
         self.assertEqual(verse["rows"][0]["anchors"][1]["symbol"], 'G')

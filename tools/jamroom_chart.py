@@ -10,11 +10,11 @@ import json
 import math
 import re
 
-GENERATOR = "source-pages-6"
-PARSER = 3
-SCHEMA = 2
+GENERATOR = "unified-sections-7"
+PARSER = 4
+SCHEMA = 3
 CH = re.compile(r"\[ch\](.*?)\[/ch\]", re.I)
-HEADER = re.compile(r"^\s*\[?(lead break|guitar solo|intro|verse|chorus|pre[- ]?chorus|post[- ]?chorus|bridge|solo|outro|"
+HEADER = re.compile(r"^\s*\[?(lead break|(?:guitar|bass|drum|sax|bagpipes|keyboard)\s+solo|intro|verse|chorus|pre[- ]?chorus|post[- ]?chorus|bridge|solo|outro|"
                     r"interlude|instrumental|refrain|break|hook|riff|ending|coda|tag)\b([^\]\n]*)(?:\]\s*(?:[-\u2013\u2014:]\s*)?(.*))?\s*$", re.I)
 
 
@@ -27,8 +27,11 @@ def norm(text):
     return " ".join(re.sub(r"[^\w ]", " ", text.casefold()).split())
 
 
-def lyric_items(job):
-    if job.get('authored_chart'):
+def lyric_items(job, evidence=False):
+    if not evidence and (job.get('chart_document') or {}).get('schema') == 3:
+        from jamroom_chart_author import lyric_items as display_items
+        return display_items(job['chart_document'])
+    if job.get('authored_chart') and not evidence:
         from jamroom_chart_author import lyric_items as authored_items
         return authored_items(job['authored_chart'])
     ly = job.get("lyrics") or {}
@@ -38,6 +41,11 @@ def lyric_items(job):
     if shift is None:
         shift = (ly.get("align") or {}).get("shift", 0) or 0
     duration = float(job.get("duration") or 0)
+    raw = [float(l['time']) + float(shift) for l in ly.get('lines', [])]
+    # Reject a mismatched recording reference, not the playable chart. Do not
+    # squeeze a long version into the recording or clip its last verses away.
+    if any(not math.isfinite(t) or t < -2 or t > duration + 2 for t in raw) or any(b < a for a, b in zip(raw, raw[1:])):
+        return []
     lines = sorted(({"start": max(0., float(l["time"]) + float(shift)),
                      "text": str(l.get("text", ""))} for l in ly.get("lines", [])),
                    key=lambda l: l["start"])
@@ -55,7 +63,6 @@ def parse_chart(content, transpose=lambda x: x):
     """Source columns and source wording are inseparable. Never trim one alone."""
     lines = re.sub(r"\[/?tab\]", "", content, flags=re.I).replace("\r", "").expandtabs(8).split("\n")
     sections, current = [], None
-    has_headers = any(HEADER.match(line) for line in lines)
     diagram = re.compile(r"^\s*[eBGDAE]\|", re.I)
     def new_section(label):
         repeat = re.search(r"\s+x\s*(\d+)\s*$", label, re.I)
@@ -65,25 +72,36 @@ def parse_chart(content, transpose=lambda x: x):
         return item
     i = 0
     while i < len(lines):
+        source_line = i
         line = lines[i]
-        header = HEADER.match(line)
+        # A heading may share its line with actual chords. Match only its
+        # prefix so neither those chords nor an ASCII riff become a label.
+        chord_at = line.lower().find('[ch]')
+        prefix = line[:chord_at].rstrip(' :-\u2013\u2014') if chord_at >= 0 else line
+        header = HEADER.match(prefix) if not re.search(r'\|[-\d]|-{3}', prefix) else None
         reference = re.match(r"^\s*repeat\s+(chorus|verse|bridge|intro|solo)(.*)$", line, re.I)
         if header or reference:
             m = header or reference
             current = new_section((m.group(1) + m.group(2)).strip().title())
             if header and header.group(3):
                 current['instruction'] = header.group(3).strip()
-            i += 1
-            continue
+            if chord_at >= 0:
+                line = line[chord_at:]
+            else:
+                i += 1
+                continue
         if current is None:
-            if has_headers:
+            if not line.strip() or re.match(r"\s*(capo|tuning|key|https?:|standard tuning|chords used)\b", line, re.I):
                 i += 1
                 continue
             current = new_section("Song")
         if diagram.match(line) or re.match(r"^[\s\u2191\u2193~^v]+$", line):
             repeat = re.search(r"\bx(\d+)", line)
             if repeat and current["rows"]:
-                current["rows"][-1]["repeat"] = min(32, int(repeat.group(1)))
+                musical = next((r for r in reversed(current['rows']) if r.get('anchors')), current['rows'][-1])
+                musical["repeat"] = min(32, int(repeat.group(1)))
+            if line.strip():
+                current['rows'].append({'text':line, 'anchors':[], 'repeat':1, 'kind':'notation', 'source_span':[i,i]})
             i += 1
             continue
         if not line.strip():
@@ -117,7 +135,10 @@ def parse_chart(content, transpose=lambda x: x):
         elif re.fullmatch(r"\s*(?:x\s*|repeat\s+)(\d+)\s*", line, re.I):
             current["repeat"] = min(32, int(re.search(r"\d+", line).group()))
         elif not re.match(r"\s*(capo|tuning|key|https?:)", line, re.I):
-            current["rows"].append({"text": line, "anchors": [], "repeat": 1})
+            kind = 'instruction' if re.match(r'\s*(?:\(|play\b|repeat\b|strum\b|pick\b|let ring\b)', line, re.I) else 'lyric'
+            current["rows"].append({"text": line, "anchors": [], "repeat": 1, 'kind':kind})
+        if current['rows']:
+            current['rows'][-1].setdefault('source_span', [source_line,i])
         i += 1
     for si, section in enumerate(sections):
         section["id"] = "template-" + str(si)
@@ -128,9 +149,10 @@ def parse_chart(content, transpose=lambda x: x):
             if previous:
                 section["rows"] = copy.deepcopy(previous["rows"])
                 section["reference"] = previous["id"]
-        section["kind"] = "vocal" if any(r["text"].strip() for r in section["rows"]) else "instrumental"
+        section["kind"] = "vocal" if any(r["text"].strip() and r.get('kind','lyric')=='lyric' for r in section["rows"]) else "instrumental"
         for ri, row in enumerate(section["rows"]):
             row["id"] = f"source-{si}-{ri}"
+            row.setdefault('kind', 'lyric' if row['text'].strip() else 'chords')
     return sections
 
 
@@ -290,7 +312,7 @@ def build_document(job, templates, detected, transpose=lambda x: x):
     duration = float(job.get("duration") or 0)
     if not math.isfinite(duration) or duration <= 0:
         raise ValueError("Recording duration is missing or invalid")
-    sections, issues = source_sections(templates)
+    sections, issues = copy.deepcopy(templates), []
     source_words, source_owner = [], []
     for si, section in enumerate(sections):
         section.update(id=f"section-{si}", evidence="chart", confidence="estimated", event_timing="unresolved")
@@ -298,11 +320,11 @@ def build_document(job, templates, detected, transpose=lambda x: x):
             row.setdefault("id", f"source-{si}-{ri}")
             for anchor in row["anchors"]:
                 anchor["symbol"] = transpose(anchor["symbol"])
-            tokens = _tokens(row["text"])
+            tokens = _tokens(row["text"]) if row.get('kind','lyric')=='lyric' else []
             source_words.extend(tokens)
             source_owner.extend([(si, ri)] * len(tokens))
         section["progression"] = [a["symbol"] for r in section["rows"] for a in r["anchors"]]
-    lyrics = lyric_items(job)
+    lyrics = lyric_items(job, evidence=True)
     sung_words, sung_owner = [], []
     for li, line in enumerate(lyrics):
         tokens = _tokens(line["text"])
@@ -352,59 +374,38 @@ def build_document(job, templates, detected, transpose=lambda x: x):
         if leading and starts[si] is not None and vocal_gap_ends.get(si-1) and gap < starts[si]:
             starts[si] = gap
             section['rows'][0].update(cue=round(gap,3), cue_confidence='estimated')
-    # Keep every source section in order. Unlocated sections get explicit
-    # estimated cues between neighbouring evidence, never a new lyric layout.
-    if starts[0] is None:
-        starts[0] = 0.
-    for si in range(len(sections)):
-        if starts[si] is not None:
-            continue
-        left = si-1
-        right = next((k for k in range(si+1,len(sections)) if starts[k] is not None),len(sections))
-        a = max(starts[left], vocal_ends.get(left, starts[left]))
-        b = starts[right] if right < len(sections) else duration
-        a = min(a, b-.1*(right-left))
-        for k in range(si,right):
-            starts[k] = a+(b-a)*(k-si)/max(1,right-si)
-    if starts[0] > 0:
-        # A chart without an intro is shown from the start; it doesn't invent
-        # an audio-derived intro progression before its first written section.
-        starts[0] = 0.
-    for si, section in enumerate(sections):
-        lower = starts[si-1]+.05 if si else 0.
-        starts[si] = max(lower,min(float(starts[si]),duration-.05*(len(sections)-si)))
-        section["start"] = round(starts[si],3)
-    for si, section in enumerate(sections):
-        section["end"] = sections[si+1]["start"] if si+1<len(sections) else duration
-    # LRC line ends often mean "next lyric starts", not "singing stopped".
-    # Do not manufacture a standalone instrumental page in that zero-width gap.
-    # Keep its written passage on the preceding page, where it remains available
-    # until the next vocal entrance. The section editor can split it again once
-    # the musician supplies the missing boundary.
-    grouped = []
-    for section in sections:
-        if grouped and section['kind'] == 'instrumental' and section['end']-section['start'] < 2:
-            previous = grouped[-1]
-            if section['rows']:
-                section['rows'][0]['source_section'] = section['label']
-            previous['rows'].extend(section['rows'])
-            previous['progression'].extend(section['progression'])
-            previous['end'] = section['end']
-            previous['label'] += ' / ' + section['label']
-            issues.append({'code':'unresolved_instrumental_boundary', 'section':previous['id'],
-                           'message':'Instrumental boundary has no usable interval; passage kept with the preceding section. Split and tap its start if needed.'})
-        else:
-            grouped.append(section)
-    sections = include_instrumental_gaps(grouped, lyrics, duration, issues)
+    # Keep source grouping. Interpolate missing starts between usable anchors;
+    # no-evidence charts spread across the song rather than a 50ms first page.
+    starts[0] = 0.
+    previous = 0.
+    for i in range(1, len(starts)):
+        t = starts[i]
+        if t is not None and (t <= previous + 2 or t >= duration - 2):
+            starts[i] = None
+        elif t is not None:
+            previous = t
+    anchors = [i for i, t in enumerate(starts) if t is not None] + [len(starts)]
+    weights = [max(2, len(s['rows'])) for s in sections]
+    for left, right in zip(anchors, anchors[1:]):
+        a, b = starts[left], starts[right] if right < len(starts) else duration
+        total = sum(weights[left:right])
+        elapsed = 0
+        for i in range(left + 1, right):
+            elapsed += weights[i-1]
+            starts[i] = a + (b-a)*elapsed/total
+    for i, section in enumerate(sections):
+        section['start'] = starts[i]
+        section['end'] = starts[i+1] if i+1 < len(starts) else duration
+    # Lyric breathing gaps are evidence, not new sections/pages.
     source_count = len(source_words)
     matched_words = sum(len(matches) for matches in row_matches.values())
     if matched_words < source_count * .9:
-        issues.append({'code':'unmatched_source_words', 'message':'Some chart words have no reliable recording match. Check the source version and page cues.'})
+        issues.append({'code':'unmatched_source_words', 'message':'Some chart words have no reliable recording match. Approximate section timing will be used.'})
     if matched_words < len(sung_words) * .9:
         issues.append({'code':'unrepresented_recording_words', 'message':'Some timed recording words are absent from the chart. Check for missing passages or a different song version.'})
     unlocated = sum(bool(r['text'].strip()) and 'cue' not in r for s in sections for r in s['rows'])
     if unlocated:
-        issues.append({'code':'unlocated_rows', 'message':f'{unlocated} chart lines have no lyric timing match. Their page cues need checking; the source may contain extra or different words.'})
+        issues.append({'code':'unlocated_rows', 'message':f'{unlocated} chart lines have no lyric timing match. Approximate section timing will be used.'})
     for section in sections:
         if section['end']-section['start'] < 2:
             issues.append({'code':'short_section', 'section':section['id'], 'message':'Section lasts less than two seconds; check its boundary.'})
@@ -415,8 +416,8 @@ def build_document(job, templates, detected, transpose=lambda x: x):
            "source_hash":fingerprint(templates),"lyrics_hash":fingerprint(job.get("lyrics",{})),
            "alignment":{"matched_rows":matched_rows,"source_rows":sum(bool(r["text"].strip()) for s in sections for r in s["rows"]),
                         "purpose":"section cues only", "method":"global word sequence alignment"},
-           "review":{"status":"needs_review", "issues":issues,
-                     "timing":"estimated", "message":"Source chord placement preserved. Section names and playback cues still need review; text matching does not verify musical timing."}}
+           "review":{"status":"ready", "issues":issues,
+                     "timing":"estimated", "message":"Source chord placement preserved. Approximate section following is ready. Adjust timing only if useful."}}
     doc["revision"] = fingerprint(doc)
     # Precise views retain measured evidence, distinct from the authored chart.
     events = [dict(c) for c in detected if 0 <= c["start"] < c["end"] <= duration]

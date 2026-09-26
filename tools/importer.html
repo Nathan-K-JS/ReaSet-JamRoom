@@ -187,7 +187,7 @@
     <div id="updatesBox" class="hide" style="margin:18px 0;padding:16px;border:1px solid #8885;border-radius:12px">
       <label>Update existing songs</label>
       <p class="note">Choose click tracks only to keep section edits. Clicks follow the recording; flagged candidates are installed muted. Use Review click to see the flagged passages and hear music with the click, then enable it after checking. Previous versions are saved for restore.</p>
-      <label>Update <select id="updateMode" onchange="updateSelection={};renderUpdateSongs()"><option value="both">Charts, click tracks and volume matching</option><option value="levels">Volume matching only (keep charts and clicks)</option><option value="clicks">Click tracks only (keep charts)</option></select></label>
+      <label>Update <select id="updateMode" onchange="updateSelection={};renderUpdateSongs()"><option value="both">Charts, click tracks and volume matching</option><option value="convert">Convert chart display (keep text and timing)</option><option value="levels">Volume matching only (keep charts and clicks)</option><option value="clicks">Click tracks only (keep charts)</option></select></label>
       <select id="updateScope" onchange="updateSelection={};renderUpdateSongs()"><option value="list">Current setlist</option><option value="all">All songs in this project</option></select>
       <button class="small" onclick="chooseUpdates(true)">Select eligible</button>
       <button class="small" onclick="chooseUpdates(false)">Deselect all</button>
@@ -212,7 +212,7 @@
 
     <div id="repairBox" class="hide">
       <label id="repairFor">Chart tools</label>
-      <div class="note">Edit the full chart's section breaks in ReaSet, then tap page starts while playing.</div>
+      <div class="note">Edit chart text, sections and timing together in ReaSet. Timing refinement is optional.</div>
       <div class="repair-actions">
         <button class="primary" id="repairTimingBtn" onclick="openLiveTimingRepair()">
           Edit chart and timing
@@ -229,7 +229,7 @@
     <div id="rechordBox" class="hide">
       <label id="rechordFor">Chord charts</label>
       <div class="note">Preserves the selected chart's words, chord columns, section order and repeats.
-        Timed lyrics estimate page starts only. Choosing a new source replaces local section edits;
+        Background lyric matches suggest section starts. Choosing a new source replaces local section edits;
         one Ctrl+Z in REAPER undoes the change.</div>
       <div class="note">Wrong song listed below? Search for it yourself, or
         paste the chart's address straight from Ultimate Guitar.</div>
@@ -355,7 +355,7 @@
 <script>
 // Version of THIS page (served fresh from disk). Compared against the version
 // of the running server. Either side may be older.
-var UI_BUILD = "v3.19";
+var UI_BUILD = "v3.20";
 
 function importerVersionWarning(serverBuild) {
   if (serverBuild === UI_BUILD) return '';
@@ -646,7 +646,7 @@ function openUpdates(){
 }
 function clickUpdatesOnly(){return $('updateMode').value==='clicks';}
 function levelUpdatesOnly(){return $('updateMode').value==='levels';}
-function updateEligible(s){return levelUpdatesOnly()?(s.level_eligible||$('replaceLevels').checked&&s.folder):clickUpdatesOnly()?s.click_eligible:(s.eligible||$('replaceLevels').checked&&s.folder);}
+function updateEligible(s){return $('updateMode').value==='convert'?!!s.folder:levelUpdatesOnly()?(s.level_eligible||$('replaceLevels').checked&&s.folder):clickUpdatesOnly()?s.click_eligible:(s.eligible||$('replaceLevels').checked&&s.folder);}
 var updateLoading=false, updateStarting=false, updateGeneration=0;
 function renderUpdateSongs(){
     var shown=updateSongs.filter(function(s){return $('updateScope').value==='all'||!updateScopeIds||updateScopeIds.indexOf(s.id)>=0;});
@@ -704,7 +704,7 @@ async function startUpdates(resume,restore,ids){
   updateStarting=true;updateControls();
   if(window.ImporterActivity)ImporterActivity.open();
   try{
-    await updateApi('/start',{ids:ids,resume:resume,restore:restore,project:updateProject,clicks_only:clickUpdatesOnly(),levels_only:levelUpdatesOnly(),replace_levels:$('replaceLevels').checked,replace_edits:$('replaceTiming').checked});
+    await updateApi('/start',{ids:ids,resume:resume,restore:restore,project:updateProject,convert_charts:$('updateMode').value==='convert',clicks_only:clickUpdatesOnly(),levels_only:levelUpdatesOnly(),replace_levels:$('replaceLevels').checked,replace_edits:$('replaceTiming').checked});
     if(window.ImporterActivity)await ImporterActivity.poll();
   }catch(e){updateError(e);}
   finally{updateStarting=false;updateControls();}
@@ -1127,24 +1127,8 @@ function showReview(rv){
     });
     if(st.slot === 'SKIP') lblEl.classList.add('hide');
   });
-  var ly = rv.lyrics;
-  if(ly.synced && ly.first_time != null){
-    $('lyricInfo').innerHTML = '<div class="note">First lyric line appears at <b>' +
-      fmtTime(ly.first_time) + '</b> into the song. ' + ly.align_note + '.</div>';
-    $('firstLine').textContent = '“' + ly.first_text + '”';
-    $('firstLine').classList.remove('hide');
-    $('lyrOffset').value = ly.suggested_offset || 0;
-    if(rv.vocal_audio){
-      $('vocalAudio').src = rv.vocal_audio;
-      var vocal=rv.stems.find(st=>st.audio===rv.vocal_audio);
-      setupStemAudio($('vocalAudio'),vocal&&vocal.profile.duration,$('vocalPreviewStatus'));
-      $('vocalCheck').classList.remove('hide');
-    }
-  } else if (ly.plain) {
-    $('lyricInfo').innerHTML = '<div class="note">Only unsynced lyrics were found — they import as one block; the offset below is ignored.</div>';
-  } else {
-    $('lyricInfo').innerHTML = '<div class="note">No lyrics found for this song.</div>';
-  }
+  // Preserve a resumed legacy offset as evidence; no separate lyric review/player.
+  $('lyrOffset').value=rv.lyrics?.suggested_offset||0;
   // pause background music players when one starts
   document.querySelectorAll('audio').forEach(function(a){
     a.onplay=function(){if(window.ChartAuthor&&ChartAuthor.active)ChartAuthor.active.close();
@@ -1201,7 +1185,7 @@ function renderChartNow(rv){
     // Never state a reason we were not told. An unknown method means the
     // chart is linked but how it was timed was not reported.
     var how = c.method === 'sections'
-      ? 'Source words and chord positions preserved. Section names and playback cues need review in ReaSet. Text matching does not verify musical timing.'
+      ? 'Source words and chord positions preserved. Approximate following is ready. Edit sections or timing only if useful.'
       : c.method === 'lyrics'
       ? ('placed on the words — ' + c.lines_matched + ' of ' + c.chart_lines
          + ' chart lines matched to sung lines')
@@ -1214,7 +1198,7 @@ function renderChartNow(rv){
       + (c.key_offset ? ' · transposed ' + (c.key_offset>0?'+':'')
                         + c.key_offset + ' to match the record' : '')
       + '<br><small>' + how + '</small>'
-      + ((c.review && c.review.issues) || []).map(function(issue){return '<div class="check">'+escapeReview(issue.message)+'</div>';}).join('')
+      + ((c.review && c.review.issues) || []).filter(function(issue){return ['missing_source','wrong_source'].includes(issue.code);}).map(function(issue){return '<div class="check">'+escapeReview(issue.message)+'</div>';}).join('')
       + '<br><a href="' + c.url + '" target="_blank" rel="noopener">'
       + 'Open the chart</a>';
   } else {

@@ -1,0 +1,121 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1500" height="1260" viewBox="0 0 1500 1260">
+  <title>Proposed unified chart editor and performance views</title>
+  <desc>One editor assigns text and time to each section. Scroll and Pages use those same sections. This is a design board with synthetic chart text, not an application screenshot.</desc>
+  <defs>
+    <style>
+      text{font-family:Segoe UI,Arial,sans-serif;fill:#e6edf5} .muted{fill:#a7bacb}.small{font-size:15px}.body{font-size:18px}.title{font-size:26px;font-weight:600}.label{font-size:17px;font-weight:600}.mono{font-family:Consolas,monospace;font-size:23px}.chord{fill:#f1c779}.green{fill:#8ce3be}.line{stroke:#33485b;stroke-width:1}.button{fill:#23384a;stroke:#456076}.paper{fill:#101a26}.panel{fill:#182533;stroke:#385063}.selected{fill:#1b393c;stroke:#69c8a6}
+    </style>
+    <pattern id="wave" width="48" height="58" patternUnits="userSpaceOnUse">
+      <path d="M2 25v8M7 17v24M12 22v14M17 9v40M22 15v28M27 22v14M32 4v50M37 16v26M42 20v18M47 25v8" stroke="#487781" stroke-width="2"/>
+    </pattern>
+  </defs>
+  <rect width="1500" height="1260" fill="#0a111b"/>
+  <text x="26" y="44" class="title">One chart. One set of cues.</text>
+  <text x="26" y="73" class="small muted">PROPOSED LAYOUT · 26 September 2026 · Illustrative content only</text>
+  <rect x="1180" y="23" width="293" height="45" rx="10" fill="#23384a"/>
+  <text x="1200" y="52" class="label">Import review: Stems / Chart</text>
+
+  <rect x="24" y="97" width="1452" height="617" rx="14" class="panel"/>
+  <text x="44" y="132" class="title">Review chart — Open Room</text>
+  <text x="44" y="157" class="small muted">Edit the text boundary and its time together. Gold text is recognised as a chord.</text>
+  <rect x="1150" y="111" width="156" height="37" rx="7" class="button"/>
+  <text x="1164" y="136" class="small">Change source</text>
+  <rect x="1319" y="111" width="137" height="37" rx="7" class="button"/>
+  <text x="1334" y="136" class="small">Preview view</text>
+  <line x1="24" y1="171" x2="1476" y2="171" class="line"/>
+  <rect x="44" y="183" width="149" height="35" rx="6" class="selected"/>
+  <text x="57" y="206" class="label">+ Add section</text>
+  <rect x="204" y="183" width="122" height="35" rx="6" class="button"/>
+  <text x="220" y="206" class="small">Split here</text>
+  <rect x="337" y="183" width="159" height="35" rx="6" class="button"/>
+  <text x="352" y="206" class="small">Merge previous</text>
+  <rect x="507" y="183" width="85" height="35" rx="6" class="button"/>
+  <text x="528" y="206" class="small">Undo</text>
+  <text x="920" y="205" class="small muted">Tablet: 24px · Laptop: 28px · fits selected section</text>
+
+  <rect x="44" y="231" width="220" height="323" rx="8" class="paper"/>
+  <text x="59" y="258" class="label">Sections</text>
+  <text x="59" y="293" class="body">1  Intro</text>
+  <text x="79" y="315" class="small muted">0:00.0 · checked</text>
+  <text x="59" y="353" class="body">2  Verse 1</text>
+  <text x="79" y="375" class="small muted">0:14.0 · +14.0s</text>
+  <rect x="53" y="391" width="201" height="72" rx="7" class="selected"/>
+  <text x="62" y="419" class="body">3  Chorus 1</text>
+  <text x="79" y="444" class="small green">0:38.0 · +24.0s</text>
+  <text x="59" y="496" class="body">4  Verse 2</text>
+  <text x="79" y="518" class="small muted">1:02.0 · estimated</text>
+
+  <rect x="278" y="231" width="1178" height="323" rx="8" class="paper"/>
+  <text x="304" y="260" class="label muted">Verse 1 · previous material stays visible</text>
+  <text x="304" y="291" class="mono muted">We leave the busy street behind</text>
+  <line x1="294" y1="310" x2="1436" y2="310" stroke="#7fe0bb" stroke-width="2"/>
+  <rect x="765" y="300" width="190" height="23" rx="5" fill="#2d6556"/>
+  <text x="780" y="317" class="small">↕ Drag text boundary</text>
+  <rect x="294" y="327" width="1142" height="150" rx="7" fill="#173038"/>
+  <text x="310" y="356" class="label">Chorus 1</text>
+  <text x="932" y="356" class="body green">0:38.0  ·  +24.0s  ·  Checked</text>
+  <text x="310" y="390" class="mono chord" xml:space="preserve">C                G</text>
+  <text x="310" y="420" class="mono">Bring your voice into the room</text>
+  <text x="310" y="451" class="mono muted">[More editable chord / lyric pairs…]</text>
+  <line x1="294" y1="489" x2="1436" y2="489" class="line"/>
+  <text x="310" y="519" class="label muted">Verse 2 · 1:02.0 · estimated — check during playback</text>
+  <rect x="1444" y="246" width="5" height="286" rx="2" fill="#263848"/>
+  <rect x="1444" y="313" width="5" height="108" rx="2" fill="#8aa7ba"/>
+
+  <rect x="44" y="570" width="1412" height="58" rx="7" fill="#0c1722"/>
+  <rect x="47" y="571" width="1406" height="56" fill="url(#wave)"/>
+  <path d="M60 570v58M315 570v58M745 570v58M1170 570v58" stroke="#eac577" stroke-width="2"/>
+  <path d="M801 570v58" stroke="#fff" stroke-width="2"/>
+  <rect x="48" y="574" width="92" height="23" rx="4" fill="#29434b"/><text x="55" y="591" class="small">1 · 0:00</text>
+  <rect x="303" y="574" width="92" height="23" rx="4" fill="#29434b"/><text x="310" y="591" class="small">2 · 0:14</text>
+  <rect x="732" y="574" width="101" height="23" rx="4" fill="#376e5d"/><text x="739" y="591" class="small">3 · 0:38</text>
+  <rect x="1157" y="574" width="100" height="23" rx="4" fill="#29434b"/><text x="1164" y="591" class="small">4 · 1:02</text>
+  <text x="46" y="650" class="small muted">Every marker belongs to a visible section. No separate page cues.</text>
+  <rect x="44" y="663" width="79" height="35" rx="6" class="button"/><text x="64" y="686" class="small">Play</text>
+  <rect x="133" y="663" width="79" height="35" rx="6" class="button"/><text x="153" y="686" class="small">Stop</text>
+  <text x="231" y="686" class="body">0:42.0</text>
+  <rect x="333" y="663" width="141" height="35" rx="6" class="selected"/><text x="350" y="686" class="small">Starts here</text>
+  <rect x="484" y="663" width="230" height="35" rx="6" class="button"/><text x="500" y="686" class="small">Next section starts now</text>
+  <text x="1103" y="686" class="small green">Draft saved</text>
+  <rect x="1290" y="661" width="164" height="38" rx="7" fill="#28715b"/><text x="1330" y="686" class="label">Save chart</text>
+
+  <text x="26" y="756" class="title">Two ways to read the same chart</text>
+  <text x="865" y="754" class="body muted">Changing view or hiding chords never changes a cue.</text>
+
+  <rect x="24" y="777" width="716" height="445" rx="14" class="panel"/>
+  <rect x="40" y="793" width="92" height="35" rx="6" class="selected"/><text x="62" y="817" class="label">Scroll</text>
+  <text x="148" y="817" class="small muted">Pages</text>
+  <text x="274" y="817" class="small green">✓ Show chords</text>
+  <text x="586" y="817" class="small green">Following</text>
+  <rect x="40" y="843" width="684" height="315" rx="7" class="paper"/>
+  <text x="60" y="869" class="small muted">Verse 1 · previous context</text>
+  <text x="60" y="900" class="mono muted">We leave the busy street behind</text>
+  <rect x="52" y="921" width="654" height="151" rx="7" class="selected"/>
+  <text x="70" y="947" class="label green">Chorus 1 · 0:38</text>
+  <text x="70" y="979" class="mono chord" xml:space="preserve">C                G</text>
+  <text x="70" y="1008" class="mono">Bring your voice into the room</text>
+  <text x="70" y="1038" class="mono chord" xml:space="preserve">Am               F</text>
+  <text x="70" y="1064" class="mono">Let the evening find its tune</text>
+  <text x="60" y="1105" class="small muted">Verse 2 · coming next at 1:02</text>
+  <text x="60" y="1137" class="mono muted">A different rhythm starts to grow</text>
+  <text x="43" y="1186" class="small muted">Scroll by hand to browse. Resume following brings you back.</text>
+  <text x="43" y="1209" class="small muted">Long sections reveal their remaining lines gradually.</text>
+
+  <rect x="760" y="777" width="716" height="445" rx="14" class="panel"/>
+  <text x="781" y="817" class="small muted">Scroll</text>
+  <rect x="852" y="793" width="91" height="35" rx="6" class="selected"/><text x="870" y="817" class="label">Pages</text>
+  <text x="996" y="817" class="small green">✓ Show chords</text>
+  <text x="1325" y="817" class="small muted">Fit: 28px</text>
+  <rect x="776" y="843" width="684" height="315" rx="7" class="paper"/>
+  <text x="801" y="882" class="title">Chorus 1</text>
+  <text x="1261" y="881" class="small green">0:38 · checked</text>
+  <text x="807" y="937" class="mono chord" style="font-size:28px" xml:space="preserve">C                G</text>
+  <text x="807" y="974" class="mono" style="font-size:28px">Bring your voice into the room</text>
+  <text x="807" y="1023" class="mono chord" style="font-size:28px" xml:space="preserve">Am               F</text>
+  <text x="807" y="1060" class="mono" style="font-size:28px">Let the evening find its tune</text>
+  <line x1="797" y1="1090" x2="1441" y2="1090" class="line"/>
+  <text x="807" y="1127" class="small muted">Next: Verse 2 at 1:02 · A different rhythm starts to grow</text>
+  <text x="779" y="1186" class="small muted">One section = one page. Fit text to the actual available space.</text>
+  <text x="779" y="1209" class="small muted">An oversized section stays accessible; it is never silently split.</text>
+  <text x="26" y="1246" class="small muted">DESIGN BOARD — not an implemented screen. Font sizes and spacing will be verified in the real computer/tablet layouts.</text>
+</svg>

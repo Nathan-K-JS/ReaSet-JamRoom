@@ -2,7 +2,8 @@
 return function(doc,data,duration)
   local function finite(n)return type(n)=='number' and n==n and math.abs(n)<math.huge end
   local function text(s,max)return type(s)=='string' and #s<=max end
-  assert(type(data)=='table' and data.schema==2 and type(data.sections)=='table','Invalid chart')
+  assert(type(data)=='table' and (data.schema==2 or data.schema==3) and type(data.sections)=='table','Invalid chart')
+  assert(doc.schema~=3 or data.schema==3,'Chart format changed. Refresh the editor before saving.')
   assert(#data.sections>0 and #data.sections<=256,'Choose between 1 and 256 sections')
   local offset=data.timing_offset or 0
   assert(finite(offset) and math.abs(offset)<duration,'Invalid timing offset')
@@ -34,6 +35,7 @@ return function(doc,data,duration)
       end
       if r.cue and (not finite(r.cue) or r.cue<a or r.cue>=b)then r.cue=nil;r.cue_confidence=nil end
       assert(r.page_cues==nil or type(r.page_cues)=='table','Invalid page cues')
+      assert(data.schema~=3 or not r.page_cues or next(r.page_cues)==nil,'Use section timing. Refresh the editor.')
       for col,t in pairs(r.page_cues or {})do
         local n=tonumber(col)
         if not n or n<0 or n>8192 or n%1~=0 or not finite(t) or t<a or t>=b then r.page_cues[col]=nil end
@@ -41,7 +43,8 @@ return function(doc,data,duration)
     end
     s.missing_source_chords=s.kind=='instrumental' and #s.progression==0
   end
-  doc.schema=2;doc.duration=duration;doc.sections=data.sections;doc.timing_offset=offset
+  doc.schema=data.schema;doc.duration=duration;doc.sections=data.sections;doc.timing_offset=offset
+  doc.migration_snapshot=data.migration_snapshot or doc.migration_snapshot
   doc.authored=true;doc.manual=true;doc.source_preserved=false;doc.review=nil
   if data.source_url and text(data.source_url,2048)then doc.source_url=data.source_url end
   doc.editing_key=data.editing_key
