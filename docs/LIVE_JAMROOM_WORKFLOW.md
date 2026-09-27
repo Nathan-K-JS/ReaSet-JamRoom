@@ -16,9 +16,10 @@ their own environment rather than assume they are a test machine.
 - REAPER's configuration identifies the library at
   `C:\Users\natha\OneDrive\Documents\Jam room files\Full song library.rpp`.
   Do not open, save, reload or switch the live project to verify this path.
-- X32 USB audio connectivity does not establish Ethernet control connectivity.
-  Mixer IP, firmware and actual routing still need separate read-only inspection.
-  The proposed X32 control bridge is not implemented.
+- X32 Ethernet control was subsequently verified at 192.168.68.56:10023,
+  identity X32RACK-0E-2F-85, reported firmware 4.13. USB audio and Ethernet
+  control are separate paths. Inspection/probe evidence is under the user's
+  Documents/JamRoom Inspections folder. The proposed ReaSet bridge is not deployed.
 
 These are inspection facts, not instructions to reinstall or reconfigure the rig.
 Earlier reports from the separate workstation remain historical evidence. Their
@@ -96,6 +97,13 @@ project/setup and an agreed audio path. It must not use or modify the live song
 library. Prepare the concrete test and recovery plan before any requested mixer
 write or audio-device change; preserve the existing configuration and recordings.
 Having the X32 connected is not authorization to test it by changing settings.
+
+Nathan subsequently authorized bounded X32 capability/workflow tests with
+capture, independent readback and verified restoration, using silent spare
+resources. That authorization does not extend to REAPER/library operations.
+Firmware updates, factory resets and boot/service operations are excluded.
+Phantom testing requires a physically unplugged input confirmed by the operator;
+an empty channel label does not establish that a socket is safe.
 
 Committing/pushing source is distinct from deploying it. Deliver tested releases
 through `feature/jamroom-claude` using the established fast-forward-only process.
