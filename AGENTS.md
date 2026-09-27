@@ -11,6 +11,10 @@ REAPER song library. It is not the former testing workstation.
 - Run tests only with separate dummy data and isolated services. Native tests
   require a separate REAPER instance with its own resource/configuration folder,
   Dummy Audio and test projects. A scratch tab in live REAPER is not isolation.
+- X32 firmware changes, factory resets and boot/service operations are excluded.
+  The user explicitly ruled out firmware work. Mixer workflow tests must use
+  captured, bounded resources with readback and verified restoration; phantom
+  tests require an operator-confirmed physically unplugged input.
 - Audit test scripts before execution: localhost ports, command-line launches,
   action registration, paths and cleanup can still target the live installation.
   Do not run a verifier that cannot be directed entirely at the isolated setup.

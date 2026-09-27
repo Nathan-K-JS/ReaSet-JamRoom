@@ -9,7 +9,8 @@
 > are not authorization to change the live rig during development.
 
 Date: 27 September 2026 (Australia/Brisbane)
-Status: planning only; no X32 integration implemented or hardware tested.
+Status: ReaSet integration remains planned; separate, explicitly authorized
+hardware inspection and bounded capability probes have since run on the room PC.
 Repository: Nathan-K-JS/ReaSet-JamRoom
 Planning branch: feature/jamroom-claude
 Reviewed baseline: ee51aacd5b76aa893c32a42b16de5d4bf946f6b9 (v3.21)
@@ -26,7 +27,10 @@ implementation work used VS Code/Codex on a separate workstation. Development
 now takes place on the active JamRoom PC connected to the X32 and live REAPER
 library. The v3.21 checkout and served browser deployment have been inspected.
 No X32 bridge, isolated test environment or library migration has been installed
-by this documentation work. Hardware control connectivity remains unverified.
+by this documentation work. Subsequent inspection verified direct OSC control at
+192.168.68.56:10023, X32RACK-0E-2F-85, firmware 4.13. Standalone probe source is in
+the separate `C:\JamRoomDev\x32-capability-proof` worktree; evidence is under
+`Documents\JamRoom Inspections`. These probes are not deployed ReaSet features.
 
 The intended software arrangement is:
 
@@ -51,6 +55,12 @@ Ordinary ReaSet playback must continue to work without that component.
 This document records research and a basic direction. Detailed write behaviour,
 preset scope and UI are proposals to resolve before implementing the relevant
 stage, following the repository's plan-before-build workflow.
+
+Firmware updates, factory resets and boot/service operations are outside scope.
+Nathan explicitly excluded firmware work during hardware acceptance. Stereo,
+FX and band/quartet workflows should use explicit parameter scopes with capture,
+readback and restoration; a full scene recall is not interchangeable with a
+scoped preset. Phantom testing needs an operator-confirmed unplugged socket.
 
 ## What the research establishes
 
