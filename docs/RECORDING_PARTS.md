@@ -1,5 +1,13 @@
 # Recording parts and reliable starts — v3.16
 
+> **Active JamRoom PC - mandatory workflow (27 September 2026):** this
+> installation is connected to the X32 and live REAPER library. Preserve all
+> live projects, media, recordings, configuration and mixer state. Development
+> tests must use a separate isolated dummy setup, never the live REAPER instance.
+> Follow [the live-system workflow](LIVE_JAMROOM_WORKFLOW.md) before using any commands below.
+> Earlier workstation results are historical; operator setup/update instructions
+> are not authorization to change the live rig during development.
+
 For the current v3.17 controls and layouts, see [Recording setup](RECORDING_SETUP.md)
 and [Workspaces](WORKSPACE_LAYOUTS.md). The audio changes below remain in place.
 
@@ -59,7 +67,7 @@ audio files remain recoverable.
 
 ## Verification
 
-Validated on the development workstation, not the room's X32:
+Historically validated on the former development workstation, not the room's X32:
 
 - Native REAPER capture, pause/resume, count-in cancellation, changed playback
   speed, restart recovery, independent takes, discard/restore and verified export.
@@ -78,7 +86,9 @@ Validated on the development workstation, not the room's X32:
 Repeatable checks: `tools/verify_recording_live.py`,
 `tools/verify_recording_timing.py`, `tools/verify_listening_live.py`, the Python
 unit/browser suite, and `tools/verify_import_playback.py` with `--queue-guards`.
-Run native project verifiers sequentially against a stopped, saved test project.
+Run native project verifiers sequentially only in a separate REAPER instance
+with isolated configuration, Dummy Audio and stopped, saved dummy projects.
+Audit/adapt their defaults first; never run them against the live instance.
 
 ## Room acceptance after updating
 

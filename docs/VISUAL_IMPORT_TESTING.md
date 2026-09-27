@@ -1,6 +1,17 @@
 # Testing an import in the actual ReaSet interface
 
-Run from the repository while REAPER is stopped:
+> **Active JamRoom PC - mandatory workflow (27 September 2026):** this
+> installation is connected to the X32 and live REAPER library. Preserve all
+> live projects, media, recordings, configuration and mixer state. Development
+> tests must use a separate isolated dummy setup, never the live REAPER instance.
+> Follow [the live-system workflow](LIVE_JAMROOM_WORKFLOW.md) before using any commands below.
+> Earlier workstation results are historical; operator setup/update instructions
+> are not authorization to change the live rig during development.
+
+Run only from an isolated development checkout with a separate test REAPER
+instance and dummy project. Stopping live REAPER or opening a scratch tab there
+is not sufficient. Audit/adapt the verifier's ports, launch paths, resource
+directory and output paths before using the commands below:
 
 ```powershell
 python tools/verify_song_visual.py
@@ -13,18 +24,22 @@ python tools/verify_song_visual.py "imports/The Presets - My People"
 ```
 
 This uses Python Playwright and the installed Microsoft Edge in headless mode,
-connected to REAPER's real web server at `http://127.0.0.1:8080/ReaSet.html`.
+connected to a real REAPER web server. The historical default
+`http://127.0.0.1:8080/ReaSet.html` is now the live endpoint and must not be used
+for tests. Direct the verifier to the isolated test server instead.
 It does not mock the REAPER transport, inject song data into the browser, or
 substitute a static HTML preview.
 
 The check generates an import job from a copy of the cached song metadata,
 references its existing audio, and runs an unchanged copy of the production
-import-apply Lua script in a new scratch project tab. It starts the real
-chords/lyrics bridge temporarily if no heartbeat is present. The scratch master
+import-apply Lua script in a new scratch project tab inside the isolated test
+instance only. It starts the real chords/lyrics bridge temporarily if no heartbeat is present. The scratch master
 is muted. The browser clicks CHORDS and + Lyrics, seeks REAPER to 0, 30, 75 and
 140 seconds, and captures desktop and tablet screenshots. Playback is not started.
 
-Each run writes an evidence folder under `imports/.visual/` containing:
+Each run historically writes under `imports/.visual/`. This must resolve to
+separate test storage, never the live installation's imports directory.
+Evidence includes:
 
 - `applied.txt`: REAPER's import receipt.
 - `result.json`: live song identity, item counts, browser errors and visible text.

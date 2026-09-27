@@ -1,5 +1,13 @@
 # Free-jam recording
 
+> **Active JamRoom PC - mandatory workflow (27 September 2026):** this
+> installation is connected to the X32 and live REAPER library. Preserve all
+> live projects, media, recordings, configuration and mixer state. Development
+> tests must use a separate isolated dummy setup, never the live REAPER instance.
+> Follow [the live-system workflow](LIVE_JAMROOM_WORKFLOW.md) before using any commands below.
+> Earlier workstation results are historical; operator setup/update instructions
+> are not authorization to change the live rig during development.
+
 Approved implementation: one Recording screen with Song / Free jam selection.
 Choose live inputs, tempo (40-240 BPM), beats per bar (2-7), click on/off and
 independent two-bar count-in before recording. Default: 100 BPM, 4 beats, click on.
@@ -53,9 +61,11 @@ The generated click never arms a recording input. Time signature choices are
 session allocation and extending click coverage. Live scratch REAPER checks cover
 four-mic capture, all click/count-in combinations, band input selection, native
 pause/resume, second takes, interrupted take recovery, export tempo/meter and
-verified cleanup. The test workstation has no physical X32 inputs, so the live
-capture check uses native track-output recording; verify the existing input
-routing/meters on the jam-room rig. The original library remains unchanged.
+verified cleanup on the former test workstation. That machine had no physical
+X32 inputs, so capture used native track-output recording; those results do not
+validate the current room inputs. Repeat automated checks only in the separate
+dummy setup. Hardware acceptance is a separately requested task, without using
+or changing the live library.
 
 A live export test caught beat-based item stretching when setting the jam tempo.
 Free-jam recordings now use time-based positioning, including recovered/exported

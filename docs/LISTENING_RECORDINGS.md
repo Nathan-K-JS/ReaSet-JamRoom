@@ -1,5 +1,13 @@
 # Leave with a listening recording
 
+> **Active JamRoom PC - mandatory workflow (27 September 2026):** this
+> installation is connected to the X32 and live REAPER library. Preserve all
+> live projects, media, recordings, configuration and mixer state. Development
+> tests must use a separate isolated dummy setup, never the live REAPER instance.
+> Follow [the live-system workflow](LIVE_JAMROOM_WORKFLOW.md) before using any commands below.
+> Earlier workstation results are historical; operator setup/update instructions
+> are not authorization to change the live rig during development.
+
 Status: delivered in v3.11; MP3-only since v3.11.1. Version 3.16 adds saved
 part levels and combined overdub arrangements to the exported mix.
 
@@ -35,7 +43,9 @@ the local link requires the same Wi-Fi and a running room PC/service.
   no web control surface, below-normal process priority, and no hardware sends or
   armed tracks. A Windows job object closes the worker if its parent service dies.
   It does not open tabs in the performance instance. This isolation was proven
-  on the test workstation's REAPER 7.75; the room remains a separate installation.
+  on the former test workstation's REAPER 7.75. Development now takes place on
+  the active room PC; automated tests must use separate dummy recording storage
+  and services, never the live share registry or performance instance.
 - Shared byte-verifying media copy code secures source files in the listening job.
   Existing discard/export cleanup retains source files, so it cannot invalidate
   pending requests. Never change recording cleanup to erase those files without

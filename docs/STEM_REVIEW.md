@@ -1,5 +1,13 @@
 # Stem review reliability — v3.19
 
+> **Active JamRoom PC - mandatory workflow (27 September 2026):** this
+> installation is connected to the X32 and live REAPER library. Preserve all
+> live projects, media, recordings, configuration and mixer state. Development
+> tests must use a separate isolated dummy setup, never the live REAPER instance.
+> Follow [the live-system workflow](LIVE_JAMROOM_WORKFLOW.md) before using any commands below.
+> Earlier workstation results are historical; operator setup/update instructions
+> are not authorization to change the live rig during development.
+
 Quiet or brief Fadr stems now default to **Extras**. Unmapped instrument names
 also go to Extras. Their audio remains in the song, including spill and short
 bursts that contribute to the complete backing track. Only verified digital

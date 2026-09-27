@@ -1,5 +1,13 @@
 # Chart pages and rehearsal clicks — v3.4
 
+> **Active JamRoom PC - mandatory workflow (27 September 2026):** this
+> installation is connected to the X32 and live REAPER library. Preserve all
+> live projects, media, recordings, configuration and mixer state. Development
+> tests must use a separate isolated dummy setup, never the live REAPER instance.
+> Follow [the live-system workflow](LIVE_JAMROOM_WORKFLOW.md) before using any commands below.
+> Earlier workstation results are historical; operator setup/update instructions
+> are not authorization to change the live rig during development.
+
 ## Using it
 
 - In ReaSet, open **Timing**. **Earlier 0.5s**, **Later 0.5s**, or the numeric
@@ -23,8 +31,9 @@
 Run **JamRoom Update.bat** on the jam-room PC, restart REAPER, and refresh ReaSet.
 The updated recovery helper installs missing click-analysis dependencies even
 when invoked by an older copy of the updater. Setup and the importer launcher
-use the same dependency manifest. This workstation's test imports do not update
-the jam-room library; run that PC's chosen library operation afterward.
+use the same dependency manifest. These are historical release instructions.
+Development now runs on the active JamRoom PC; live deployment and library
+operations require an explicit request and are never development test steps.
 
 ## Missing instrumental passages
 
@@ -73,7 +82,7 @@ long passages without drums. Beat tracking is not a proof of musical correctness
 
 Content-addressed WAVs preserve previous audio for undo/restore. Cached analysis
 avoids repeat work; fresh analysis after initial library loading took roughly
-1–2 seconds on this workstation. Source/metadata changes invalidate the cache.
+1–2 seconds on the former testing workstation. Source/metadata changes invalidate the cache.
 The generated duration includes stem-codec padding through the region end.
 Updates only replace importer-owned click items and reject an unowned item on
 the generated click track. Click-only operations preserve chart documents and
@@ -133,8 +142,9 @@ fallback recovery and whole-library retry eligibility. The real cached Fly Away
 audio generated a fallback under the injected DLL error, then 297 recording-based
 beats on a healthy retry. Seven live append/playback checks passed in disposable
 REAPER tabs; the original project and state counter were unchanged. Healthy
-updater startup passed locally. The repair must still execute on the jam-room PC;
-this workstation does not reproduce its missing system DLL.
+updater startup passed on the former workstation, which did not reproduce the
+room PC's missing system DLL. This historical result is not a current diagnosis
+or an instruction to run dependency repair on the active PC.
 
 ### v3.4 chart and click validation
 

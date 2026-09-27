@@ -1,5 +1,13 @@
 **Project review and chord/lyric design proposal — 7 September 2026**
 
+> **Active JamRoom PC - mandatory workflow (27 September 2026):** this
+> installation is connected to the X32 and live REAPER library. Preserve all
+> live projects, media, recordings, configuration and mixer state. Development
+> tests must use a separate isolated dummy setup, never the live REAPER instance.
+> Follow [the live-system workflow](LIVE_JAMROOM_WORKFLOW.md) before using any commands below.
+> Earlier workstation results are historical; operator setup/update instructions
+> are not authorization to change the live rig during development.
+
 Reviewed repository baseline: `b88bb35`. The findings below describe that baseline. The approved section-chart model, optional section repair, guarded bulk updates and associated fixes have since been implemented. See [delivery, migration instructions and validation](SONG_CHART_UPDATES.md) for what shipped and its limits. The original findings remain here as review evidence; not every broader recommendation has been implemented. Existing library songs were not silently regenerated.
 
 The project has a useful foundation: REAPER owns audio playback, the PB buses give instruments stable routing, and the importer already supports source reuse, stem previews, and repair without importing everything again. Keep those investments. The main timing problem needs a better representation of the music as well as several ordinary bug fixes.

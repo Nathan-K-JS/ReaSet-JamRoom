@@ -1,6 +1,14 @@
 # Paramore - Misery Business: default-import visual review
 
-Testing workstation only. Imported the already-split Fadr asset
+> **Active JamRoom PC - mandatory workflow (27 September 2026):** this
+> installation is connected to the X32 and live REAPER library. Preserve all
+> live projects, media, recordings, configuration and mixer state. Development
+> tests must use a separate isolated dummy setup, never the live REAPER instance.
+> Follow [the live-system workflow](LIVE_JAMROOM_WORKFLOW.md) before using any commands below.
+> Earlier workstation results are historical; operator setup/update instructions
+> are not authorization to change the live rig during development.
+
+Historical report from the former testing workstation only. Imported the already-split Fadr asset
 6a8ad132bc73956386d14750 through the visible importer buttons. Existing primary
 and secondary splits were reused, with no new separation charge. Default stem
 assignments produced six groups. Selected the first Ultimate Guitar result,

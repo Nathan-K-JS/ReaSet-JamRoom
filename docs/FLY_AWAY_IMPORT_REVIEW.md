@@ -1,6 +1,14 @@
 # Fresh import: Fly Away — Lenny Kravitz
 
-Tested on the development workstation, 2026-09-11. Release: importer v3.3,
+> **Active JamRoom PC - mandatory workflow (27 September 2026):** this
+> installation is connected to the X32 and live REAPER library. Preserve all
+> live projects, media, recordings, configuration and mixer state. Development
+> tests must use a separate isolated dummy setup, never the live REAPER instance.
+> Follow [the live-system workflow](LIVE_JAMROOM_WORKFLOW.md) before using any commands below.
+> Earlier workstation results are historical; operator setup/update instructions
+> are not authorization to change the live rig during development.
+
+Historically tested on the former development workstation, 2026-09-11. Release: importer v3.3,
 chart generator `source-pages-4`, source parser 3.
 
 ## Recording, chart and stems
@@ -97,6 +105,8 @@ The new `tools/verify_import_playback.py` checks native Play before import, exis
 and appended songs after two successive imports (new buses, then reused buses),
 an aborted import, and the actual ReaSet Play button. It uses the last saved
 populated library as a disposable template and verifies the original is unchanged.
+On the active PC, that source must be a dummy library in an isolated test
+instance; the verifier must never target the performance instance.
 The historical script fails this check: a requested position of 1661 seconds
 instead played at 0.997 seconds. The patched script passes. Empty-project import
 tests had missed this failure, so populated-library playback is now a separate
@@ -122,5 +132,7 @@ changing the upload format again would not address those measured 72 seconds.
 Investigate overlapping the two independent sub-splits while preserving task
 reuse and cost accounting, rather than assuming a smaller file speeds the models.
 
-The jam-room PC receives these changes through **JamRoom Update.bat**, then its own
-explicit library updates. This workstation's imported song is not that PC's library.
+The historical workstation imports above did not update the room library.
+Development now occurs on the active JamRoom PC with isolated dummy tests.
+Live deployment and library updates remain separate explicitly requested
+operations; do not repeat these experiments in the live library.

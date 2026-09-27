@@ -1,5 +1,13 @@
 # Unified charts — v3.21
 
+> **Active JamRoom PC - mandatory workflow (27 September 2026):** this
+> installation is connected to the X32 and live REAPER library. Preserve all
+> live projects, media, recordings, configuration and mixer state. Development
+> tests must use a separate isolated dummy setup, never the live REAPER instance.
+> Follow [the live-system workflow](LIVE_JAMROOM_WORKFLOW.md) before using any commands below.
+> Earlier workstation results are historical; operator setup/update instructions
+> are not authorization to change the live rig during development.
+
 Import review now has **Stems** and **Chart**. Stem previews open together;
 collapsing one does not close the others. Only the selected audio plays.
 There is no separate lyric-timing checklist. Background lyric matches can help
@@ -82,4 +90,6 @@ sizes, conversion parity and retries, and 53 cached real chart cases from the
 45 named Fadr recordings. Those cases retain their source grouping and chord
 tokens. Disposable REAPER projects verify following, authoring, saved timing,
 appending imports and the import guards; the original project remains unchanged.
-Room-side X32 and physical tablet testing are separate from these workstation checks.
+These are historical workstation checks. Development now runs on the active
+JamRoom PC; repeat tests only in a separate dummy setup under the mandatory
+workflow. Room-side X32 and physical tablet acceptance are separate tasks.

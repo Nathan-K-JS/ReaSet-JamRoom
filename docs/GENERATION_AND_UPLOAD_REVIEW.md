@@ -1,5 +1,13 @@
 # Shared generation and compressed upload review
 
+> **Active JamRoom PC - mandatory workflow (27 September 2026):** this
+> installation is connected to the X32 and live REAPER library. Preserve all
+> live projects, media, recordings, configuration and mixer state. Development
+> tests must use a separate isolated dummy setup, never the live REAPER instance.
+> Follow [the live-system workflow](LIVE_JAMROOM_WORKFLOW.md) before using any commands below.
+> Earlier workstation results are historical; operator setup/update instructions
+> are not authorization to change the live rig during development.
+
 Importer release: `v3.2`. Chart generator: `source-pages-3`.
 
 The earlier source-page work preserved authored chord columns, but that was not
@@ -32,7 +40,7 @@ Fresh imports, cached reimports and **Update whole library** use the same
 older documents eligible for the explicit update chooser. Existing manual-edit
 protection and backups remain in force. No saved library is silently regenerated.
 
-## Verification on the testing workstation
+## Historical verification on the former testing workstation
 
 - 93 automated tests passed, including missing headings, missing recording
   passages, source fidelity, uncertain gaps, pagination, actual browser controls,
@@ -82,6 +90,7 @@ locally is separate from network transfer.
 Primary format references: [Fadr supported uploads](https://fadr.com/help/stems),
 [Fadr API upload contract](https://fadr.com/docs/api-stems-tutorial).
 
-Delivery is through the normal jam-room update branch. On the separate jam-room
-PC, run **JamRoom Update.bat**, reload ReaSet, and use the importer’s explicit
-library update chooser. Test-workstation imports do not update that PC's library.
+Delivery remains through the normal jam-room update branch. Development now
+runs on the active JamRoom PC with isolated tests. Live deployment and any library
+update are separate explicitly requested operations; the historical imports
+reported here are not changes to the live library.

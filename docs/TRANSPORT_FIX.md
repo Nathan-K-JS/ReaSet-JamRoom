@@ -1,5 +1,13 @@
 # Stop/Play and post-import transport fix
 
+> **Active JamRoom PC - mandatory workflow (27 September 2026):** this
+> installation is connected to the X32 and live REAPER library. Preserve all
+> live projects, media, recordings, configuration and mixer state. Development
+> tests must use a separate isolated dummy setup, never the live REAPER instance.
+> Follow [the live-system workflow](LIVE_JAMROOM_WORKFLOW.md) before using any commands below.
+> Earlier workstation results are historical; operator setup/update instructions
+> are not authorization to change the live rig during development.
+
 The browser can send real REAPER transport commands, so a delayed browser Stop
 can interrupt Play pressed in REAPER itself even with only one ReaSet tab open.
 The investigation reproduced seven faulty sequences before fixing them:

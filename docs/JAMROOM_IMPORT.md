@@ -1,5 +1,13 @@
 # Jam Room — One-Shot Song Import (operator guide)
 
+> **Active JamRoom PC - mandatory workflow (27 September 2026):** this
+> installation is connected to the X32 and live REAPER library. Preserve all
+> live projects, media, recordings, configuration and mixer state. Development
+> tests must use a separate isolated dummy setup, never the live REAPER instance.
+> Follow [the live-system workflow](LIVE_JAMROOM_WORKFLOW.md) before using any commands below.
+> Earlier workstation results are historical; operator setup/update instructions
+> are not authorization to change the live rig during development.
+
 Give the tool a YouTube link (or a song name to search); it downloads the
 audio, splits it into stems with Fadr, places everything in the open REAPER
 project on the standard Jam Room PB/`[JR:…]` layout, adds the
@@ -73,9 +81,12 @@ REAPER or the disk objects. To reclaim space, delete songs you no longer play
 `source.wav` and the `stems/*.wav` MP3 originals in a job folder are only
 needed for the review screen and can be removed, saving ~100 MB per song.
 
-## Getting it onto the jam room PC / updating it
+## Installation on a new PC / updating an existing installation
 
-First time (PowerShell — after this everything is double-click):
+For a new installation only. The active installation already exists; do not
+rerun setup, clone over it or use it for development tests.
+
+First time (PowerShell):
 
 ```
 winget install --id Git.Git -e
@@ -99,13 +110,13 @@ needs Git — without it, updating means downloading a fresh ZIP each time.
 Short version: double-click **`JamRoom Update.bat`**. **Delete nothing** — it
 overwrites what changed and prints exactly what you need to restart.
 
-Then run `C:\JamRoom\JamRoom Setup.bat` once (tools + config), and use the
-importer as below. **Every update after that**: on the dev machine, push the
-finished work to GitHub; on the jam room PC, double-click
-**`JamRoom Update.bat`** — it pulls the latest version and re-deploys
-`ReaSet.html` into REAPER's web folder automatically (then hard-reload
-ReaSet on the tablets with Ctrl+F5). Local files that matter — the Fadr key
-config and downloaded songs in `imports/` — are never touched by updates.
+On a new installation, run `JamRoom Setup.bat` once (tools + config). This PC
+is already installed. Development now happens on this same PC in a separate
+checkout and dummy test setup. Push tested work through the release branch;
+only an explicitly requested live deployment should run `JamRoom Update.bat`
+and its required restarts/refreshes. A source push is not a live deployment.
+Preserve the Fadr configuration, downloaded songs, journals and recordings.
+Library changes are separate explicit operator actions, never deployment tests.
 
 ## Importing a song
 

@@ -1,5 +1,13 @@
 # One chart, one timing workflow
 
+> **Active JamRoom PC - mandatory workflow (27 September 2026):** this
+> installation is connected to the X32 and live REAPER library. Preserve all
+> live projects, media, recordings, configuration and mixer state. Development
+> tests must use a separate isolated dummy setup, never the live REAPER instance.
+> Follow [the live-system workflow](LIVE_JAMROOM_WORKFLOW.md) before using any commands below.
+> Earlier workstation results are historical; operator setup/update instructions
+> are not authorization to change the live rig during development.
+
 Implementation: **v3.20**, documented in [Unified charts](UNIFIED_CHARTS.md).
 Known-duration charts receive usable numeric section estimates instead of a
 mandatory unplaced-cue workflow. Preview uses the actual available viewport;
@@ -513,8 +521,10 @@ schema/migration fixtures. Use synthetic chart text for public tests and cached
 real songs locally for visual/audio checks. Run the existing
 `verify_song_visual.py --playback-check --edit-check` and
 `verify_import_playback.py --queue-guards` workflows only during implementation,
-against disposable projects with stopped REAPER and saved originals. Reading this
-plan or creating its layout board performs no project/library modifications.
+against disposable projects in a separate test REAPER instance with isolated
+configuration, test endpoints and Dummy Audio. Audit/adapt verifier defaults
+first; stopped live REAPER and saved originals are not sufficient isolation.
+Reading this plan or creating its layout board performs no project/library modifications.
 
 Definition of done: friends can import a song and start playing with a readable,
 approximately following chart without opening timing tools. If they choose to

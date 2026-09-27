@@ -1,5 +1,13 @@
 # Automatic song-volume matching (v3.9)
 
+> **Active JamRoom PC - mandatory workflow (27 September 2026):** this
+> installation is connected to the X32 and live REAPER library. Preserve all
+> live projects, media, recordings, configuration and mixer state. Development
+> tests must use a separate isolated dummy setup, never the live REAPER instance.
+> Follow [the live-system workflow](LIVE_JAMROOM_WORKFLOW.md) before using any commands below.
+> Earlier workstation results are historical; operator setup/update instructions
+> are not authorization to change the live rig during development.
+
 The approved workflow measures final backing stems at import, and provides the
 same operation for cached songs through the library updater. It changes one
 per-song playback trim, preserving instrument balance and leaving click separate.
@@ -77,8 +85,10 @@ original-project state counter. A repeat with extended diagnostics passed both
 content and counter checks; no content differences were observed in either run.
 
 Run `JamRoom Update.bat`, restart REAPER and refresh ReaSet/importer with Ctrl+F5.
-Then run the volume-only whole-library update on the jam-room PC. Test-workstation
-measurements do not change that PC's library automatically.
+A volume-only live-library update is a separate operator choice requiring an
+explicit request. Never run it as a development test. Use an isolated populated
+dummy library for regression checks; earlier workstation measurements are
+historical evidence, not changes or acceptance on this PC.
 
 ## v3.11.2: updates after backing timing changes
 

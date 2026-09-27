@@ -1,5 +1,13 @@
 # ReaSet + Jam Room — install from scratch
 
+> **Active JamRoom PC - mandatory workflow (27 September 2026):** this
+> installation is connected to the X32 and live REAPER library. Preserve all
+> live projects, media, recordings, configuration and mixer state. Development
+> tests must use a separate isolated dummy setup, never the live REAPER instance.
+> Follow [the live-system workflow](LIVE_JAMROOM_WORKFLOW.md) before using any commands below.
+> Earlier workstation results are historical; operator setup/update instructions
+> are not authorization to change the live rig during development.
+
 Everything needed to take a PC with nothing on it to a working jam room rig.
 Follow the stages in order: later stages genuinely depend on earlier ones.
 

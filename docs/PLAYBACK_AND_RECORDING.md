@@ -1,5 +1,13 @@
 # Playback and recording
 
+> **Active JamRoom PC - mandatory workflow (27 September 2026):** this
+> installation is connected to the X32 and live REAPER library. Preserve all
+> live projects, media, recordings, configuration and mixer state. Development
+> tests must use a separate isolated dummy setup, never the live REAPER instance.
+> Follow [the live-system workflow](LIVE_JAMROOM_WORKFLOW.md) before using any commands below.
+> Earlier workstation results are historical; operator setup/update instructions
+> are not authorization to change the live rig during development.
+
 Delivered in v3.17: [import and recording workspaces](WORKSPACE_LAYOUTS.md).
 The v3.16 audio changes remain: [recording parts, continuous count-in and input readiness](RECORDING_PARTS.md).
 The [original implementation plan](RECORDING_UPGRADES_PLAN.md) is retained for context.
@@ -24,8 +32,9 @@ for confirmed REAPER state. No output-routing restriction is added.
 
 Click quality flags still install muted until explicitly enabled. Enabling an
 existing click does not require reimporting the song. This fixes the hidden
-item-mute path; the remote jam-room project's actual routing/solo state has
-not been inspected. The local test project did not reproduce the reported silence.
+item-mute path; at that historical investigation the jam-room project's actual
+routing/solo state had not been inspected. The former test project did not
+reproduce the reported silence. This is not a current hardware acceptance claim.
 
 Validation: browser geometry at desktop, phone portrait and landscape; browser
 click command/confirmation; Lua enable and stale-command tests; live REAPER
@@ -110,12 +119,14 @@ phone/tablet drawer geometry. Lua checks cover tempo isolation, recording locks,
 loop cleanup in the owning project, and refusing song deletion with saved takes.
 
 The opt-in `tools/verify_recording_live.py` runs native recording in a disposable
-REAPER tab: count-in, two inputs, pause/resume, repeated keep/retry, 80% song speed,
+REAPER tab in an isolated test instance only: count-in, two inputs, pause/resume,
+repeated keep/retry, 80% song speed,
 restart/older-project/interrupted-media recovery, review mutes, delete/restore,
 failed export, verified export, duplicate/stale tablet commands and project scope.
-It confirms the original loaded project and cursor remain unchanged. On this
-workstation it uses native track-output capture when hardware inputs are absent;
-this does **not** validate physical X32 recording or the IEM/room mix.
+Its unchanged-original check is not permission to run it in live REAPER.
+Audit/adapt its instance, ports and storage first. Historical workstation runs
+used native track-output capture when hardware inputs were absent; this does
+**not** validate physical X32 recording or the IEM/room mix.
 
 Import/playback regression checks also passed using a disposable copy of the
 populated library. Real X32 input identification, latency and audition levels

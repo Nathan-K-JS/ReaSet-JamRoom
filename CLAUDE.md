@@ -1,5 +1,13 @@
 # Project Context: ReaSet — Jam Room Feature
 
+> **Active JamRoom PC - mandatory workflow (27 September 2026):** this
+> installation is connected to the X32 and live REAPER library. Preserve all
+> live projects, media, recordings, configuration and mixer state. Development
+> tests must use a separate isolated dummy setup, never the live REAPER instance.
+> Follow [the live-system workflow](docs/LIVE_JAMROOM_WORKFLOW.md) before using any commands below.
+> Earlier workstation results are historical; operator setup/update instructions
+> are not authorization to change the live rig during development.
+
 Read this file at the start of every session. It contains durable facts about this
 project so they don't need to be re-explained in every prompt.
 
@@ -19,7 +27,10 @@ alignment. The current chart plan is `docs/UNIFIED_CHART_WORKFLOW_PLAN.md`.
 **REAPER** DAW. This repo is a fork/customisation of it. We are adding a new feature
 to it — we are not building a new app from scratch.
 
-Current implementation branch: `feature/timing-repair`. The section-chart overhaul
+Current live installation branch: `feature/jamroom-claude`, inspected at v3.21
+(`ee51aac`). `feature/timing-repair` is the historical implementation branch;
+use a separate development checkout/branch for new executable changes.
+The section-chart overhaul
 is documented in `docs/SONG_CHART_UPDATES.md`; the baseline review and longer-term
 suggestions are in `docs/PROJECT_REVIEW.md`.
 The fresh-import findings and shared generation fixes are in
@@ -27,18 +38,27 @@ The fresh-import findings and shared generation fixes are in
 `tools/verify_song_visual.py <cached-song-folder> --playback-check --edit-check`;
 stopped-position screenshots and text-match counts alone do not verify playback.
 For importer changes, also run `tools/verify_import_playback.py <cached-song-folder>`
-against a stopped, saved, populated library. In REAPER 7.75, omitting
+only in an isolated test REAPER instance against a stopped, saved, populated
+dummy library, after verifying the harness targets that instance.
+In REAPER 7.75, omitting
 `TrackList_AdjustWindows(false)` after import can make native Play jump to zero;
 an arrange/timeline redraw and empty-project tests did not catch or fix this.
 
-This workspace and its running REAPER instance are the **testing workstation**,
-not the jam-room PC. Local deployments, song rebuilds and saved test projects are
-validation only. Deliver all application changes through the standard update
-branch. On the separate jam-room PC, Nathan runs `JamRoom Update.bat`, restarts
-REAPER when scripts change, and uses that PC's importer to update its own library.
-Never imply that changing the test library updates the jam-room library. Released
-features must use installation-relative paths and the jam-room PC's own config,
-cached sources and REAPER project; they cannot depend on test artifacts.
+This workspace is on the **active JamRoom PC**, connected to the X32 and the
+live REAPER song library. It is no longer the separate testing workstation.
+Read and obey [the mandatory live workflow](docs/LIVE_JAMROOM_WORKFLOW.md) and
+`AGENTS.md`. Do not alter the live project, library, recordings, mixer settings,
+services or deployment as part of development/testing. Tests require separate
+dummy data, services and a REAPER instance with its own configuration and Dummy
+Audio; a scratch tab in live REAPER is not acceptable isolation. Inspect existing
+verifiers before running them: default ports 8080/8765 are live here.
+
+Use a separate checkout for executable development. Live deployment and library
+operations require an explicit user request for that scope. Delivery still uses
+the standard update branch, but pushing source is not permission to deploy or
+restart the rig. Released features must use installation-relative paths and the
+installation's own config; they cannot depend on test artifacts. This describes
+this installation, not every future checkout. Verify the environment each session.
 
 The installed Jam Room update channel is `feature/jamroom-claude`, as used by
 `docs/FRESH_INSTALL.md`. `JamRoom Update.bat` pulls the installation's current
@@ -163,9 +183,10 @@ Current architecture:
 Bump `jamroom_chart.GENERATOR` when changing generation behavior after a release,
 so the chooser can identify songs requiring regeneration.
 
-Rebuild existing songs only through the explicit library chooser. Never silently
-regenerate the user's loaded library while testing. Test commands and the opt-in
-scratch-project REAPER check are in the delivery guide.
+Rebuilding live songs requires an explicit user request and the library chooser;
+it is never a test step. All tests use isolated dummy projects and data under
+`docs/LIVE_JAMROOM_WORKFLOW.md`. Older scratch-project commands must not target
+the live instance, even with transport stopped or an unchanged-original check.
 
 ## Hard constraints — these are real, not stylistic choices
 
@@ -238,7 +259,7 @@ what's there.
   bridge built, etc.) rather than one large commit at the end, so we can roll back
   cleanly if a step goes wrong.
 - **Push at every checkpoint too** (`git push origin <branch>`). The jam room PC
-  gets its code from `JamRoom Update.bat`, which is a bare `git pull` — so a
+  gets its code from `JamRoom Update.bat`, which pulls and deploys released code — so a
   commit that has not been pushed is not delivered. Never report work as
   finished, and never say "run the update", while commits are still local:
   either push them, or say plainly that they are local only.

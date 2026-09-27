@@ -1,5 +1,13 @@
 # Section charts and existing-song updates
 
+> **Active JamRoom PC - mandatory workflow (27 September 2026):** this
+> installation is connected to the X32 and live REAPER library. Preserve all
+> live projects, media, recordings, configuration and mixer state. Development
+> tests must use a separate isolated dummy setup, never the live REAPER instance.
+> Follow [the live-system workflow](LIVE_JAMROOM_WORKFLOW.md) before using any commands below.
+> Earlier workstation results are historical; operator setup/update instructions
+> are not authorization to change the live rig during development.
+
 Delivered on `feature/timing-repair`, September 2026. The importer reports v3.1;
 the structured chart schema is 2 and its generator is `source-pages-2`.
 
@@ -126,7 +134,9 @@ operation IDs make retries idempotent. Save the project normally after updates.
 
 ## Validation and limits
 
-Run automated content, browser, transaction and timing regression checks:
+Run these checks only in a separate development checkout/virtual environment.
+Native verifiers require an isolated REAPER instance and dummy library; audit
+and adapt their default targets before execution:
 
 ```powershell
 python -m pip install -r tools/requirements-dev.txt
@@ -136,11 +146,14 @@ python tools/verify_song_visual.py "imports/The Darkness - I Believe in a Thing 
 python tools/verify_import_playback.py "imports/Lenny Kravitz - Fly Away"
 ```
 
-The last three commands use real REAPER scratch projects and require stopped
-playback. The visual check imports cached stems, photographs the actual browser,
+The last three commands require stopped playback in the isolated test REAPER
+instance, with only dummy projects loaded. Do not use the live instance.
+The visual check imports cached stems, photographs the actual browser,
 splits a section and taps a cue through REAPER's web interface, then confirms
 that source rows did not change and the original project was preserved.
-The append check requires a saved, populated library. It imports cached stems
+The append check requires a saved, populated dummy library in that isolated
+instance; the live song library must not be its active or last-saved project.
+It imports cached stems
 twice into a disposable template of that library and checks native and browser
 Play without restarting REAPER. This catches transport failures that an empty
 scratch project can miss. It also checks playback after an aborted import.

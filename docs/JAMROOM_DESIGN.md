@@ -1,5 +1,13 @@
 # Jam Room "Tracks" Feature — Design & Verified Facts
 
+> **Active JamRoom PC - mandatory workflow (27 September 2026):** this
+> installation is connected to the X32 and live REAPER library. Preserve all
+> live projects, media, recordings, configuration and mixer state. Development
+> tests must use a separate isolated dummy setup, never the live REAPER instance.
+> Follow [the live-system workflow](LIVE_JAMROOM_WORKFLOW.md) before using any commands below.
+> Earlier workstation results are historical; operator setup/update instructions
+> are not authorization to change the live rig during development.
+
 Status: design approved; M0 live verification complete (2026-07-05).
 This document is the working architecture reference for the Jam Room feature
 built on branch `feature/jamroom-claude`. For the prior attempt's design (a

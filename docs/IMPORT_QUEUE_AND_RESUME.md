@@ -1,5 +1,13 @@
 # Import queue and restart recovery
 
+> **Active JamRoom PC - mandatory workflow (27 September 2026):** this
+> installation is connected to the X32 and live REAPER library. Preserve all
+> live projects, media, recordings, configuration and mixer state. Development
+> tests must use a separate isolated dummy setup, never the live REAPER instance.
+> Follow [the live-system workflow](LIVE_JAMROOM_WORKFLOW.md) before using any commands below.
+> Earlier workstation results are historical; operator setup/update instructions
+> are not authorization to change the live rig during development.
+
 Status: implemented in importer **v3.6** (18 September 2026). The approved design
 and investigation are preserved below; this section describes the released controls.
 
@@ -217,7 +225,9 @@ The proposal was approved before implementation. Implementation lives in
 `tools/jamroom_import_queue.py`, `tools/importer-queue.js`, and the existing
 importer/REAPER bridge. Run `python -m unittest discover -p "test_*.py"` from
 `tools`, plus `python tools/verify_import_playback.py "imports/Lenny Kravitz - Fly Away"
---queue-guards` from the repository root for the scratch-project integration check.
+--queue-guards` from the isolated development checkout for the integration check.
+Audit/adapt the verifier first: its REAPER instance, endpoints, configuration,
+source dummy library and job storage must all be separate from the live setup.
 
 ## Reopening and stopping (v3.15)
 

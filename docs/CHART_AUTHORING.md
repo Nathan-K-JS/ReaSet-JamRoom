@@ -1,5 +1,13 @@
 # Chart authoring — v3.18
 
+> **Active JamRoom PC - mandatory workflow (27 September 2026):** this
+> installation is connected to the X32 and live REAPER library. Preserve all
+> live projects, media, recordings, configuration and mixer state. Development
+> tests must use a separate isolated dummy setup, never the live REAPER instance.
+> Follow [the live-system workflow](LIVE_JAMROOM_WORKFLOW.md) before using any commands below.
+> Earlier workstation results are historical; operator setup/update instructions
+> are not authorization to change the live rig during development.
+
 For the current controls and shared Scroll/Pages workflow, see
 [Unified charts — v3.20](UNIFIED_CHARTS.md). The separate Lyrics/Chords navigation
 and page-timing controls described below are retained here as historical context.
@@ -94,7 +102,7 @@ Validation includes parser and timing tests, queue restart/conflict/source-previ
 tests, Chromium phone/tablet layouts, iPhone WebKit editing at keyboard height,
 cached-audio origin/click-exclusion checks, real REAPER author/save/undo checks,
 full-song visual/playback editing, and append/import queue guards. Evidence from
-the test workstation is under `imports/.visual/chart-author/` and the scratch
+the former test workstation was recorded under `imports/.visual/chart-author/` and the scratch
 folders named in its logs. No room-library rebuild is performed automatically.
 
 Install with **JamRoom Update.bat**, restart REAPER and the importer, then refresh

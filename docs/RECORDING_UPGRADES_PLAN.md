@@ -1,5 +1,13 @@
 # Recording reliability, playback balance and overdubs
 
+> **Active JamRoom PC - mandatory workflow (27 September 2026):** this
+> installation is connected to the X32 and live REAPER library. Preserve all
+> live projects, media, recordings, configuration and mixer state. Development
+> tests must use a separate isolated dummy setup, never the live REAPER instance.
+> Follow [the live-system workflow](LIVE_JAMROOM_WORKFLOW.md) before using any commands below.
+> Earlier workstation results are historical; operator setup/update instructions
+> are not authorization to change the live rig during development.
+
 Status: implemented in v3.16; retained as the original design record. See
 [release details](RECORDING_PARTS.md) for the chosen timeline approach, verification
 and remaining physical X32 acceptance checks.
@@ -266,7 +274,8 @@ Design the part/mix schema before implementing sliders so they do not need to be
 rewritten for overdubs. The independent readiness/count-in fixes can ship first
 once their own checks pass. Use the existing Lua, Python and Playwright test
 infrastructure plus disposable native REAPER projects. Native output-capture
-tests on this workstation do not substitute for real X32 input-latency checks.
+tests in the isolated dummy setup do not substitute for separately requested
+X32 input-latency acceptance. Never use the live library for either.
 Compare successive overdubs for accumulated alignment error; correct driver
 latency/calibration at the source rather than guessing a fixed timer offset.
 The digital scheduling target is an exact sample boundary. For physical-loopback

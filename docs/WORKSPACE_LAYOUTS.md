@@ -1,5 +1,13 @@
 # Import and recording workspaces — v3.17
 
+> **Active JamRoom PC - mandatory workflow (27 September 2026):** this
+> installation is connected to the X32 and live REAPER library. Preserve all
+> live projects, media, recordings, configuration and mixer state. Development
+> tests must use a separate isolated dummy setup, never the live REAPER instance.
+> Follow [the live-system workflow](LIVE_JAMROOM_WORKFLOW.md) before using any commands below.
+> Earlier workstation results are historical; operator setup/update instructions
+> are not authorization to change the live rig during development.
+
 The approved [layout plan](WORKSPACE_LAYOUT_PLAN.md) is implemented. The importer
 and recording screens now reserve space for their actions and scroll the working
 content. The original SVG boards illustrate the design; they are not application
@@ -72,6 +80,7 @@ Run **JamRoom Update.bat**, save and restart REAPER, then refresh ReaSet and the
 importer on each device. Confirm the importer badge is **v3.17**. Existing saved
 imports and recordings continue through their current journals.
 
-Validation uses the development workstation, not the physical X32 room. Actual
-room audio, Wi-Fi and mobile on-screen keyboard behavior still need checking on
-those devices.
+This validation was performed on the former development workstation, not the
+physical X32 room. Development now runs on the active JamRoom PC with separate
+dummy tests. Actual room audio, Wi-Fi and mobile keyboard acceptance remain
+separate tasks; the historical results do not establish those checks.

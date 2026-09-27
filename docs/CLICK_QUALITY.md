@@ -1,5 +1,13 @@
 # Recording-following clicks (v3.5)
 
+> **Active JamRoom PC - mandatory workflow (27 September 2026):** this
+> installation is connected to the X32 and live REAPER library. Preserve all
+> live projects, media, recordings, configuration and mixer state. Development
+> tests must use a separate isolated dummy setup, never the live REAPER instance.
+> Follow [the live-system workflow](LIVE_JAMROOM_WORKFLOW.md) before using any commands below.
+> Earlier workstation results are historical; operator setup/update instructions
+> are not authorization to change the live rig during development.
+
 The v3.4 click was not adequately validated. It forced librosa's onset tracker to
 use Fadr's BPM, followed strong offbeat attacks around fills, and extrapolated a
 fixed grid outside detected beats. If the native dependency failed, it substituted
