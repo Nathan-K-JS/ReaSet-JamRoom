@@ -29,3 +29,8 @@ body.has-activity #workspaceContent>#receiptCard,body.has-activity #workspaceCon
 
 #workspaceTaskHead h2{max-height:2.4em;overflow:auto}
 button,input,select{font-family:inherit}
+#workspaceReviewTabs button{flex:1}#workspaceReviewFooter [hidden]{display:none!important}
+#ugResults .result{display:block;width:100%;text-align:left}#ugResults .result strong,#ugResults .result small{display:block}
+#chartSearchStatus{padding:10px 12px;border-left:3px solid #74ddb0;background:#172d26}
+#chartSearchStatus:empty{display:none}#workspace-chart-review{max-width:800px}
+#ugResults .result[aria-pressed=true]{border:2px solid #74ddb0;background:#244435}

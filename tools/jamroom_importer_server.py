@@ -869,7 +869,8 @@ class Handler(BaseHTTPRequestHandler):
                 source = html.split('<script id="chart-author-core">',1)[1].split('</script>',1)[0]
             else:
                 source = html[html.index('        function chartRowKey('):html.index('        function renderStructuredChart(')]
-                source = 'function transposeChordName(s,n){return s;}\n' + source
+                display = html.split('<script id="chart-display-core">', 1)[1].split('</script>', 1)[0]
+                source = display + '\nfunction transposeChordName(s,n){return s;}\n' + source
             return self._send(200, source.encode('utf-8'), 'text/javascript')
         if self.path.startswith('/api/chart-preview?'):
             from urllib.parse import parse_qs

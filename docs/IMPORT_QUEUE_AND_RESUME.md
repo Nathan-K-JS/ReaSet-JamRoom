@@ -15,7 +15,8 @@ and investigation are preserved below; this section describes the released contr
 
 Run `JamRoom Update.bat`, close the old importer process, then launch
 `JamRoom Importer.bat` and reload its page. The current badge should show **v3.17**. The queue and review now use
-[separate workspaces](WORKSPACE_LAYOUTS.md), with Stems/Lyrics/Chords tabs.
+[separate workspaces](WORKSPACE_LAYOUTS.md), with Stems -> Choose chart -> Review chart steps (see
+[Guided import review](GUIDED_IMPORT_REVIEW.md)).
 
 - **Your imports** lists unfinished songs. Use **Open** to see progress or
   review. **Add songs** remains available while other songs are processing.

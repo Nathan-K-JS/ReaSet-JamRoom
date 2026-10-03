@@ -13,7 +13,7 @@ For the current controls and shared Scroll/Pages workflow, see
 and page-timing controls described below are retained here as historical context.
 
 Open **Edit chart** from Lyrics or Chords in ReaSet. In an import review, open
-**Chords → Review / edit chart**. A song without a chart offers **Create chart**;
+**Choose chart → Continue to review**. A song without a chart in ReaSet offers **Create chart**;
 existing legacy words are copied into the draft when available.
 
 ## Writing and reviewing
@@ -34,7 +34,8 @@ divider while keeping the text; the first section offers **Merge next**. Drag a 
 a line in either adjacent section, or use **Move divider up/down**. Pasting a chart
 with `[Verse]`, `[Chorus]` and similar headers creates sections needing timing review.
 
-On small screens, switch **Edit / Preview / Timing**. Short windows and phone
+Switch **Edit / Preview**. Optional **Timing adjustments** expand beside the
+player in either view. Short windows and phone
 keyboard layouts put structural commands under **Tools**, leaving the text and
 Save/Stop accessible. The preview uses the performance paginator.
 

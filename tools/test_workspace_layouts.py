@@ -3,6 +3,7 @@ import json
 import unittest
 import test_browser as browser_tests
 import test_importer_activity as activity_tests
+from test_import_chart_flow import document as chart_document
 
 
 class RecordingWorkspaceTests(unittest.TestCase):
@@ -95,12 +96,13 @@ class ImporterWorkspaceTests(unittest.IsolatedAsyncioTestCase):
 
     async def queue(self):
         review=dict(stems=[dict(file=f'{i}.wav',name=f'Stem {i}',slot='BASS',audio='/audio.wav',duration=180) for i in range(8)],
-                    slot_choices=[['BASS','Bass'],['GTR1','Guitar 1']],slot_labels={'BASS':'Bass'},lyrics={'synced':False},chart={})
+                    slot_choices=[['BASS','Bass'],['GTR1','Guitar 1']],slot_labels={'BASS':'Bass'},lyrics={'synced':False},chart={'url':'https://tabs.ultimate-guitar.com/tab/dummy'},duration=60,document=chart_document())
         for stem in review['stems']:
             stem['profile']={'duration':180,'peaks':[.1,.4,.05,.7,.2,.5]*80,'verdict':'full','peak_db':-3,'loud_seconds':100,'active_pct':55.6}
         self.jobs=[dict(id=str(i),song=f'Artist - Song {i}',state='review' if i<4 else 'preparing',stage='Working',revision=1,target='JamRoom',review=review,draft={}) for i in range(30)]
         await self.page.reload();await self.page.wait_for_function('ImportJobs.enabled')
         await self.page.get_by_role('button',name='Open Artist - Song 0',exact=True).click()
+        await self.page.wait_for_function("document.querySelectorAll('#stemList select').length===8")
 
     async def test_review_tabs_autosave_resume_and_apply_stay_in_view(self):
         await self.queue()
@@ -113,17 +115,21 @@ class ImporterWorkspaceTests(unittest.IsolatedAsyncioTestCase):
         await self.page.set_viewport_size(dict(width=390,height=844))
         await self.page.locator('#stemList select').first.select_option('GTR1')
         await self.page.wait_for_function("document.getElementById('queueSaved').textContent==='Saved'")
-        await self.page.get_by_role('button',name='Chart',exact=True).click()
+        await self.page.get_by_role('button',name='2. Choose chart',exact=True).click()
         await self.page.locator('#ugQuery').fill('My unfinished search')
         await self.page.wait_for_timeout(700)
         await self.page.reload();await self.page.wait_for_selector('#ugQuery',state='visible')
         self.assertEqual(await self.page.locator('#ugQuery').input_value(),'My unfinished search')
         self.assertEqual(await self.page.locator('#workspaceTitle').inner_text(),'Artist - Song 0')
         await self.page.locator('#applyBtn').click()
+        await self.page.get_by_role('button',name='Done reviewing',exact=True).click()
+        await self.page.wait_for_selector('#chart-author',state='detached')
+        await self.page.locator('#applyBtn').click()
         await self.page.wait_for_selector('#workspaceJobState',state='visible')
         self.assertEqual(await self.page.locator('#workspaceJobState').inner_text(),'Added to REAPER')
         self.assertEqual(self.calls['/api/jobs/0/apply'],1)
         await self.page.get_by_role('button',name='Review next ready song',exact=True).click()
+        await self.page.wait_for_function("document.getElementById('workspaceTitle').textContent==='Artist - Song 1'")
         self.assertEqual(await self.page.locator('#workspaceTitle').inner_text(),'Artist - Song 1')
 
     async def test_library_update_footer_and_last_row_do_not_overlap(self):
@@ -146,13 +152,13 @@ class ImporterWorkspaceTests(unittest.IsolatedAsyncioTestCase):
         await self.queue()
         self.jobs[0]['review'].update(document=authored.document(),duration=60)
         await self.page.evaluate('d=>{window._review.document=d;window._review.duration=60;}',authored.document())
-        await self.page.evaluate('ImportJobs.editChart()')
+        await self.page.evaluate("ImportJobs.editChart('edit')")
         await self.page.locator('.ca-text').fill('Dm7   G/B\nFresh words for our room')
         await self.page.wait_for_timeout(900)
         await self.page.get_by_role('button',name='Close',exact=True).click()
         await self.page.reload()
         await self.page.wait_for_function('ImportJobs.enabled')
-        await self.page.evaluate('ImportJobs.editChart()')
+        await self.page.evaluate("ImportJobs.editChart('edit')")
         await self.page.wait_for_selector('.ca-text')
         self.assertIn('Fresh words for our room',await self.page.locator('.ca-text').input_value())
 

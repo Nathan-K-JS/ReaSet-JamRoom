@@ -18,8 +18,11 @@ screenshots.
 - Desktop shows the import queue beside the selected task. Phone switches between
   queue and task. **Add songs** stays accessible; each queue entry has **Open**.
   Search and filters help with bulk work. Removal stays under **More**.
-- Review uses **Stems / Lyrics / Chords** tabs. Stem rows expand one preview at a
-  time. **Add to REAPER**, save status and **Keep for later** stay at the bottom.
+- Review follows **Stems → Choose chart → Review chart**. Fresh chart selection
+  searches automatically and loads the top matching Ultimate Guitar result;
+  saved choices and drafts are retained. Stem previews can stay open together.
+  The footer advances through the steps, ending with **Add to REAPER** after
+  **Done reviewing**. Save status and **Keep for later** stay at the bottom.
   The intended project appears in the task header. Target checks still run before
   Apply; the importer never silently selects a different project.
 - Reopening restores the selected job, tab and saved draft. Background completion

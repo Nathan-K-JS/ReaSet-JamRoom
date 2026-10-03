@@ -120,7 +120,7 @@ class AuthoredQueueTests(unittest.TestCase):
     def test_source_preview_is_isolated_and_accept_retains_previous_chart(self):
         ident=self.add();row=self.review(ident);folder=self.queue.folder(ident)
         job=ji.load_job(folder);job.update(duration=60,authored_chart=document(),chords_detected=[{'start':0,'end':60,'chord':'C'}]);ji.save_job(folder,job)
-        row['draft']={'chart_document':document()};original=(folder/'job.json').read_bytes()
+        row['draft']={'chart_document':document(),'chart_reviewed':True};original=(folder/'job.json').read_bytes()
         candidate=copy.deepcopy(document());candidate['sections'][0]['rows'][0]['text']='Different candidate'
         self.bridge.build_review.return_value={'stems':[],'document':candidate,'duration':60}
         with patch.object(ji,'build_chart_chords',return_value={'chords':[]}):
@@ -130,6 +130,7 @@ class AuthoredQueueTests(unittest.TestCase):
         recovered=ImportQueue(self.bridge,self.cfg)
         accepted=recovered.action(ident,'accept-chart',{'revision':row['revision'],'candidate':result['candidate']})
         self.assertEqual(accepted['draft']['chart_document']['sections'][0]['rows'][0]['text'],'Different candidate')
+        self.assertFalse(accepted['draft']['chart_reviewed'])
         self.assertEqual(accepted['draft']['previous_chart']['sections'][0]['rows'][0]['text'],'We sing together')
 
     def test_failed_candidate_keeps_cached_job_and_existing_draft(self):
@@ -205,7 +206,7 @@ class AuthorBrowserTests(unittest.TestCase):
         folder=bt.ROOT/'imports/.visual/chart-author';folder.mkdir(parents=True,exist_ok=True)
         for width,height in [(1440,900),(768,1024),(390,844),(320,568),(844,390)]:
             self.page.set_viewport_size({'width':width,'height':height})
-            for view in ['Edit','Preview','Timing']:
+            for view in ['Edit','Preview']:
                 self.page.locator('#chart-author nav').get_by_role('button',name=view,exact=True).click()
                 for label in ['Save chart','Stop','Close']:
                     r=self.page.locator('#chart-author').get_by_role('button',name=label,exact=True).bounding_box()
@@ -243,16 +244,17 @@ class AuthorBrowserTests(unittest.TestCase):
         self.editor();self.page.get_by_role('button',name='Merge next',exact=True).click()
         section=self.page.evaluate('ChartAuthor.active.getDocument().sections')
         self.assertEqual(len(section),1);self.assertEqual(len(section[0]['rows']),3)
-        self.page.locator('#chart-author nav').get_by_role('button',name='Timing',exact=True).click()
+        self.page.locator('.ca-timing-tools summary').click()
         self.page.get_by_role('button',name='Close',exact=True).click();self.page.evaluate('chartEditorOpen()')
-        self.assertEqual(self.page.locator('#chart-author').get_attribute('data-view'),'timing')
+        self.assertEqual(self.page.locator('#chart-author').get_attribute('data-view'),'edit')
+        self.assertEqual(self.page.get_by_role('button',name='Timing',exact=True).count(),0)
 
     def test_timing_suggestion_uses_retained_matching_words_and_keeps_checked_cue(self):
         self.load_reaset();d=document()
         d['sections'][1]['rows'][0].update(text='An original solo lyric',cue=35,cue_word_coverage=1)
         self.page.evaluate('d=>{g_clData.document=d;chartEditorOpen();}',d)
         self.page.locator('.ca-section-list button').nth(1).click()
-        self.page.locator('#chart-author nav').get_by_role('button',name='Timing',exact=True).click()
+        self.page.locator('.ca-timing-tools summary').click()
         self.page.get_by_role('button',name='Suggest timing',exact=True).click()
         section=self.page.evaluate('ChartAuthor.active.getDocument().sections[1]')
         self.assertEqual(section['start'],35);self.assertEqual(section['timing_status'],'matched')

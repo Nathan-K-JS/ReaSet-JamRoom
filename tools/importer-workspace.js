@@ -47,17 +47,22 @@ window.ImportWorkspace=(function(){
   const reviewTools=node('details','workspaceReviewTools');node('summary',null,reviewTools).textContent='Review tools';
   const tabs=node('nav','workspaceReviewTabs');tabs.setAttribute('aria-label','Song review');
   const panes=node('div','workspaceReviewPanes');
-  const stems=node('section','workspace-stems',panes),lyrics=node('section','workspace-lyrics',panes),chords=node('section','workspace-chords',panes);
+  const stems=node('section','workspace-stems',panes),lyrics=node('section','workspace-lyrics',panes),chords=node('section','workspace-chords',panes),chartReview=node('section','workspace-chart-review',panes);
   stems.dataset.reviewTab='stems';lyrics.dataset.reviewTab='retired';lyrics.hidden=true;lyrics.inert=true;chords.dataset.reviewTab='chart';
+  chartReview.dataset.reviewTab='review';
+  node('h2',null,chartReview).textContent='Review your chart';
+  node('p','workspaceChartSummary',chartReview);
+  button('Preview / edit chart',()=>window.ImportJobs.editChart('preview'),chartReview);
+  button('Change chart',()=>chooseTab('chart'),chartReview);
   let target=stems;const apply=$('applyBtn'),cancel=review.querySelector('button[onclick="doCancel()"]');
   for(const n of Array.from(review.children)){
     if(n===apply||n===cancel)continue;
     if(n.tagName==='H2'&&n.textContent.includes('Lyric'))target=lyrics;
-    if(n.tagName==='H2'&&n.textContent.includes('Chord'))target=chords;
+    if(n.id==='chartSelectHeading')target=chords;
     target.append(n);
   }
   const footer=node('footer','workspaceReviewFooter');const save=node('div','workspaceSave',footer);footer.append(apply,cancel);
-  for(const name of ['stems','chart']){const b=button(name[0].toUpperCase()+name.slice(1),()=>chooseTab(name),tabs);b.dataset.reviewTab=name;}
+  for(const [name,label] of [['stems','1. Stems'],['chart','2. Choose chart'],['review','3. Review chart']]){const b=button(label,()=>chooseTab(name),tabs);b.dataset.reviewTab=name;}
   review.replaceChildren(tabs,reviewTools,panes,footer);
   stems.querySelector('h2').hidden=true;
   const stemHelp=stems.querySelector('.note'),fullHelp=node('p',null,reviewTools);
@@ -83,24 +88,24 @@ window.ImportWorkspace=(function(){
     else if(!selected&&task!=='add')show('add');
     root.dataset.pane='queue';
   }
-  function chooseTab(name){
-    if(name==='lyrics'||name==='chords')name='chart';if(!['stems','chart'].includes(name))name='stems';
+  function chooseTab(name,notify=true){
+    if(name==='lyrics'||name==='chords')name='chart';if(!['stems','chart','review'].includes(name))name='stems';
     document.querySelectorAll('audio').forEach(a=>a.pause());
     tab=name;if(selected)localStorage.setItem('jamroom-review-tab:'+selected.id,name);
     for(const p of panes.children)p.hidden=p.dataset.reviewTab!==name;
     for(const b of tabs.children)b.setAttribute('aria-pressed',String(b.dataset.reviewTab===name));
+    if(notify&&window.ImportJobs)ImportJobs.reviewStep(name);
   }
   function renderJobHeader(){if(!selected)return;$('workspaceTitle').textContent=selected.song;$('workspaceSubtitle').textContent='Target: '+(selected.target||'Choose the open REAPER project when adding');}
   function clearJob(){selected=null;show('add');showQueue();}
   function updateJob(row,navigate){
     const changed=!selected||selected.id!==row.id;selected=row;
-    if(changed)chooseTab(localStorage.getItem('jamroom-review-tab:'+row.id)||'stems');
+    if(changed)chooseTab(localStorage.getItem('jamroom-review-tab:'+row.id)||'stems',false);
     if(navigate){queueScroll=side.scrollTop;show(row.state==='review'?'review':'job');}
     else if(task==='review'||task==='job'){task=row.state==='review'?'review':'job';root.dataset.task=task;renderJobHeader();}
     $('workspaceJobState').textContent={done:'Added to REAPER',failed:'This import needs attention',interrupted:'Ready to resume',queued:'Waiting in the queue',preparing:'Preparing your song',applying:'Adding to REAPER',cached:'Saved source files available',paused:'Paused'}[row.state]||row.stage||row.state;
     $('workspaceJobSummary').textContent=row.summary||(row.state==='done'?'Save the REAPER project. You can review the next ready song.':'Work and review choices are saved. Open Activity for detailed progress.');
-    tabs.children[0].textContent='Stems'+(row.review?' ('+row.review.stems.length+')':'');
-    tabs.children[1].textContent='Chart';
+    tabs.children[0].textContent='1. Stems'+(row.review?' ('+row.review.stems.length+')':'');
   }
   function compactStems(){
     for(const row of $('stemList').children){
@@ -119,5 +124,5 @@ window.ImportWorkspace=(function(){
   chooseTab('stems');show(window.g_source==='man'?'library':'add');
   if(!$('updatesBox').classList.contains('hide'))updated();
   function checks(c){connection.hidden=!!c&&!['ytdlp','ffmpeg','key','reaper'].some(k=>c[k]===false);}
-  return {show,showQueue,clearJob,checks,job:updateJob,compactStems,mountQueue,tools,updated,selection,source:s=>show(s==='man'?'library':'add'),tab:chooseTab};
+  return {show,showQueue,clearJob,checks,job:updateJob,compactStems,mountQueue,tools,updated,selection,source:s=>show(s==='man'?'library':'add'),tab:chooseTab,step:()=>tab};
 })();

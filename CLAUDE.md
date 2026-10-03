@@ -68,6 +68,14 @@ ancestry first; never force-push or overwrite divergent changes. Pushing only
 `feature/timing-repair` does not deliver an update to standard installations.
 
 Current architecture:
+- v3.22 source adds Stems -> Choose chart -> Review chart to import review.
+  Fresh chart selection searches Ultimate Guitar and loads the top match;
+  saved sources/drafts stay intact. Add follows Done reviewing. The shared editor
+  has Preview/Edit and expandable Timing adjustments. See
+  `docs/GUIDED_IMPORT_REVIEW.md`. Browser tests must exercise the actual served
+  chart assets, including ChartDisplay. Recording mute restoration now uses one
+  project scan; saves/recovery checkpoints remain intact. See
+  `docs/RECORDING_PERFORMANCE.md`. These source changes do not authorize live deployment.
 - v3.21 adds visible device-local Turn/scroll early (default 2 seconds). Author
   section markers at actual musical starts; anticipation never edits timing.
   Long-section following uses the full reading span in scroll-body coordinates.

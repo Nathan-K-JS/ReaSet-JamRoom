@@ -525,6 +525,7 @@ class ImportQueue:
                     raise Conflict('This chart preview is no longer current. Preview it again.')
                 row.setdefault('draft', {})['previous_chart'] = row['draft'].get('chart_document') or row.get('review', {}).get('document')
                 row['draft']['chart_document'] = candidate['review']['document']
+                row['draft']['chart_reviewed'] = False
                 ji.save_job(self.folder(ident), candidate['job'])
                 row['review'] = candidate['review']
                 row.pop('chart_candidate')

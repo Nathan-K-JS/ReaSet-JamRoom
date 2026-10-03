@@ -1,4 +1,4 @@
-# Unified charts — v3.21
+# Unified charts — v3.22
 
 > **Active JamRoom PC - mandatory workflow (27 September 2026):** this
 > installation is connected to the X32 and live REAPER library. Preserve all
@@ -8,7 +8,10 @@
 > Earlier workstation results are historical; operator setup/update instructions
 > are not authorization to change the live rig during development.
 
-Import review now has **Stems** and **Chart**. Stem previews open together;
+Import review follows **Stems → Choose chart → Review chart → Add to REAPER**.
+Chart selection automatically searches Ultimate Guitar and loads the top match
+for a fresh import; saved choices and edits are retained. See
+[Guided import review](GUIDED_IMPORT_REVIEW.md). Stem previews open together;
 collapsing one does not close the others. Only the selected audio plays.
 There is no separate lyric-timing checklist. Background lyric matches can help
 suggest timing, but a chart is ready to use without checking every cue.
@@ -35,7 +38,9 @@ to a readable minimum, then scroll; changing screen size never invents pages.
 
 ## Editing
 
-Use **Edit chart** in ReaSet or **Chart → Review / edit chart** in the importer.
+Use **Edit chart** in ReaSet or **Continue to review** in the importer.
+The shared editor has **Preview** and **Edit**, with optional **Timing adjustments**
+beside the player instead of a separate Timing tab.
 The editor shows surrounding sections. Write chords above words; recognised
 chords are gold. **Auto / Chords / Lyrics** can override a line's recognition.
 Tagged source chords retain their identity even alongside chord-shape notation.
@@ -46,7 +51,7 @@ Tagged source chords retain their identity even alongside chord-shape notation.
 - Drag a waveform marker, enter a start time, or tap **Starts here**. The marker's
   pointed tip and vertical guide show the exact time; its rectangle is a handle.
 - **Next section starts now** advances the target while setting its start.
-- **Timing → Whole chart offset** shifts the chart together.
+- **Timing adjustments → Whole chart offset** shifts the chart together.
 - **Preview** uses the same Scroll/Pages renderer as ReaSet at the available size.
 
 Timing adjustments are optional. Source headings remain the default grouping;

@@ -322,13 +322,13 @@
       <div id="lyrResults"></div>
     </div>
 
-    <h2 style="margin-top:16px">Chord chart</h2>
+    <h2 id="chartSelectHeading" style="margin-top:16px">Choose your chord chart</h2>
     <div id="chartNow" class="note"></div>
-    <button class="small" onclick="ImportJobs.editChart()">Review / edit chart</button>
-    <div class="note">The chart becomes the chords shown in ReaSet, placed on
-      the words they are printed above. Nothing is chosen automatically — pick
-      the chart you actually play from.</div>
-    <button class="small" onclick="doUgSearch()">Find chord charts on Ultimate Guitar</button>
+    <div class="note">We search Ultimate Guitar and select the top matching chart
+      to get you started. Choose another version below if you prefer.</div>
+    <div id="chartSearchStatus" class="note" role="status"></div>
+    <div id="ugResults"></div>
+    <button class="small" onclick="doUgSearch()">Search again</button>
     <label style="margin-top:10px">Not the right song? Search it yourself</label>
     <input type="text" id="ugQuery" placeholder="e.g. paramore misery business"
            onkeydown="if(event.key==='Enter')doUgSearch(this.value)">
@@ -336,7 +336,6 @@
     <label style="margin-top:10px">…or paste the chart link from Ultimate Guitar</label>
     <input type="text" id="ugUrl" placeholder="https://tabs.ultimate-guitar.com/tab/…">
     <button class="small" onclick="useTypedChart()">Use this chart</button>
-    <div id="ugResults"></div>
     <button id="applyBtn" onclick="doApply()">Looks right — add to REAPER</button>
     <button class="ghost" onclick="doCancel()">Cancel this import</button>
   </div>
@@ -355,7 +354,7 @@
 <script>
 // Version of THIS page (served fresh from disk). Compared against the version
 // of the running server. Either side may be older.
-var UI_BUILD = "v3.21";
+var UI_BUILD = "v3.22";
 
 function importerVersionWarning(serverBuild) {
   if (serverBuild === UI_BUILD) return '';
@@ -429,6 +428,7 @@ function resetReviewPanel(){
   $('lyrPick').classList.add('hide');
   $('lyrQuery').value = ''; $('lyrResults').innerHTML = '';
   $('ugQuery').value = ''; $('ugUrl').value = ''; $('ugResults').innerHTML = '';
+  $('chartSearchStatus').textContent = '';
   $('chartNow').textContent = '';
   $('applyBtn').disabled = false;
 }
@@ -1221,42 +1221,14 @@ function useTypedChart(){
   useChart(u, $('ugUrl'));
 }
 
-function doUgSearch(free){
-  var rv = window._review || {};
-  $('ugResults').innerHTML = '<div class="note">Searching Ultimate Guitar…</div>';
-  fetch('/api/ug_search', {method:'POST', headers:{'Content-Type':'application/json'},
-    body: JSON.stringify({artist: rv.band || '', title: rv.title || '',
-                          free: (typeof free === 'string' ? free : '')})})
-  .then(r=>r.json()).then(function(d){
-    if(d.error){ $('ugResults').innerHTML = '<div class="check bad">'+d.error+'</div>'; return; }
-    var rows = d.charts || [];
-    if(!rows.length){
-      $('ugResults').innerHTML = '<div class="note">No chart matched that closely '
-        + 'enough to trust, so none was picked. Search in your own words above, '
-        + 'or paste the chart link.</div>';
-      return;
-    }
-    $('ugResults').innerHTML = '';
-    rows.forEach(function(c){
-      var b = document.createElement('button');
-      b.className = 'result';
-      var conf = c.match >= 0.95 ? '' :
-        ' <span class="libpill warn">name only ' + Math.round(c.match*100) + '% match</span>';
-      b.innerHTML = c.artist + ' — ' + c.title + ' <span class="libpill">v'
-        + (c.version||'?') + '</span>' + conf
-        + '<br><small>' + c.rating.toFixed(2) + '★ from ' + c.votes + ' votes</small>';
-      b.onclick = function(){ useChart(c.url, b); };
-      $('ugResults').appendChild(b);
-    });
-  });
-}
+function doUgSearch(free){return importWorkspace('searchCharts', typeof free === 'string' ? free : '', false);}
 
 function importWorkspace(action){
   if(!window.ImportJobs || !ImportJobs.enabled){alert('The saved import workspaces are still connecting. Check the setup message, then retry.');return;}
   return ImportJobs[action].apply(null,Array.prototype.slice.call(arguments,1));
 }
 function useChart(url,btn){return importWorkspace('choose','chart',{url:url},btn);}
-function doApply(){return importWorkspace('apply');}
+function doApply(){return importWorkspace('advanceReview');}
 function doCancel(){return importWorkspace('close');}
 
 

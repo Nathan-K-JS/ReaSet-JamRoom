@@ -308,6 +308,7 @@ class QueueTests(unittest.TestCase):
                 page.on('pageerror', lambda e: errors.append(str(e)))
                 page.route('**/api/checks', lambda r:r.fulfill(json={'build':ji.BUILD, 'key':True, 'reaper':True}))
                 page.route('**/api/updates/status', lambda r:r.fulfill(json={'project':'test','batch':None}))
+                page.route('**/api/ug_search', lambda r:r.fulfill(json={'charts':[]}))
                 page.goto('http://127.0.0.1:' + str(http.server_port))
                 page.get_by_role('button', name='Open Band - One', exact=True).wait_for()
                 self.assertFalse(page.get_by_role('button',name='Remove from queue',exact=True).first.is_visible())
