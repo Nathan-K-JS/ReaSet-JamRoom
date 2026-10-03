@@ -566,11 +566,17 @@ class ImportQueue:
                     raise Conflict('Open the intended project, or explicitly select the current project as the target.')
                 if not row.get('apply_started') and row.get('stem_policy') != ji.STEM_REVIEW_POLICY:
                     raise Conflict('Reopen this review to refresh its stem previews and recovered audio before applying.')
+                try:
+                    ji.require_stopped_for_import(self.config(row))
+                except RuntimeError as error:
+                    row['summary'] = str(error)
+                    self._save()
+                    raise Conflict(str(error)) from error
                 if not self.server.BUSY.acquire(blocking=False):
                     raise Conflict('Another REAPER change is running. Try again when it finishes.')
                 old_state = row['state']
                 try:
-                    row.update(state='applying', apply_phase='submitted' if row.get('apply_started') else 'preparing')
+                    row.update(state='applying', summary='', apply_phase='submitted' if row.get('apply_started') else 'preparing')
                     self._save()
                     threading.Thread(target=self.apply, args=(ident,), daemon=True).start()
                 except Exception:

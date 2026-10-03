@@ -68,6 +68,12 @@ ancestry first; never force-push or overwrite divergent changes. Pushing only
 `feature/timing-repair` does not deliver an update to standard installations.
 
 Current architecture:
+- v3.22.1 checks that REAPER is stopped before import preparation and handoff.
+  Paused playback is rejected immediately, without changing transport. Unconfirmed
+  appends open a recovery task with Retry adding to REAPER, appear under Needs
+  attention, and retain the original operation/project and prepared audio.
+  Native rejection receipts are scoped to the operation; never reset an uncertain
+  operation or restart paid processing to retry. See `docs/IMPORT_QUEUE_AND_RESUME.md`.
 - v3.22 source adds Stems -> Choose chart -> Review chart to import review.
   Fresh chart selection searches Ultimate Guitar and loads the top match;
   saved sources/drafts stay intact. Add follows Done reviewing. The shared editor

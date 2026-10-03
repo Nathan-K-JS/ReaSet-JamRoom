@@ -161,7 +161,8 @@ window.ImporterActivity = (function () {
       if(j.state==='cached'){tasks.delete('job:'+j.id);continue;}
       const names={review:'Ready to review',done:'Added to REAPER — save your project',failed:'Needs attention',interrupted:'Resume available',paused:'Paused',queued:'Queued'};
       const queuePaused=data.paused&&j.state==='queued';
-      put('job:'+j.id,{title:j.song,detail:queuePaused?'Queue paused':j.summary||j.stage||names[j.state]||j.state,state:queuePaused?'paused':j.state,job:j.id,lines:tasks.get('job:'+j.id)?.lines||[]});
+      const retry=j.apply_started&&['review','interrupted'].includes(j.state);
+      put('job:'+j.id,{title:j.song,detail:queuePaused?'Queue paused':j.summary||j.stage||names[j.state]||j.state,state:queuePaused?'paused':retry?'failed':j.state,job:j.id,lines:tasks.get('job:'+j.id)?.lines||[]});
     }
     render();
   }

@@ -34,3 +34,8 @@ button,input,select{font-family:inherit}
 #chartSearchStatus{padding:10px 12px;border-left:3px solid #74ddb0;background:#172d26}
 #chartSearchStatus:empty{display:none}#workspace-chart-review{max-width:800px}
 #ugResults .result[aria-pressed=true]{border:2px solid #74ddb0;background:#244435}
+#workspaceJob[data-apply-retry=true]{display:flex;flex-direction:column;overflow:hidden}
+#workspaceJob[data-apply-retry=true] #workspaceJobState{flex-shrink:0;font-size:20px;margin:0 0 8px}
+#workspaceJob[data-apply-retry=true] #workspaceJobSummary{flex:1;min-height:0;overflow:auto;white-space:pre-line;margin:0 0 12px}
+#workspaceJob[data-apply-retry=true] #workspaceJobActions{flex-shrink:0;padding-top:8px;border-top:1px solid #344650}
+#workspaceJob[data-apply-retry=true] #workspaceJobFooter{display:none}

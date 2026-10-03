@@ -158,6 +158,7 @@ class ImporterWorkspaceTests(unittest.IsolatedAsyncioTestCase):
         await self.page.get_by_role('button',name='Close',exact=True).click()
         await self.page.reload()
         await self.page.wait_for_function('ImportJobs.enabled')
+        await self.page.wait_for_function("document.querySelectorAll('#stemList select').length===8")
         await self.page.evaluate("ImportJobs.editChart('edit')")
         await self.page.wait_for_selector('.ca-text')
         self.assertIn('Fresh words for our room',await self.page.locator('.ca-text').input_value())

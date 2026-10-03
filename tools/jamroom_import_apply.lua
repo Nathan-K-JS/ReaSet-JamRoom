@@ -29,8 +29,16 @@ local PB_BY_SLOT = {
 local SONG_GAP = 30       -- silence between the previous project end and the new song
 local msgs = {}
 local function log(s) msgs[#msgs + 1] = s end
+local failure_dir, failure_operation
 
 local function fail(why)
+    -- Report only this job's rejection. The queue keeps its original operation
+    -- identity even on failure, since a partial/ambiguous append is not retryable
+    -- as a new operation. Python clears this receipt before each attempt.
+    if failure_dir then
+        local ef = io.open(failure_dir .. '/apply-error.txt', 'w')
+        if ef then ef:write(failure_operation .. '\n' .. why) ef:close() end
+    end
     reaper.SetExtState(SEC, "importer", "failed:" .. why, false)
     reaper.ShowConsoleMsg("[JR import apply] FAILED: " .. why .. "\n" ..
         table.concat(msgs, "\n") .. "\n")
@@ -55,6 +63,7 @@ local okload, job = pcall(dofile, job_dir .. "/job_for_reaper.lua")
 if not okload or type(job) ~= "table" then
     return fail("could not load job_for_reaper.lua: " .. tostring(job))
 end
+failure_dir, failure_operation = job_dir, job.import_operation or ''
 
 -- ─── Track helpers (folder-depth math mirrors ReaSet_JamRoom.lua) ────────────
 
@@ -253,8 +262,11 @@ if operation ~= '' then
         i = i + 1
     end
 end
-if reaper.GetPlayState()~=0 or (recording_project~='' and reaper.GetExtState('ReaSetRec','lock')==recording_project) then
-    return fail('Finish playback/recording and choose Done before importing songs')
+if reaper.GetPlayState()~=0 then
+    return fail('Press Stop in REAPER or ReaSet, then retry adding this saved import. Pause is not Stop; your stems and chart are kept.')
+end
+if recording_project~='' and reaper.GetExtState('ReaSetRec','lock')==recording_project then
+    return fail('Finish the recording session and choose Done, then retry adding this saved import.')
 end
 reaper.Undo_BeginBlock()
 if operation ~= '' then reaper.SetProjExtState(0,'ReaSetImport',operation,'pending') end

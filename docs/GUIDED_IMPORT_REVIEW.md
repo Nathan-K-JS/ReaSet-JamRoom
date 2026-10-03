@@ -4,6 +4,11 @@ Approved and implemented on 3 October 2026. Source development and tests use a
 separate checkout; the [live workflow](LIVE_JAMROOM_WORKFLOW.md) still applies.
 This document describes the new build, not deployment to the active rig.
 
+v3.22.1 adds import recovery: press Stop before adding; Pause does not suffice.
+If an append is unconfirmed, open the saved song under Needs attention and choose
+Retry adding to REAPER. Reviewed stems/chart and the original operation are kept;
+see [queue recovery](IMPORT_QUEUE_AND_RESUME.md).
+
 ## Musician workflow
 
 1. **Stems:** preview stems and choose their playback groups. The primary action

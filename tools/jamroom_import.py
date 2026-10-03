@@ -40,7 +40,7 @@ import jamroom_loudness as level_model
 # what is on disk — the importer server holds its modules in memory, so this is
 # how you tell "did the update take effect?" from "is the old process still up?"
 # BUMP THIS whenever the importer changes, and quote it when handing over.
-BUILD = "v3.22"
+BUILD = "v3.22.1"
 BUILD_DATE = "2026-10-03"
 
 # Fadr's S3 throttles each connection independently, so several transfers at
@@ -2362,6 +2362,22 @@ def write_reaper_job(job, job_dir):
     save_job(job_dir, job)
 
 
+def require_stopped_for_import(cfg):
+    """Read-only preflight. Paused (2), playing and recording are all unsafe."""
+    web = cfg['reaper_web'].rstrip('/')
+    try:
+        response = requests.get(f'{web}/_/TRANSPORT', timeout=5)
+        response.raise_for_status()
+        fields = next(line.split('\t') for line in response.text.splitlines()
+                      if line.startswith('TRANSPORT\t'))
+        state = int(fields[1])
+    except (requests.RequestException, StopIteration, ValueError, IndexError) as error:
+        raise RuntimeError('Could not check REAPER playback. Check the connection, then retry adding this saved import.') from error
+    if state != 0:
+        status = 'paused' if state == 2 else 'playing or recording'
+        raise RuntimeError(f'REAPER is {status}. Press Stop in REAPER or ReaSet, then retry adding this saved import. Pause is not Stop; your stems and chart are kept.')
+
+
 def stage_apply(job, job_dir, cfg, force):
     """Hand the job to REAPER: pointer file + `reaper -nonewinst apply.lua`,
     then wait for the script's applied.txt receipt (no optimistic claims)."""
@@ -2370,7 +2386,11 @@ def stage_apply(job, job_dir, cfg, force):
         log(f"Already applied ({applied.read_text().strip()}) — skipping. "
             f"Use --force-apply to re-run.")
         return
+    if cfg['auto_apply']:
+        require_stopped_for_import(cfg)  # Playback may have changed during preparation.
     applied.unlink(missing_ok=True)
+    rejected = job_dir / 'apply-error.txt'
+    rejected.unlink(missing_ok=True)  # Never reuse a previous attempt's rejection.
     tooldir = Path(__file__).resolve().parent
     apply_lua = tooldir / "jamroom_import_apply.lua"
     pointer = tooldir / "jamroom_pending_job.txt"
@@ -2433,6 +2453,10 @@ def stage_apply(job, job_dir, cfg, force):
         if applied.exists():
             log(f"REAPER confirmed: {applied.read_text(encoding='utf-8').strip()}")
             return
+        if rejected.exists():
+            receipt = rejected.read_text(encoding='utf-8').split('\n', 1)
+            if len(receipt) == 2 and receipt[0] == job.get('import_operation', ''):
+                raise RuntimeError('REAPER could not add this song: ' + receipt[1].strip())
         time.sleep(1)
     log("WARNING: no confirmation from REAPER after 90s — check the ReaScript "
         "console in REAPER. (Is the right project tab active?)")

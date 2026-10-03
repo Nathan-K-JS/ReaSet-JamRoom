@@ -2,6 +2,7 @@
 window.ImportWorkspace=(function(){
   const $=id=>document.getElementById(id), root=$('importWorkspace');
   let task='add',selected=null,tab='stems',queueScroll=0;
+  function jobTask(row){return row.state==='review'&&!row.apply_started?'review':'job';}
   function node(tag,id,parent){const n=document.createElement(tag);if(id)n.id=id;if(parent)parent.append(n);return n;}
   function button(label,fn,parent){const b=node('button',null,parent);b.type='button';b.textContent=label;b.onclick=fn;return b;}
   const header=node('header','workspaceHeader');document.body.insertBefore(header,$('activityBar'));
@@ -84,7 +85,7 @@ window.ImportWorkspace=(function(){
   }
   function showQueue(){
     if(window.ImporterActivity)ImporterActivity.close();root.dataset.pane='queue';side.scrollTop=queueScroll;
-    if(selected&&task!=='review'&&task!=='job')show(selected.state==='review'?'review':'job');
+    if(selected&&task!=='review'&&task!=='job')show(jobTask(selected));
     else if(!selected&&task!=='add')show('add');
     root.dataset.pane='queue';
   }
@@ -100,11 +101,14 @@ window.ImportWorkspace=(function(){
   function clearJob(){selected=null;show('add');showQueue();}
   function updateJob(row,navigate){
     const changed=!selected||selected.id!==row.id;selected=row;
+    const retry=row.apply_started&&['review','interrupted'].includes(row.state);
+    job.dataset.applyRetry=String(!!retry);
     if(changed)chooseTab(localStorage.getItem('jamroom-review-tab:'+row.id)||'stems',false);
-    if(navigate){queueScroll=side.scrollTop;show(row.state==='review'?'review':'job');}
-    else if(task==='review'||task==='job'){task=row.state==='review'?'review':'job';root.dataset.task=task;renderJobHeader();}
-    $('workspaceJobState').textContent={done:'Added to REAPER',failed:'This import needs attention',interrupted:'Ready to resume',queued:'Waiting in the queue',preparing:'Preparing your song',applying:'Adding to REAPER',cached:'Saved source files available',paused:'Paused'}[row.state]||row.stage||row.state;
+    if(navigate){queueScroll=side.scrollTop;show(jobTask(row));}
+    else if(task==='review'||task==='job'){task=jobTask(row);root.dataset.task=task;renderJobHeader();}
+    $('workspaceJobState').textContent=retry?'Adding to REAPER needs attention':{done:'Added to REAPER',failed:'This import needs attention',interrupted:'Ready to resume',queued:'Waiting in the queue',preparing:'Preparing your song',applying:'Adding to REAPER',cached:'Saved source files available',paused:'Paused'}[row.state]||row.stage||row.state;
     $('workspaceJobSummary').textContent=row.summary||(row.state==='done'?'Save the REAPER project. You can review the next ready song.':'Work and review choices are saved. Open Activity for detailed progress.');
+    if(retry)$('workspaceJobSummary').textContent+='\n\nYour stems and chart are saved. Stop playback, then retry. The original import is checked first to avoid adding the song twice.';
     tabs.children[0].textContent='1. Stems'+(row.review?' ('+row.review.stems.length+')':'');
   }
   function compactStems(){

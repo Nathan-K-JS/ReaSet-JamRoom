@@ -97,10 +97,10 @@ window.ImportJobs = (function(){
     $('progTitle').textContent = row.song + ' — ' + (row.stage || row.state);
     target.textContent = 'Apply target: ' + (row.target || 'Choose the open REAPER project before applying');
     message.textContent = row.summary||'';
-    if(row.state === 'review' && row.review && rendered !== row.id + ':review'){
+    if(row.state === 'review' && !row.apply_started && row.review && rendered !== row.id + ':review'){
       showReview(row.review); restoreDraft(row.draft);
       rendered = row.id + ':review'; saved.textContent = 'Saved';
-    } else if(row.state !== 'review'){
+    } else if(row.state !== 'review' || row.apply_started){
       resetReviewPanel(); rendered = row.id + ':' + row.state;
     }
     document.querySelectorAll('#reviewCard input,#reviewCard select').forEach(function(node){node.disabled = !!row.apply_started;});
@@ -143,12 +143,15 @@ window.ImportJobs = (function(){
     applying:'Adding to REAPER', done:'Added — save REAPER', failed:'Needs attention',
     interrupted:'Resume available', paused:'Paused', cached:'Cached song', editing:'Updating review', checking:'Checking Fadr'};
   var actionSignature='';
+  function needsApplyRetry(row){return row.apply_started&&['review','interrupted'].includes(row.state);}
   function renderJobActions(row){
     var host=$('workspaceJobActions');if(!host)return;
     var sig=JSON.stringify([row.id,row.state,row.apply_started]);if(sig===actionSignature)return;
     actionSignature=sig;host.replaceChildren();
-    if(['failed','paused','interrupted','cached'].includes(row.state)){
-      button(row.apply_started?'Check Apply':'Resume import',async function(){
+    if(needsApplyRetry(row)){
+      button('Retry adding to REAPER',function(){return api.apply();},host);
+    } else if(['failed','paused','interrupted','cached'].includes(row.state)){
+      button(row.apply_started?'Retry adding to REAPER':'Resume import',async function(){
         if(row.apply_started){await api.apply();return;}
         await request('/'+row.id+'/resume',{});await refresh();
       },host);
@@ -163,18 +166,18 @@ window.ImportJobs = (function(){
     var top=$('workspaceQueue')&&$('workspaceQueue').scrollTop;
     list.replaceChildren();
     var active=rows.filter(function(r){return !['done','cached'].includes(r.state);});
-    $('queueCounts').textContent=active.length+' unfinished / '+active.filter(function(r){return r.state==='review';}).length+' ready'+(paused?' / Queue paused':'');
+    $('queueCounts').textContent=active.length+' unfinished / '+active.filter(function(r){return r.state==='review'&&!r.apply_started;}).length+' ready'+(paused?' / Queue paused':'');
     var shown=rows.filter(function(r){
       if(filterText&&!r.song.toLowerCase().includes(filterText.toLowerCase()))return false;
       if(filterState==='completed')return ['done','cached'].includes(r.state);
-      if(filterState==='attention')return ['failed','interrupted','paused'].includes(r.state);
-      if(filterState==='review')return r.state==='review';
+      if(filterState==='attention')return needsApplyRetry(r)||['failed','interrupted','paused'].includes(r.state);
+      if(filterState==='review')return r.state==='review'&&!r.apply_started;
       if(filterState==='progress')return ['queued','preparing','applying','checking','editing'].includes(r.state);
       return !['done','cached'].includes(r.state);
     });
     shown.forEach(function(row){
       var line=el('div',undefined,list);line.className='queue-row'+(selected===row.id?' selected':'');line.dataset.job=row.id;
-      el('strong',row.song,line);el('span',names[row.state]||row.state,line).className='note';
+      el('strong',row.song,line);el('span',needsApplyRetry(row)?'Needs attention — retry adding':names[row.state]||row.state,line).className='note';
       var open=button('Open',function(){return select(row.id);},line);open.setAttribute('aria-label','Open '+row.song);
       if(!['preparing','applying','editing','checking'].includes(row.state)){
         var more=el('details',undefined,line);more.dataset.song=row.id;more.open=menus.has(row.id);el('summary','More',more);var actions=el('div',undefined,more);
@@ -204,7 +207,7 @@ window.ImportJobs = (function(){
       if(selected && !busy && !dirty && !saving){
         var id = selected, generation = selection, row = await request('/' + selected);
         if(id !== selected || generation !== selection || dirty || saving || busy) return;
-        if(conflict||detail&&row.state==='review'&&row.revision!==detail.revision&&($('reviewCard').contains(document.activeElement)||window.ChartAuthor&&ChartAuthor.active)){
+        if(conflict||detail&&row.state==='review'&&!row.apply_started&&row.revision!==detail.revision&&($('reviewCard').contains(document.activeElement)||window.ChartAuthor&&ChartAuthor.active)){
           conflict=true;$('workspaceReviewTools').open=true;
           saved.textContent='This review changed elsewhere. Reload the saved review before continuing.';
           $('applyBtn').disabled=true;return;

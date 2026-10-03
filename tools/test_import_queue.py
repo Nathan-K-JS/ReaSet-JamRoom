@@ -244,7 +244,7 @@ class QueueTests(unittest.TestCase):
 
     def test_preparation_failure_does_not_freeze_review(self):
         ident = self.add(); row = self.review(ident)
-        with patch.object(ji, 'stage_mixdown', side_effect=RuntimeError('disk full')):
+        with patch.object(ji, 'require_stopped_for_import'), patch.object(ji, 'stage_mixdown', side_effect=RuntimeError('disk full')):
             self.queue.action(ident,'apply',{'revision':0})
             deadline = time.monotonic()+5
             while self.bridge.BUSY.locked() and time.monotonic()<deadline:time.sleep(.01)
@@ -252,6 +252,45 @@ class QueueTests(unittest.TestCase):
         self.assertFalse(row.get('apply_started'))
         self.queue.draft(ident,{'revision':0,'draft':{}})
         self.queue.action(ident,'target',{'revision':1})
+
+    def test_paused_apply_is_rejected_before_preparation_or_submission(self):
+        ident = self.add(); row = self.review(ident)
+        before = copy.deepcopy(row)
+        self.cfg['reaper_web'] = 'http://reaper.test'
+        with patch.object(ji.requests, 'get', return_value=Mock(text='TRANSPORT\t2\t10\t0')) as get, \
+             patch.object(ji, 'stage_mixdown') as mix, patch.object(ji, 'stage_apply') as apply:
+            with self.assertRaisesRegex(Conflict, 'Pause is not Stop'):
+                self.queue.action(ident, 'apply', {'revision':0})
+            get.assert_called_once_with('http://reaper.test/_/TRANSPORT', timeout=5)
+            mix.assert_not_called(); apply.assert_not_called()
+        self.assertIn('Pause is not Stop', row['summary'])
+        before['summary'] = row['summary']
+        self.assertEqual(row, before)
+        self.assertFalse(self.bridge.BUSY.locked())
+
+    def test_failed_apply_retries_after_restart_without_new_operation_or_preparation(self):
+        ident = self.add(); row = self.review(ident)
+        row['draft'] = {'slots':{'stems/bass.wav':'BASS'}, 'labels':{'stems/bass.wav':'My bass'}}
+        original = copy.deepcopy(row)
+        def wait():
+            deadline = time.monotonic()+5
+            while self.bridge.BUSY.locked() and time.monotonic()<deadline:time.sleep(.01)
+            self.assertFalse(self.bridge.BUSY.locked())
+        with patch.object(ji, 'require_stopped_for_import'), patch.object(ji, 'stage_mixdown') as mix, \
+             patch.object(ji, 'write_reaper_job') as write, patch.object(ji, 'stage_apply', side_effect=RuntimeError('Press Stop')) as apply:
+            self.queue.action(ident, 'apply', {'revision':0}); wait()
+            self.assertEqual(row['state'], 'review'); self.assertTrue(row['apply_started'])
+            restarted = ImportQueue(self.bridge, self.cfg)
+            def confirm(job, folder, cfg, force):
+                self.assertEqual(job['import_operation'], original['operation'])
+                self.assertEqual(job['target_project'], original['target'])
+                (folder/'applied.txt').write_text('Confirmed dummy song')
+            apply.side_effect = confirm
+            restarted.action(ident, 'apply', {'revision':0}); wait()
+            self.assertEqual(restarted.jobs[ident]['state'], 'done')
+            self.assertEqual(restarted.jobs[ident]['draft'], original['draft'])
+            self.assertEqual(apply.call_count, 2)
+            mix.assert_called_once(); write.assert_called_once()
 
     def test_provider_check_releases_failed_task_without_resubmitting(self):
         ident = self.add(); row = self.queue.jobs[ident];row['state']='failed'

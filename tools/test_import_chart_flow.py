@@ -72,7 +72,11 @@ class ChartFlowTests(unittest.IsolatedAsyncioTestCase):
                     await route.fulfill(json={'matches': True})
                     return
                 elif path.endswith('/apply'):
-                    job['state'] = 'done'
+                    if getattr(self, 'apply_error', None):
+                        await route.fulfill(status=409, json={'error':self.apply_error})
+                        return
+                    job['state'] = 'applying' if getattr(self, 'apply_pending', False) else 'done'
+                    job['apply_started'] = True
             await route.fulfill(json=job)
             return
         await activity.ActivityTests.route(self, route)
@@ -95,6 +99,65 @@ class ChartFlowTests(unittest.IsolatedAsyncioTestCase):
     async def select_chart(self):
         await self.page.get_by_role('button', name='Continue to chart', exact=True).click()
         await self.page.wait_for_function("document.getElementById('chartSearchStatus').textContent.includes('Top matching chart selected')")
+
+    async def test_unconfirmed_import_has_visible_retry_on_desktop_and_phone_after_reload(self):
+        await self.open_job(saved=True)
+        original = copy.deepcopy(self.jobs[0]['draft'])
+        for width, height, state in ((1280,800,'review'), (390,844,'review'), (844,390,'interrupted')):
+            with self.subTest(width=width, state=state):
+                self.jobs[0].update(state=state, apply_started=True, summary='REAPER did not confirm Apply. Open the intended project, stop playback/recording, then retry. The same operation ID prevents a duplicate append.')
+                await self.page.set_viewport_size({'width':width,'height':height})
+                await self.page.reload(); await self.page.wait_for_function('ImportJobs.enabled')
+                retry = self.page.get_by_role('button', name='Retry adding to REAPER', exact=True)
+                await retry.wait_for(state='visible')
+                self.assertTrue(await retry.is_enabled())
+                self.assertIn('saved', await self.page.locator('#workspaceJobSummary').inner_text())
+                box = await retry.bounding_box()
+                self.assertGreaterEqual(box['y'], 0); self.assertLessEqual(box['y']+box['height'], height)
+                folder = Path(__file__).resolve().parent.parent/'imports/.visual/import-apply-recovery'
+                folder.mkdir(parents=True, exist_ok=True)
+                await self.page.screenshot(path=str(folder/f'retry-{width}x{height}.png'))
+                await retry.click()
+                await self.page.wait_for_function("document.getElementById('workspaceJobState').textContent==='Added to REAPER'")
+                self.assertEqual(self.jobs[0]['draft'], original)
+        self.assertEqual(self.calls['/api/jobs/0/apply'], 3)
+        self.assertEqual(self.calls['/api/jobs/0/draft'], 0)
+        self.assertEqual(self.calls['/api/ug_search'], 0)
+
+    async def test_native_rejection_returns_to_retry_and_is_listed_under_attention(self):
+        await self.open_job(saved=True)
+        self.jobs[0]['draft']['chart_reviewed'] = True
+        await self.page.reload(); await self.page.wait_for_function('ImportJobs.enabled')
+        await self.page.evaluate("ImportWorkspace.tab('review',false)")
+        self.apply_pending = True
+        await self.page.locator('#applyBtn').click()
+        await self.page.wait_for_function("document.getElementById('workspaceJobState').textContent==='Adding to REAPER'")
+        self.jobs[0].update(state='review', summary='Press Stop, then retry.', revision=self.jobs[0]['revision']+1)
+        await self.page.get_by_role('button', name='Retry adding to REAPER', exact=True).wait_for(state='visible')
+        self.assertIn('needs attention', await self.page.locator('#workspaceJobState').inner_text())
+        await self.page.get_by_label('Filter imports').select_option('attention')
+        self.assertEqual(await self.page.locator('#queueList .queue-row').count(), 1)
+        self.assertIn('retry adding', await self.page.locator('#queueList').inner_text())
+        self.apply_pending = False
+        await self.page.get_by_role('button', name='Retry adding to REAPER', exact=True).click()
+        await self.page.wait_for_function("document.getElementById('workspaceJobState').textContent==='Added to REAPER'")
+
+    async def test_paused_preflight_error_keeps_add_button_and_review_for_immediate_retry(self):
+        await self.open_job(saved=True)
+        self.jobs[0]['draft']['chart_reviewed'] = True
+        await self.page.reload(); await self.page.wait_for_function('ImportJobs.enabled')
+        await self.page.evaluate("ImportWorkspace.tab('review',false)")
+        self.apply_error = 'REAPER is paused. Press Stop, then retry. Pause is not Stop.'
+        await self.page.locator('#applyBtn').click()
+        await self.page.wait_for_function("document.getElementById('queueMessage').textContent.includes('REAPER is paused')")
+        self.assertTrue(await self.page.locator('#applyBtn').is_enabled())
+        self.assertTrue(await self.page.locator('#applyBtn').is_visible())
+        self.assertFalse(self.jobs[0].get('apply_started'))
+        self.apply_error = None
+        await self.page.locator('#applyBtn').click()
+        await self.page.wait_for_function("document.getElementById('workspaceJobState').textContent==='Added to REAPER'")
+        self.assertEqual(self.calls['/api/jobs/0/apply'], 2)
+        self.assertIn('Keep my edits', str(self.jobs[0]['draft']['chart_document']))
 
     async def test_fresh_flow_auto_selects_top_preserves_stems_and_applies_only_after_review(self):
         await self.open_job()

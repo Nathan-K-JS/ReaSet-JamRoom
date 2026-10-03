@@ -14,7 +14,7 @@ and investigation are preserved below; this section describes the released contr
 ## Using the queue
 
 Run `JamRoom Update.bat`, close the old importer process, then launch
-`JamRoom Importer.bat` and reload its page. The current badge should show **v3.17**. The queue and review now use
+`JamRoom Importer.bat` and reload its page. The current badge should show **v3.22.1**. The queue and review now use
 [separate workspaces](WORKSPACE_LAYOUTS.md), with Stems -> Choose chart -> Review chart steps (see
 [Guided import review](GUIDED_IMPORT_REVIEW.md)).
 
@@ -34,8 +34,11 @@ Run `JamRoom Update.bat`, close the old importer process, then launch
   it would leave a potentially running task blocking the remote processing budget.
 - Apply each reviewed song explicitly. Its target project is shown in the task header;
   **Review tools > Use open REAPER project** deliberately changes that target before applying.
-  Finish recording/playback first. Save the REAPER project after a successful Apply.
-- An interrupted Apply uses **Check Apply** or **Check / retry Apply**. It keeps
+  Press **Stop** first: paused playback is still active. Finish any recording
+  session with **Done**. Save the REAPER project after a successful Apply.
+- An unconfirmed or interrupted Apply appears under **Needs attention**. Open
+  the saved import and use **Retry adding to REAPER** after stopping playback.
+  This recovery action is available after reloading or restarting too. It keeps
   the same operation ID and freezes its review until reconciled, so a retry cannot
   overwrite audio or append the song twice. **Review / re-add** on a completed job
   starts a fresh operation with explicit project selection.
@@ -64,7 +67,32 @@ and requests the wrong target project, checks unchanged item/region/track counts
 and verifies that the original library remains unchanged. No paid Fadr submissions
 were made for testing.
 
-## Recommendation
+## v3.22.1 import recovery fix (3 October 2026)
+
+Read-only inspection of the Iris import on the active PC found prepared stems,
+a saved reviewed chart, no append receipt and a native transport rejection.
+The importer previously waited 90 seconds for success even after rejection,
+then labelled the frozen review Ready to review and excluded it from the Needs
+attention filter. Recovery now opens a dedicated task with a visible retry action.
+Existing saved operations recover without resetting journals or regenerating audio.
+
+The queue checks transport before preparing/submitting, and checks again at
+handoff. A paused/offline response leaves the saved import intact. The native
+script retains its final transport and recording-session guards. It writes an
+operation-scoped `apply-error.txt` on rejection; each handoff clears stale error
+receipts and ignores errors for other operations. Errors do not clear intent or
+change project targets. Existing project receipts still prevent duplicate or
+partially completed imports from being blindly appended again.
+
+Validation: 53 checks passed across queue recovery, apply guards, guided import,
+activity and importer workspace tests. These use temporary job folders, mocked
+HTTP, the full Lua apply script against in-memory REAPER APIs, intercepted Edge
+fixtures at desktop/phone/landscape sizes and the existing WebKit activity check.
+One Windows connection abort in the isolated HTTP drain test passed on rerun.
+The live library and Iris import were inspected only;
+no live retry, transport change or deployment was performed as a test.
+
+## Original queue design
 
 Use a persistent import queue with a switchable song list and bounded background
 processing. Queueing and switching songs solve different problems: the queue
