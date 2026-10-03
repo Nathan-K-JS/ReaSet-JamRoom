@@ -105,10 +105,15 @@ function M.new()
     self:jam_clear_click()
     M.owned_items(function(it)reaper.SetMediaItemInfo_Value(it,'B_MUTE',1)end)
     for _,tr in pairs(M.tracks()) do reaper.SetMediaTrackInfo_Value(tr,'I_RECARM',0);reaper.SetMediaTrackInfo_Value(tr,'I_RECMON',0)end
-    for guid,value in pairs(self.audition) do
+    -- Recording journals every library item's mute, including chart items.
+    -- Resolve GUIDs in one pass after preview cleanup; a scan per saved GUID
+    -- makes stop/review quadratic as the library grows. Do not retain pointers
+    -- across transitions, since preview cleanup or native edits can delete items.
+    if next(self.audition) then
       for i=0,reaper.CountMediaItems(0)-1 do
         local it=reaper.GetMediaItem(0,i);local _,g=reaper.GetSetMediaItemInfo_String(it,'GUID','',false)
-        if g==guid then reaper.SetMediaItemInfo_Value(it,'B_MUTE',value)end
+        local value=self.audition[g]
+        if value~=nil then reaper.SetMediaItemInfo_Value(it,'B_MUTE',value)end
       end
     end
     if self.auditionOptions then
