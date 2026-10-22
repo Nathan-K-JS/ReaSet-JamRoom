@@ -3789,7 +3789,7 @@ function render(host,options){
   state.body.addEventListener('pointerdown',manual);
   state.body.addEventListener('keydown',e=>{if(['ArrowUp','ArrowDown','PageUp','PageDown','Home','End',' '].includes(e.key))manual();});
   state.body.addEventListener('scroll',()=>{if(!state.follow&&state.view==='scroll'){const entries=state.body.querySelectorAll('.uc-section');for(let i=0;i<entries.length;i++)if(entries[i].getBoundingClientRect().top-state.body.getBoundingClientRect().top+state.body.scrollTop<=state.body.scrollTop+state.body.clientHeight*.3)state.index=i;host.querySelector('.uc-select').value=state.index;}},{passive:true});
-  state.observer=new ResizeObserver(()=>{if(host.isConnected)rerender();});state.observer.observe(host);
+  state.observer=new ResizeObserver(()=>{if(host.isConnected)rerender();});state.observer.observe(host);state.observer.observe(state.body);
  }
  state.options=options;
  const source=options.document;if(state.source!==source||state.revision!==source.revision){if(state.revision!==source.revision)state.key='';state.source=source;state.revision=source.revision;state.doc=convert(source);}
@@ -4743,6 +4743,7 @@ global.ChartAuthor.audition=function(editor,query){
         }
 
         var currentPos = 0.0;
+        var isRecording = false;
         var queuedRegion = null;
         var lastActiveID = null;
         var lastRenderChecksum = "";
@@ -5816,7 +5817,7 @@ global.ChartAuthor.audition=function(editor,query){
         syncLeadSlider();
         tkRenderPanel();             // paints the performance chips on load
         // Shown in the sidebar so a stale cached page is obvious after a deploy.
-        var REASET_VERSION = "v3.22.1 - Import retry recovery";
+        var REASET_VERSION = "v3.22.2 - Recording count-in and charts";
         var _rv = document.getElementById("reasetVer");
         if (_rv) _rv.textContent = REASET_VERSION;
         (function () { var t = localStorage.getItem("reasetlist_theme") || "dark"; setTheme(t, true); })();
@@ -5862,6 +5863,7 @@ global.ChartAuthor.audition=function(editor,query){
                         if(Number.isFinite(Number(tok[2]))) { g_roomLastReply=Date.now();updateConnectionStatus(); }
                         var nowPlaying = (parseInt(tok[1]) & 1) === 1;
                         currentPos = parseFloat(tok[2]);
+                        isRecording = (parseInt(tok[1]) & 4) === 4;
                         if(nowPlaying && !wasPlayingLast && g_transportTimers.length && !g_transportMidiPulse) {
                             // Playback started outside this page (REAPER or a
                             // controller): discard an old automatic cue/delay.
@@ -9780,8 +9782,14 @@ global.ChartAuthor.audition=function(editor,query){
             renderChordsView();renderLyricsView();
         }
         function chartFollow(){g_chartPage=null;g_sectionBrowse=null;ChartDisplay.follow(document.getElementById('chords-live'));ChartDisplay.follow(document.getElementById('lyrics-live'));renderChordsView();renderLyricsView();}
+        function chartSongPosition(){
+            var c=g_clData&&g_clData.capture,song=g_clData&&g_clData.song;
+            if(isRecording&&c&&song&&Number.isFinite(c.origin)&&Math.abs(c.start-song.start)<.001)
+                return song.start+Math.max(0,currentPos-c.origin);
+            return currentPos;
+        }
         function chartDisplayTime(doc){
-            return currentPos-g_clData.song.start-(doc.timing_offset||0)+(isPlaying?.75*((g_tkState&&g_tkState.rate)||1):0);
+            return chartSongPosition()-g_clData.song.start-(doc.timing_offset||0)+(isPlaying?.75*((g_tkState&&g_tkState.rate)||1):0);
         }
         function chartOffset(seconds){
             seconds=Math.round(seconds*1000)/1000;
@@ -9922,7 +9930,7 @@ global.ChartAuthor.audition=function(editor,query){
             panel.style.bottom=(rect&&rect.height&&rect.top>100?Math.max(0,innerHeight-rect.top+8):8)+'px';
             var semis=(g_tkState&&tkAlive()&&Math.abs(g_tkState.songStart-g_clData.song.start)<.05?g_tkState.semis:0)-getCapo();
             var state=ChartDisplay.render(host,{document:doc,song:g_clData.project+':'+g_clData.song.id,
-                position:currentPos-g_clData.song.start,playing:isPlaying,connected:clAlive(),semis:semis,title:g_clData.song.name,
+                position:chartSongPosition()-g_clData.song.start,playing:isPlaying,connected:clAlive(),semis:semis,title:g_clData.song.name,
                 mode:lyricsOnly?'lyrics':undefined,browse:g_chartPage,edit:chartEditorOpen,timing:function(){chartEditorOpen();document.querySelector('#chart-author [data-tab="timing"]')?.click();},message:g_chartMessage});
             host._pages=state.pages;host._pageIndex=state.index;g_chartPages=state.pages;
             updateTopTabs();return true;
@@ -10055,6 +10063,7 @@ global.ChartAuthor.audition=function(editor,query){
             var host = document.getElementById('chords-live');
             if (!host) return;
             if (g_clData && g_clData.document && renderStructuredChart(host)) return;
+            ChartDisplay.dispose(host);host.classList.remove('uc-host');
             host.classList.remove('structured-chart');host._chartHtml=null;document.getElementById('chords-panel').classList.remove('source-chart');document.getElementById('chords-panel').style.bottom='';
             if (!g_clData || !g_clData.chords || !g_clData.chords.length) {
                 host.innerHTML = '<div class="cv-empty">' + (clAlive()
@@ -10069,7 +10078,7 @@ global.ChartAuthor.audition=function(editor,query){
             // 0.5 real seconds only if we look 0.6 project-seconds ahead.
             var tkRate = (g_tkState && g_tkState.rate) || 1.0;
             var tkSemis = (g_tkState && g_tkState.semis) || 0;
-            var t = currentPos + getLead() * tkRate;
+            var t = chartSongPosition() + getLead() * tkRate;
             var cur = clIndexAtOrBefore(list, t);
             var active = clIndexAt(list,t);
             if (cur < 0) cur = 0;
@@ -10211,11 +10220,12 @@ global.ChartAuthor.audition=function(editor,query){
             }
             if (!host) return;
             if (g_clData && g_clData.document && renderStructuredChart(host, true)) return;
-            host.classList.remove('structured-chart');host._chartHtml=null;document.getElementById('chords-panel').classList.remove('source-chart');document.getElementById('chords-panel').style.bottom='';
+            ChartDisplay.dispose(host);host.classList.remove('uc-host');
+            host.classList.remove('structured-chart');host._chartHtml=null;document.getElementById('lyrics-panel').classList.remove('source-chart');document.getElementById('lyrics-panel').style.bottom='';
             if (!g_clData || !g_clData.lyrics || !g_clData.lyrics.length) {host.textContent='No lyrics for this song.';return;}
             var list = g_clData.lyrics;
             if(!clAlive()){host.innerHTML=legacyChartNotice()+list.map(function(line){return '<div class="lv-block-line">'+trEsc(line[2])+'</div>';}).join('');return;}
-            var t = currentPos + getLead() * ((g_tkState && g_tkState.rate) || 1.0);
+            var t = chartSongPosition() + getLead() * ((g_tkState && g_tkState.rate) || 1.0);
             var cur = clIndexAt(list, t);
             var out = '';
             if (!g_preciseFollow) {

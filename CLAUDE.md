@@ -68,6 +68,13 @@ ancestry first; never force-push or overwrite divergent changes. Pushing only
 `feature/timing-repair` does not deliver an update to standard installations.
 
 Current architecture:
+- v3.22.2 derives song count-in from the installed click's opening beats and
+  phase. Recording publishes capture coordinates so chart discovery and both
+  browser views follow original song time during count-in/capture/pause.
+  Chart layout observes the inner reading area and cleans up its own panel on
+  fallback. See `docs/RECORDING_CHART_FIXES.md` for isolated verification and
+  the unrelated baseline importer test failure. Source delivery is not live
+  deployment authorization.
 - v3.22.1 checks that REAPER is stopped before import preparation and handoff.
   Paused playback is rejected immediately, without changing transport. Unconfirmed
   appends open a recovery task with Retry adding to REAPER, appear under Needs

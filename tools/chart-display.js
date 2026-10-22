@@ -82,7 +82,7 @@ function render(host,options){
   state.body.addEventListener('pointerdown',manual);
   state.body.addEventListener('keydown',e=>{if(['ArrowUp','ArrowDown','PageUp','PageDown','Home','End',' '].includes(e.key))manual();});
   state.body.addEventListener('scroll',()=>{if(!state.follow&&state.view==='scroll'){const entries=state.body.querySelectorAll('.uc-section');for(let i=0;i<entries.length;i++)if(entries[i].getBoundingClientRect().top-state.body.getBoundingClientRect().top+state.body.scrollTop<=state.body.scrollTop+state.body.clientHeight*.3)state.index=i;host.querySelector('.uc-select').value=state.index;}},{passive:true});
-  state.observer=new ResizeObserver(()=>{if(host.isConnected)rerender();});state.observer.observe(host);
+  state.observer=new ResizeObserver(()=>{if(host.isConnected)rerender();});state.observer.observe(host);state.observer.observe(state.body);
  }
  state.options=options;
  const source=options.document;if(state.source!==source||state.revision!==source.revision){if(state.revision!==source.revision)state.key='';state.source=source;state.revision=source.revision;state.doc=convert(source);}

@@ -213,9 +213,22 @@ local function apply_timing(items, song, anchors)
     return out
 end
 
-local function build_json()
+local function chart_position()
     local pos = reaper.GetPlayState() > 0 and reaper.GetPlayPosition()
                                           or reaper.GetCursorPosition()
+    local _,project=reaper.GetProjExtState(0,'ReaSet','projectId')
+    if project~='' and reaper.GetExtState('ReaSetRec','lock')==project and (reaper.GetPlayState()&4)==4 then
+        local ok,c=pcall(J.decode,reaper.GetExtState('ReaSetRec','chart'))
+        local function finite(v)return type(v)=='number' and v==v and math.abs(v)<math.huge end
+        if ok and type(c)=='table' and c.project==project and finite(c.origin) and finite(c.start) and finite(c.finish) and c.finish>c.start then
+            return math.max(c.start,math.min(c.finish-.000001,c.start+pos-c.origin)),c
+        end
+    end
+    return pos
+end
+
+local function build_json()
+    local pos,capture=chart_position()
     local song = song_at(pos)
     if not song then
         return '{"schema":1,"song":null}'
@@ -263,10 +276,10 @@ local function build_json()
     end
     return string.format(
         '{"schema":1,"song":{"id":%d,"name":"%s","start":%.3f,"end":%.3f},'
-        .. '"chords":[%s],"lyrics":[%s],'
+        .. '"chords":[%s],"lyrics":[%s],"capture":%s,'
         .. '"document":%s,"previous_document":%s,"project":"%s","repair":{"chords":%s,"lyrics":%s,'
         .. '"reviewed":{"chords":%s,"lyrics":%s}}}',
-        song.id, jesc(song.name), song.s, song.e, chords_json, lyrics_json, chart_json, previous, jesc(project),
+        song.id, jesc(song.name), song.s, song.e, chords_json, lyrics_json, capture and J.encode(capture) or 'null', chart_json, previous, jesc(project),
         anchors_json(ch_anchors), anchors_json(ly_anchors),
         load_reviewed(song.id, "chords") and "true" or "false",
         load_reviewed(song.id, "lyrics") and "true" or "false")
@@ -549,8 +562,7 @@ local function main_loop()
 
     -- Rebuild when the project changed, the tab changed, or the playhead moved
     -- into a different song (the payload only covers the current song).
-    local pos = reaper.GetPlayState() > 0 and reaper.GetPlayPosition()
-                                          or reaper.GetCursorPosition()
+    local pos=chart_position()
     local song = song_at(pos)
     local song_id = song and song.id or nil
     if reaper.GetProjectStateChangeCount(0)~=s_last_csc or reaper.EnumProjects(-1,'')~=s_last_proj then ChartUndo.sync_all() end

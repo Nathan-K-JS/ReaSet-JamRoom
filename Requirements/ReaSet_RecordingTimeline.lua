@@ -1,6 +1,8 @@
 -- One native Record transport for lead-in, accompaniment and capture. GPL-3.0.
 -- A temporary area beyond library media avoids negative time and preceding songs.
 return function(self,M)
+  local dir=debug.getinfo(1,'S').source:match('@?(.*[\\/])') or ''
+  local CountIn=dofile(dir..'ReaSet_RecordingCountIn.lua')
   function self:clear_timeline()
     for i=reaper.CountMediaItems(0)-1,0,-1 do
       local it=reaper.GetMediaItem(0,i)
@@ -11,9 +13,18 @@ return function(self,M)
     self:clear_timeline()
     local num,den,bpm=reaper.TimeMap_GetTimeSigAtTime(0,s.song.start)
     local _,detected=reaper.GetProjExtState(0,'ReaSetTK','bpm:'..s.song.name)
-    bpm=tonumber(detected) or bpm
+    local imported=tonumber(detected)
     if s.song.free then num=s.song.beats;den=4;bpm=s.song.bpm end
-    local beat=60/bpm*4/den;local lead=self.db.countin and 2*num*beat or 0
+    local beat,phase=60/bpm*4/den,0
+    if self.db.countin and not s.song.free then
+      local rows=M.P.items(s.song,true);local has_click=false
+      for _,r in ipairs(rows)do if r.slot=='CLICK' then has_click=true end end
+      local measured,offset=CountIn.grid(s.song,rows,M.read,M.J.decode)
+      if measured then beat=measured;phase=offset
+      elseif not has_click and imported and imported==imported and imported>0 and imported<1000 then beat=60/imported*4/den
+      else error('Song count-in timing unavailable. Turn off count-in or update this song click.')end
+    end
+    local lead=self.db.countin and 2*num*beat or 0
     assert(lead>=0 and lead<120,'Unsupported count-in duration')
     local origin=reaper.GetProjectLength(0)+10+lead
     t.origin=origin;t.leadin=lead
@@ -68,8 +79,8 @@ return function(self,M)
       reaper.SetMediaTrackInfo_Value(tr,'D_VOL',volume);reaper.SetTrackSendInfo_Value(tr,1,0,'I_DSTCHAN',output)
       local samples=math.floor(lead*48000+.5);local data={}
       for n=0,samples-1 do
-        local time=n/48000;local b=math.floor(time/beat);local dt=time-b*beat
-        local v=dt<.04 and math.sin(2*math.pi*(b%num==0 and 1500 or 1000)*dt)*math.exp(-dt*110)*.35 or 0
+        local time=n/48000-phase;local b=math.floor(time/beat);local dt=time-b*beat
+        local v=time>=0 and dt<.04 and math.sin(2*math.pi*(b%num==0 and 1500 or 1000)*dt)*math.exp(-dt*110)*.35 or 0
         data[#data+1]=string.pack('<i2',math.floor(v*32767))
       end
       local pcm=table.concat(data);local file=s.folder..'/count-in.wav'

@@ -683,7 +683,12 @@ function M.new()
     local backing=J.array();local seen={};local selected=self.selected and self:session(self.selected)
     if selected then for _,r in ipairs(P.items(selected.song,true))do if not seen[r.slot]then seen[r.slot]=true;backing[#backing+1]={slot=r.slot}end end end
     local preparation=self.preparation and {kind=self.preparation.kind,session=self.preparation.session,take=self.preparation.take,parent=self.preparation.parent,stopAtEnd=self.preparation.stopAtEnd}
-    return {elapsed=self.db.active and math.max(0,reaper.GetPlayPosition()-(self.db.active.origin or 0)) or 0,device=self.deviceState,preparation=preparation,backing=backing,overdub=self.overdub,parts=parts,project=self.id,revision=self.revision,mode=self.mode,paused=(reaper.GetPlayState()&2)==2,inputs=inputs,sessions=sessions,songs=J.array(songs),pending=pending,notice=pending>0 and not self.later,recordMode=self.db.recordMode or 'song',jam=self.db.jam,countin=self.db.countin,selected=self.selected,take=self.take,message=self.message,error=self.error,ack=self.ack,ready=self.root~=nil,backingOn=self.backingOn~=false,recordingOn=self.recordingOn~=false,recMutes=self.recMutes or {},stemMutes=self.stemMutes or {}}
+    local capture
+    if self.db.active then
+      local s,t=M.mix_take(self)
+      if not s.song.free and t.origin then capture={project=self.id,origin=t.origin,start=s.song.start,finish=s.song.finish,leadin=t.leadin or 0}end
+    end
+    return {capture=capture,elapsed=self.db.active and math.max(0,reaper.GetPlayPosition()-(self.db.active.origin or 0)) or 0,device=self.deviceState,preparation=preparation,backing=backing,overdub=self.overdub,parts=parts,project=self.id,revision=self.revision,mode=self.mode,paused=(reaper.GetPlayState()&2)==2,inputs=inputs,sessions=sessions,songs=J.array(songs),pending=pending,notice=pending>0 and not self.later,recordMode=self.db.recordMode or 'song',jam=self.db.jam,countin=self.db.countin,selected=self.selected,take=self.take,message=self.message,error=self.error,ack=self.ack,ready=self.root~=nil,backingOn=self.backingOn~=false,recordingOn=self.recordingOn~=false,recMutes=self.recMutes or {},stemMutes=self.stemMutes or {}}
   end
   -- Restore preview overrides before ordinary rehearsal playback is available.
   local _,raw=reaper.GetProjExtState(0,'ReaSetRec','audition')

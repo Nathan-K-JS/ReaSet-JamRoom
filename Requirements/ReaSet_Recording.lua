@@ -3,6 +3,7 @@ local dir=debug.getinfo(1,'S').source:match('@?(.*[\\/])') or ''
 local M=dofile(dir..'ReaSet_RecordingCore.lua')
 dofile(dir..'ReaSet_RecordingExport.lua')(M)
 local SEC='ReaSetRec'
+reaper.SetExtState(SEC,'chart','',false)
 local instance=M.guid();reaper.SetExtState(SEC,'instance',instance,false)
 reaper.SetExtState(SEC,'want','',false)
 local controller,owner,last_csc,last_data,generation,next_tick=nil,nil,-1,'',0,0
@@ -47,6 +48,7 @@ local function tick()
   local _,exported=reaper.GetProjExtState(0,'ReaSet','recordingProject')
   if exported=='1' then
     reaper.SetExtState(SEC,'lock','',false)
+    reaper.SetExtState(SEC,'chart','',false)
     publish({exported=true,mode='idle',message='Recording project: edit and mix in REAPER.'})
     reaper.defer(tick);return
   end
@@ -90,6 +92,7 @@ local function tick()
     local state=controller:state()
     state.instance=instance;state.recovery=controller.recovery
     reaper.SetExtState(SEC,'lock',controller.mode~='idle' and controller.id or '',false)
+    reaper.SetExtState(SEC,'chart',state.capture and M.J.encode(state.capture) or '',false)
     publish(state)
   end,debug.traceback)
   if not ok then
@@ -100,7 +103,7 @@ end
 reaper.atexit(function()
   if reaper.GetExtState(SEC,'instance')==instance then
     pcall(leave)
-    for _,key in ipairs({'heartbeat','meta','lock','instance'})do reaper.SetExtState(SEC,key,'',false)end
+    for _,key in ipairs({'heartbeat','meta','lock','instance','chart'})do reaper.SetExtState(SEC,key,'',false)end
   end
 end)
 tick()
