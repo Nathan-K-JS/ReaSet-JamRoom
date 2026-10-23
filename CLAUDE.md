@@ -27,8 +27,9 @@ alignment. The current chart plan is `docs/UNIFIED_CHART_WORKFLOW_PLAN.md`.
 **REAPER** DAW. This repo is a fork/customisation of it. We are adding a new feature
 to it — we are not building a new app from scratch.
 
-Current live installation branch: `feature/jamroom-claude`, inspected at v3.21
-(`ee51aac`). `feature/timing-repair` is the historical implementation branch;
+Current live installation branch: `feature/jamroom-claude`, with code release
+v3.22.2 (`2604035`) installed on 23 October 2026.
+`feature/timing-repair` is the historical implementation branch;
 use a separate development checkout/branch for new executable changes.
 The section-chart overhaul
 is documented in `docs/SONG_CHART_UPDATES.md`; the baseline review and longer-term
@@ -47,18 +48,23 @@ an arrange/timeline redraw and empty-project tests did not catch or fix this.
 This workspace is on the **active JamRoom PC**, connected to the X32 and the
 live REAPER song library. It is no longer the separate testing workstation.
 Read and obey [the mandatory live workflow](docs/LIVE_JAMROOM_WORKFLOW.md) and
-`AGENTS.md`. Do not alter the live project, library, recordings, mixer settings,
-services or deployment as part of development/testing. Tests require separate
-dummy data, services and a REAPER instance with its own configuration and Dummy
+`AGENTS.md`. Preserve the live project, library, recordings and mixer settings.
+Tests require separate dummy data, services and a REAPER instance with its own
+configuration and Dummy
 Audio; a scratch tab in live REAPER is not acceptable isolation. Inspect existing
 verifiers before running them: default ports 8080/8765 are live here.
 
-Use a separate checkout for executable development. Live deployment and library
-operations require an explicit user request for that scope. Delivery still uses
-the standard update branch, but pushing source is not permission to deploy or
-restart the rig. Released features must use installation-relative paths and the
-installation's own config; they cannot depend on test artifacts. This describes
-this installation, not every future checkout. Verify the environment each session.
+Use a separate checkout for executable development. Nathan's standing release
+authorization, updated 23 October 2026, covers committing, pushing and deploying
+an update once its requested requirements are complete and all required tests
+and checks pass. Do not ask for an additional push or deployment approval.
+Follow the release gate and safe deployment procedure in
+`docs/LIVE_JAMROOM_WORKFLOW.md`, including required restarts and dependency
+changes without interrupting active work. Live library changes and hardware
+operations remain separately scoped; tests remain isolated. Released features
+must use installation-relative paths and the installation's own config; they
+cannot depend on test artifacts. This describes this installation, not every
+future checkout. Verify the environment each session.
 
 The installed Jam Room update channel is `feature/jamroom-claude`, as used by
 `docs/FRESH_INSTALL.md`. `JamRoom Update.bat` pulls the installation's current
@@ -73,8 +79,8 @@ Current architecture:
   browser views follow original song time during count-in/capture/pause.
   Chart layout observes the inner reading area and cleans up its own panel on
   fallback. See `docs/RECORDING_CHART_FIXES.md` for isolated verification and
-  the unrelated baseline importer test failure. Source delivery is not live
-  deployment authorization.
+  the unrelated baseline importer test failure. Current release authorization
+  and required-check policy are in `docs/LIVE_JAMROOM_WORKFLOW.md`.
 - v3.22.1 checks that REAPER is stopped before import preparation and handoff.
   Paused playback is rejected immediately, without changing transport. Unconfirmed
   appends open a recovery task with Retry adding to REAPER, appear under Needs
@@ -88,7 +94,7 @@ Current architecture:
   `docs/GUIDED_IMPORT_REVIEW.md`. Browser tests must exercise the actual served
   chart assets, including ChartDisplay. Recording mute restoration now uses one
   project scan; saves/recovery checkpoints remain intact. See
-  `docs/RECORDING_PERFORMANCE.md`. These source changes do not authorize live deployment.
+  `docs/RECORDING_PERFORMANCE.md`. Release delivery follows the standing workflow.
 - v3.21 adds visible device-local Turn/scroll early (default 2 seconds). Author
   section markers at actual musical starts; anticipation never edits timing.
   Long-section following uses the full reading span in scroll-body coordinates.
@@ -284,5 +290,11 @@ what's there.
   commit that has not been pushed is not delivered. Never report work as
   finished, and never say "run the update", while commits are still local:
   either push them, or say plainly that they are local only.
+- **Finish release delivery without another approval.** Once the requested
+  requirements and release checks are complete, push to the standard update
+  branch and deploy under the standing authorization. Report a specific failed
+  check or unsafe deployment condition if blocked; do not invent a permission
+  gate. Documentation-only changes need documentation checks and a push, with
+  no runtime restart or dependency update.
 - **Be direct about tradeoffs and risks**, including anything you're unsure REAPER's
   API can actually support — don't paper over uncertainty.

@@ -91,6 +91,7 @@ Primary format references: [Fadr supported uploads](https://fadr.com/help/stems)
 [Fadr API upload contract](https://fadr.com/docs/api-stems-tutorial).
 
 Delivery remains through the normal jam-room update branch. Development now
-runs on the active JamRoom PC with isolated tests. Live deployment and any library
-update are separate explicitly requested operations; the historical imports
-reported here are not changes to the live library.
+runs on the active JamRoom PC with isolated tests. Qualified releases use the
+[standing deployment authorization](LIVE_JAMROOM_WORKFLOW.md#standing-release-authorization).
+Library updates still require explicit scope; the historical imports reported
+here are not changes to the live library.

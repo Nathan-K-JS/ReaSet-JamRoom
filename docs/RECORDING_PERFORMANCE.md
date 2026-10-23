@@ -86,6 +86,8 @@ are justified by these results.
 Keep the save/recovery checkpoints and import redraw/undo behavior intact.
 Investigating any remaining live import lag requires narrowing which stage
 stalls; the retained isolated profiler measures native Apply calls but is not
-an end-to-end importer benchmark. The recording fix must be deployed explicitly
-before it can improve the running rig. No live action, restart, deployment or
-library migration was performed during this work.
+an end-to-end importer benchmark. Source must be installed and activated before
+it can improve the running rig; current releases follow the
+[standing deployment workflow](LIVE_JAMROOM_WORKFLOW.md#standing-release-authorization).
+No live action, restart, deployment or library migration was performed during
+the investigation recorded here.

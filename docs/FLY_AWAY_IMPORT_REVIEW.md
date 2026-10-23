@@ -134,5 +134,6 @@ reuse and cost accounting, rather than assuming a smaller file speeds the models
 
 The historical workstation imports above did not update the room library.
 Development now occurs on the active JamRoom PC with isolated dummy tests.
-Live deployment and library updates remain separate explicitly requested
-operations; do not repeat these experiments in the live library.
+Qualified releases use the [standing deployment authorization](LIVE_JAMROOM_WORKFLOW.md#standing-release-authorization).
+Library updates still require explicit scope; do not repeat these experiments
+in the live library.

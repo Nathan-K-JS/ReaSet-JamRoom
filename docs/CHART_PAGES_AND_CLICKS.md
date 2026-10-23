@@ -32,8 +32,9 @@ Run **JamRoom Update.bat** on the jam-room PC, restart REAPER, and refresh ReaSe
 The updated recovery helper installs missing click-analysis dependencies even
 when invoked by an older copy of the updater. Setup and the importer launcher
 use the same dependency manifest. These are historical release instructions.
-Development now runs on the active JamRoom PC; live deployment and library
-operations require an explicit request and are never development test steps.
+Development now runs on the active JamRoom PC. Qualified releases use the
+[standing deployment authorization](LIVE_JAMROOM_WORKFLOW.md#standing-release-authorization).
+Library operations still require explicit scope; neither is a development test.
 
 ## Missing instrumental passages
 

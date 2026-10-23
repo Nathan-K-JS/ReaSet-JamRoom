@@ -72,6 +72,9 @@ Transport remained stopped throughout; only the harness-owned process closed.
 Final artifacts are under
 `C:/Users/natha/AppData/Local/Temp/reaset-recording-chart-4m1ow0l3/`.
 
-The live REAPER instance, service ports 8080/8765, library, recordings, browser
-profiles and X32 were not operated or modified. Physical tablet and room-audio
-acceptance remains a separate, explicitly authorized deployment/acceptance step.
+During the development checks recorded above, the live REAPER instance, service
+ports 8080/8765, library, recordings, browser profiles and X32 were not operated
+or modified. Current release delivery follows the
+[standing deployment workflow](LIVE_JAMROOM_WORKFLOW.md#standing-release-authorization).
+Physical tablet and room-audio acceptance remains separate from these isolated
+checks and must respect the workflow's live-data and hardware boundaries.

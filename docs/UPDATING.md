@@ -11,6 +11,13 @@
 For a machine that already works. Setting one up from scratch is
 [FRESH_INSTALL.md](FRESH_INSTALL.md) — you never need to redo that.
 
+For agent-delivered updates on this active JamRoom PC, Nathan's standing
+authorization of 23 October 2026 allows pushing and deploying completed work
+without a further approval once all required tests/checks pass. Follow the
+[release gate and safe deployment procedure](LIVE_JAMROOM_WORKFLOW.md#standing-release-authorization).
+Preserve active/unsaved work; live library changes and hardware operations remain
+separately scoped. Documentation-only updates require no service restart.
+
 ## The whole procedure
 
 1. Double-click **`JamRoom Update.bat`**.

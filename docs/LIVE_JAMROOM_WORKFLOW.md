@@ -1,6 +1,7 @@
 # Mandatory workflow on the active JamRoom PC
 
-Effective 27 September 2026. This records Nathan's explicit working constraint.
+Effective 27 September 2026; release authorization updated 23 October 2026.
+This records Nathan's explicit working constraints and standing release authority.
 It takes precedence over older development, setup, release and test instructions
 in this repository. It describes this installation; future checkouts must verify
 their own environment rather than assume they are a test machine.
@@ -11,6 +12,8 @@ their own environment rather than assume they are a test machine.
   to the X32 and the live REAPER library. Development now happens on this PC.
 - The inspected baseline is v3.21, commit `ee51aac`, on
   `feature/jamroom-claude`. The deployed and HTTP-served ReaSet HTML matched it.
+  That is historical inspection evidence. Code release v3.22.2 (`2604035`) was
+  installed on this PC on 23 October 2026; verify current state each session.
 - Live REAPER serves port **8080**; the live Python importer serves **8765**.
   Neither is a test endpoint. Other loopback addresses do not provide isolation.
 - REAPER's configuration identifies the library at
@@ -27,9 +30,10 @@ test counts, screenshots and artifact paths do not prove acceptance on this PC.
 
 ## Preserve the live system
 
-Development, documentation and testing tasks do not authorize changing the live
-system. Do not save, migrate, rebuild, import into, convert, repair, rename,
-delete or otherwise edit the live library or its media. Do not operate live
+Development, documentation and testing tasks do not authorize changing live
+user data or hardware. Qualified software releases have the standing deployment
+authorization below. Do not save, migrate, rebuild, import into, convert, repair,
+rename, delete or otherwise edit the live library or its media. Do not operate live
 transport, change project tabs, arm tracks, record, render, change routing or
 launch actions in the performance REAPER instance to run a test.
 
@@ -89,7 +93,62 @@ not commands approved for execution against this PC's default endpoints. No
 isolated native test environment or isolation support in those scripts is
 claimed to have been established by this documentation change.
 
-## Hardware acceptance and live delivery
+## Standing release authorization
+
+On 23 October 2026 Nathan authorized completing release delivery without a
+separate approval once an update meets its requested requirements and passes
+all required tests and checks. This covers committing and pushing source,
+fast-forwarding the standard update branch, installing the release on this PC,
+deploying web assets, and the necessary safe service restarts and runtime
+dependency changes. Do not stop to ask permission to push, update or deploy a
+qualifying release. A narrower instruction for a particular task still applies.
+
+### Release gate
+
+- Complete the requested requirements and acceptance criteria. Required tests
+  and checks must pass against the exact release being delivered, using the
+  isolated setup above. Include relevant browser/native regressions when the
+  change needs them; historical workstation evidence is not a substitute.
+- A failing, skipped or unavailable required check is not a pass. Resolve and
+  report the specific blocker; do not silently waive a baseline failure or claim
+  completion with unmet requirements. Optional checks are not required gates.
+- Review the final diff and confirm the release uses installation-relative
+  paths/configuration and has no dependency on development fixtures.
+- Documentation-only changes require documentation checks, including a clean
+  diff/format check and consistent instructions. They do not require runtime
+  tests, service restarts, web redeployment or dependency changes. Such edits
+  may be committed and pushed directly from this checkout to the update branch.
+
+### Delivery on the active PC
+
+1. Commit and push the implementation branch, then fast-forward
+   `origin/feature/jamroom-claude` to the checked release. Verify ancestry;
+   never force-push or overwrite divergent or uncommitted work.
+2. Check live state before installing or restarting anything. Preserve unsaved
+   work and recording recovery data. Wait for playback, recording and rendering
+   to finish; checkpoint/drain importer jobs through the established helper.
+   Never force-stop active work to make an update possible. If safe deployment
+   cannot proceed, report that concrete condition without adding an approval gate.
+3. Fast-forward this installation and deploy the changed runtime/web assets.
+   Use the existing updater/helpers, or their audited steps when a narrower
+   update avoids unrelated actions. Apply only dependency changes needed by the
+   release. Reload/restart affected services when safe; leave already closed
+   services closed unless starting them is needed for the requested outcome.
+   Do not discard unsaved work or alter the library to achieve a restart.
+4. Verify the installed commit, deployed asset contents/hashes and, for running
+   services, their version and liveness. Keep deployment verification read-only:
+   do not record, play, render, import, regenerate the library or change the mixer
+   as an update check. Preserve browser data when refreshing clients.
+5. Report what was pushed, installed and activated, plus any remaining browser
+   refresh or next-launch step. A source push alone is not an installed update;
+   files installed while REAPER is closed become active on its next launch.
+
+This authorization covers delivering the requested software, not changing the
+live song library, recordings, user configuration or X32 settings. Library
+migrations/updates and hardware operations retain their separate explicit scope.
+Development and acceptance tests remain isolated even after deployment.
+
+## Hardware acceptance
 
 Routine development tests use the dummy setup. A hardware acceptance task needs
 an explicit user request covering the intended live interaction, a separate test
@@ -101,16 +160,15 @@ Having the X32 connected is not authorization to test it by changing settings.
 Nathan subsequently authorized bounded X32 capability/workflow tests with
 capture, independent readback and verified restoration, using silent spare
 resources. That authorization does not extend to REAPER/library operations.
-Firmware updates, factory resets and boot/service operations are excluded.
+X32 firmware updates, factory resets and X32 boot/service operations are excluded.
 Phantom testing requires a physically unplugged input confirmed by the operator;
 an empty channel label does not establish that a socket is safe.
 
-Committing/pushing source is distinct from deploying it. Deliver tested releases
-through `feature/jamroom-claude` using the established fast-forward-only process.
-Do not run `JamRoom Update.bat`, `JamRoom Setup.bat`, deployment/recovery helpers,
-restart live REAPER/importer, change live dependencies or refresh performance
-clients as a development test. Perform live deployment only when explicitly
-requested for that scope; keep library migrations separate and explicit too.
+`JamRoom Update.bat`, deployment/recovery helpers, necessary service restarts and
+client refreshes are covered by the standing release authorization when its gate
+and safe deployment conditions are met. They are never development test steps.
+`JamRoom Setup.bat` is for a separately requested installation/setup task, not a
+routine update. Keep library migrations separate and explicit.
 
 Fresh-install and operator guides remain useful for their named tasks. They are
 not instructions to rebuild this existing installation or exercise its controls

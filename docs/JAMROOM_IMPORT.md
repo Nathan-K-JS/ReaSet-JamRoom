@@ -112,9 +112,11 @@ overwrites what changed and prints exactly what you need to restart.
 
 On a new installation, run `JamRoom Setup.bat` once (tools + config). This PC
 is already installed. Development now happens on this same PC in a separate
-checkout and dummy test setup. Push tested work through the release branch;
-only an explicitly requested live deployment should run `JamRoom Update.bat`
-and its required restarts/refreshes. A source push is not a live deployment.
+checkout and dummy test setup. Once the requested requirements and all required
+tests/checks pass, push and deploy through the release branch without another
+approval under the [standing workflow](LIVE_JAMROOM_WORKFLOW.md#standing-release-authorization).
+Its safe deployment conditions govern the updater and required restarts/refreshes.
+A source push is not an installed update.
 Preserve the Fadr configuration, downloaded songs, journals and recordings.
 Library changes are separate explicit operator actions, never deployment tests.
 
