@@ -110,6 +110,8 @@ class PlayalongTests(unittest.TestCase):
         self.assertFalse(self.page.locator('#recording-panel').is_visible())
         self.assertTrue(self.page.locator('#chords-panel').is_visible())
         self.assertIn('Vox 2',self.page.locator('#rec-playing').inner_text())
+        self.publish(countinBpm=103.448275862)
+        self.assertIn('103.4 BPM',self.page.locator('#rec-playing-label').inner_text())
         self.section(0)
         self.publish(mode='recording',elapsed=40)
         self.transport(5,10040);self.section(1)

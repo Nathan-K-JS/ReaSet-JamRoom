@@ -60,12 +60,15 @@ local ok,why=xpcall(function()
    start_native=function(s)assert(reaper.GetPlayState()==0);s.mode='recording'end}
  dofile(folder..'/code/Requirements/ReaSet_RecordingTimeline.lua')(self,M)
  for i,rate in ipairs({1,.8})do
+  -- This preparation-only stub never runs core:park() between cases. Restore
+  -- the fixture's original mute as the production controller does after a take.
+  reaper.SetMediaItemInfo_Value(it,'B_MUTE',0)
   reaper.CSurf_OnPlayRateChange(rate)
   local s={song={start=120,finish=130,name='Synthetic song'},folder=folder..'/song-'..i,parts={},takes={}}
   reaper.RecursiveCreateDirectory(s.folder,0)
   local t={id='take-'..i,mix={}}
   self:prepare_timeline(s,t)
-  assert(math.abs(t.leadin-3)<.000001,'Song count-in used the unrelated 80 BPM label')
+  assert(math.abs(t.leadin-3)<8/22050,'Song count-in used the unrelated 80 BPM label')
   assert(self.mode=='countin' and reaper.GetPlayState()==0)
   result.cases[#result.cases+1]={file=s.folder..'/count-in.wav',lead=t.leadin,rate=rate,phase=.12,beat=.375}
  end

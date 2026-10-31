@@ -15,12 +15,14 @@ return function(self,M)
     local _,detected=reaper.GetProjExtState(0,'ReaSetTK','bpm:'..s.song.name)
     local imported=tonumber(detected)
     if s.song.free then num=s.song.beats;den=4;bpm=s.song.bpm end
-    local beat,phase=60/bpm*4/den,0
+    local beat,phase,first=60/bpm*4/den,0,0
     if self.db.countin and not s.song.free then
       local rows=M.P.items(s.song,true);local has_click=false
-      for _,r in ipairs(rows)do if r.slot=='CLICK' then has_click=true end end
-      local measured,offset=CountIn.grid(s.song,rows,M.read,M.J.decode)
-      if measured then beat=measured;phase=offset
+      -- Rejected/unreviewed clicks install muted. They must not override the
+      -- selected song's tempo merely because their media still exists.
+      for _,r in ipairs(rows)do if r.slot=='CLICK' and reaper.GetMediaItemInfo_Value(r.item,'B_MUTE')~=1 then has_click=true end end
+      local measured,offset,opening=CountIn.grid(s.song,rows,M.read,M.J.decode)
+      if measured then beat=measured;phase=offset;first=opening
       elseif not has_click and imported and imported==imported and imported>0 and imported<1000 then beat=60/imported*4/den
       else error('Song count-in timing unavailable. Turn off count-in or update this song click.')end
     end
@@ -28,6 +30,7 @@ return function(self,M)
     assert(lead>=0 and lead<120,'Unsupported count-in duration')
     local origin=reaper.GetProjectLength(0)+10+lead
     t.origin=origin;t.leadin=lead
+    t.countinBpm=60/beat*reaper.Master_GetPlayRate(0)
     self.db.active.origin=origin
     -- Journal coordinates and original mutes before temporary items are created.
     for i=0,reaper.CountMediaItems(0)-1 do
@@ -77,7 +80,12 @@ return function(self,M)
       end
       reaper.SetMediaTrackInfo_Value(tr,'I_RECARM',0);reaper.SetMediaTrackInfo_Value(tr,'B_MUTE',0)
       reaper.SetMediaTrackInfo_Value(tr,'D_VOL',volume);reaper.SetTrackSendInfo_Value(tr,1,0,'I_DSTCHAN',output)
-      local samples=math.floor(lead*48000+.5);local data={}
+      -- Keep the pulse continuous through a silent/pickup opening. Modulo phase
+      -- alone loses whole beats before the first installed click (e.g. a first
+      -- beat at 1.3 s on a .8 s grid left a 1.6 s hole after the count-in).
+      -- Stop before the real click; never change or double that source's beats.
+      local duration=lead+math.max(0,first-beat+.04)
+      local samples=math.floor(duration*48000+.5);local data={}
       for n=0,samples-1 do
         local time=n/48000-phase;local b=math.floor(time/beat);local dt=time-b*beat
         local v=time>=0 and dt<.04 and math.sin(2*math.pi*(b%num==0 and 1500 or 1000)*dt)*math.exp(-dt*110)*.35 or 0
@@ -87,7 +95,10 @@ return function(self,M)
       M.write(file,'RIFF'..string.pack('<I4',36+#pcm)..'WAVEfmt '..string.pack('<I4I2I2I4I4I2I2',16,1,1,48000,96000,2,16)..'data'..string.pack('<I4',#pcm)..pcm)
       local it=reaper.AddMediaItemToTrack(tr);local tk=reaper.AddTakeToMediaItem(it)
       reaper.SetMediaItemTake_Source(tk,assert(reaper.PCM_Source_CreateFromFile(file)))
-      reaper.SetMediaItemInfo_Value(it,'D_POSITION',origin-lead);reaper.SetMediaItemInfo_Value(it,'D_LENGTH',lead)
+      reaper.SetMediaItemTakeInfo_Value(tk,'D_PLAYRATE',1)
+      reaper.SetMediaItemTakeInfo_Value(tk,'D_STARTOFFS',0)
+      reaper.SetMediaItemInfo_Value(it,'B_LOOPSRC',0)
+      reaper.SetMediaItemInfo_Value(it,'D_POSITION',origin-lead);reaper.SetMediaItemInfo_Value(it,'D_LENGTH',duration)
       reaper.SetMediaItemInfo_Value(it,'C_BEATATTACHMODE',0);M.ext(it,'ReaSetRecPreview',t.id)
       for _,k in ipairs({'D_FADEINLEN','D_FADEOUTLEN','D_FADEINLEN_AUTO','D_FADEOUTLEN_AUTO'})do reaper.SetMediaItemInfo_Value(it,k,0)end
     end

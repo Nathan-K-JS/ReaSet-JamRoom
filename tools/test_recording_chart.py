@@ -21,7 +21,7 @@ class CountInTests(unittest.TestCase):
         lua.globals().report=json.dumps({'beats':beats or [.2+i*.5 for i in range(20)]})
         lua.execute('''
 J=dofile(root..'/Requirements/ReaSet_JSON.lua')
-click={D_POSITION=120,D_LENGTH=30,take={D_PLAYRATE=1,D_STARTOFFS=0,source='dummy-click.wav'}}
+click={D_POSITION=120,D_LENGTH=30,B_MUTE=0,take={D_PLAYRATE=1,D_STARTOFFS=0,source='dummy-click.wav'}}
 reaper={GetActiveTake=function(it)return it.take end,
  GetMediaItemTake_Source=function(t)return t.source end,
  GetMediaSourceFileName=function(s)return s end,
@@ -35,21 +35,21 @@ song={start=120};rows={{item=click,slot='CLICK'}}
 
     def test_opening_click_beats_override_unrelated_tempo_and_preserve_phase(self):
         lua=self.runtime([.2+i*60/137 for i in range(20)])
-        beat,phase=lua.eval('grid.grid(song,rows,read,J.decode)')
+        beat,phase,_=lua.eval('grid.grid(song,rows,read,J.decode)')
         self.assertAlmostEqual(beat,60/137)
         self.assertAlmostEqual(phase,.2)
 
     def test_opening_half_double_tempo_regression(self):
         # The captured opening pulse spacing, represented without song/media data.
         lua=self.runtime([.12,.5,.872,1.248,1.624,2,2.38,2.76,3.14,3.52])
-        beat,phase=lua.eval('grid.grid(song,rows,read,J.decode)')
+        beat,phase,_=lua.eval('grid.grid(song,rows,read,J.decode)')
         self.assertAlmostEqual(60/beat,158.73,places=2)
         self.assertAlmostEqual(phase,.12)
 
     def test_trimmed_and_stretched_click_uses_item_coordinates(self):
         lua=self.runtime()
         lua.execute('click.D_POSITION=120.1;click.take.D_STARTOFFS=.7;click.take.D_PLAYRATE=1.25')
-        beat,phase=lua.eval('grid.grid(song,rows,read,J.decode)')
+        beat,phase,_=lua.eval('grid.grid(song,rows,read,J.decode)')
         self.assertAlmostEqual(beat,.4)
         self.assertAlmostEqual(phase,.1)
 
@@ -64,15 +64,47 @@ song={start=120};rows={{item=click,slot='CLICK'}}
             original=path.read_bytes()
             lua=self.runtime();lua.globals().path=path.as_posix()
             lua.execute("click.take.source=path;report=''")
-            beat,phase=lua.eval('grid.grid(song,rows,read,J.decode)')
+            beat,phase,_=lua.eval('grid.grid(song,rows,read,J.decode)')
             self.assertAlmostEqual(beat,.5,places=4)
             self.assertAlmostEqual(phase,.2,places=4)
             self.assertEqual(path.read_bytes(),original)
+            # A stale sidecar must not override the actual click being played.
+            lua.globals().report=json.dumps({'beats':[.1+i*.75 for i in range(12)]})
+            beat,phase,_=lua.eval('grid.grid(song,rows,read,J.decode)')
+            self.assertAlmostEqual(beat,.5,places=4)
+            self.assertAlmostEqual(phase,.2,places=4)
+
+    def test_delayed_first_beat_retains_whole_beats_before_click(self):
+        lua=self.runtime([1.3+i*.8 for i in range(20)])
+        beat,phase,first=lua.eval('grid.grid(song,rows,read,J.decode)')
+        self.assertAlmostEqual(beat,.8)
+        self.assertAlmostEqual(phase,.5)
+        self.assertAlmostEqual(first,1.3)
+
+    def test_audio_reader_starts_at_trimmed_source_offset(self):
+        with tempfile.TemporaryDirectory(prefix='reaset-trim-click-') as folder:
+            path=Path(folder)/'click.wav'
+            samples=[0]*8000*40
+            for i in range(14):samples[round((32.2+i*.5)*8000)]=16000
+            with wave.open(str(path),'wb') as out:
+                out.setparams((1,2,8000,0,'NONE','not compressed'))
+                out.writeframes(struct.pack('<'+'h'*len(samples),*samples))
+            lua=self.runtime();lua.globals().path=path.as_posix()
+            lua.execute("click.take.source=path;click.take.D_STARTOFFS=32;report=''")
+            beat,phase,first=lua.eval('grid.grid(song,rows,read,J.decode)')
+            self.assertAlmostEqual(beat,.5,places=4)
+            self.assertAlmostEqual(phase,.2,places=4)
+            self.assertAlmostEqual(first,.2,places=4)
 
     def test_bad_beats_do_not_supply_a_tempo(self):
         for beats in [[1,1,1],[1,2,.5],[0,5,10]]:
             with self.subTest(beats=beats):
                 self.assertIsNone(self.runtime(beats).eval('grid.grid(song,rows,read,J.decode)'))
+
+    def test_muted_click_cannot_override_song_tempo(self):
+        lua=self.runtime([1.3+i*.8 for i in range(20)])
+        lua.execute('click.B_MUTE=1')
+        self.assertIsNone(lua.eval('grid.grid(song,rows,read,J.decode)'))
 
     def test_rendered_two_bar_countin_matches_click_and_boundary(self):
         lua=self.runtime()
@@ -102,6 +134,8 @@ r.SetTrackSendInfo_Value=function()end
 r.AddTakeToMediaItem=function()return {}end
 r.PCM_Source_CreateFromFile=function()return {}end
 r.SetMediaItemTake_Source=function()end
+r.SetMediaItemTakeInfo_Value=function()end
+r.Master_GetPlayRate=function()return 1 end
 r.TrackList_AdjustWindows=function()end;r.UpdateArrange=function()end
 r.SetEditCurPos=function(pos)cursor=pos end
 self={db={countin=true,active={}},audition={},save=function()end,

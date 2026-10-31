@@ -5824,7 +5824,7 @@ global.ChartAuthor.audition=function(editor,query){
         syncLeadSlider();
         tkRenderPanel();             // paints the performance chips on load
         // Shown in the sidebar so a stale cached page is obvious after a deploy.
-        var REASET_VERSION = "v3.23 - Recording play-along";
+        var REASET_VERSION = "v3.23.1 - Recording count-in";
         var _rv = document.getElementById("reasetVer");
         if (_rv) _rv.textContent = REASET_VERSION;
         (function () { var t = localStorage.getItem("reasetlist_theme") || "dark"; setTheme(t, true); })();
@@ -9361,6 +9361,7 @@ global.ChartAuthor.audition=function(editor,query){
             }
             recSend('record',extra);
         }
+        function recCountInLabel(state){return 'Count-in'+(Number.isFinite(state.countinBpm)?' ('+Number(state.countinBpm.toFixed(1))+' BPM)':'');}
         function updateMainTransport(){
             var btn=document.getElementById('main-play-btn');if(!btn)return;
             var open=document.getElementById('recording-panel').classList.contains('open'),context=open||recLocked(),state=g_recState||{},mode=state.mode||'idle';
@@ -9370,7 +9371,7 @@ global.ChartAuthor.audition=function(editor,query){
             var capturing=recCapturing(),banner=document.getElementById('rec-playing');
             if(banner){
                 banner.hidden=!capturing||open;
-                document.getElementById('rec-playing-label').textContent=(mode==='countin'?'Count-in':state.paused?'Recording paused':'Recording')+' · '+trTime(state.elapsed||0);
+                document.getElementById('rec-playing-label').textContent=(mode==='countin'?recCountInLabel(state):state.paused?'Recording paused':'Recording')+' · '+trTime(state.elapsed||0);
                 document.getElementById('rec-playing-inputs').textContent=(state.inputs||[]).filter(function(c){return c.selected;}).map(function(c){return c.name;}).join(' · ');
                 document.getElementById('rec-playing-error').textContent=capturing?(!recOnline()?'Connection lost. Check REAPER; Stop remains available.':g_recError||state.error||(g_recPending?'Waiting for REAPER…':'')):'';
             }
@@ -9582,7 +9583,7 @@ global.ChartAuthor.audition=function(editor,query){
                 if(cs&&ct){content='<div class="rec-export-summary"><h3>'+trEsc(cs.song.name)+' / '+trEsc(ct.name||'Take '+ct.number)+'</h3><p>Your selected parts and saved balance. Click and count-in are excluded.</p>'+(cs.song.free?'':'<label class="rec-input"><input type="checkbox" id="rec-copy-backing" '+(g_recCopy.backing?'checked':'')+'> Include original backing</label>')+'<p class="rec-sub">The importer creates the MP3 in the background. Keep it running so friends can download on the room Wi-Fi. Your multitracks stay saved.</p></div>';foot=recLocal('Back to recording','work')+(g_recCopy.job?recLocal('View export','openExport'):recButton('Create MP3','createCopy',{},mode==='audition',true));}
             }
             else if(busy){
-                content='<div class="rec-capture"><div class="rec-capture-state">'+(mode==='countin'?'Two-bar count-in':state.paused?'Paused':'Recording')+'</div><div class="rec-clock" id="rec-elapsed">'+trTime(state.elapsed||0)+'</div><p>'+selected.length+' inputs / '+(session&&session.song.free?'Free jam':'With backing')+'</p></div><div class="rec-input-grid rec-capture-meters">'+selected.map(function(c){return '<div class="rec-input"><span>'+trEsc(c.name)+'</span><div class="rec-meter'+(c.stereo?' stereo':'')+'" data-rec-meter="'+trEsc(c.id)+'"><i></i>'+(c.stereo?'<i></i>':'')+'</div></div>';}).join('')+'</div>';
+                content='<div class="rec-capture"><div class="rec-capture-state">'+(mode==='countin'?recCountInLabel(state):state.paused?'Paused':'Recording')+'</div><div class="rec-clock" id="rec-elapsed">'+trTime(state.elapsed||0)+'</div><p>'+selected.length+' inputs / '+(session&&session.song.free?'Free jam':'With backing')+'</p></div><div class="rec-input-grid rec-capture-meters">'+selected.map(function(c){return '<div class="rec-input"><span>'+trEsc(c.name)+'</span><div class="rec-meter'+(c.stereo?' stereo':'')+'" data-rec-meter="'+trEsc(c.id)+'"><i></i>'+(c.stereo?'<i></i>':'')+'</div></div>';}).join('')+'</div>';
                 foot=recButton(state.paused?'Resume':'Pause','pause',{},mode==='countin')+recButton('Stop','stop',{},false,true);
             }
             else if(prep&&session){

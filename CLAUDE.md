@@ -28,7 +28,8 @@ alignment. The current chart plan is `docs/UNIFIED_CHART_WORKFLOW_PLAN.md`.
 to it — we are not building a new app from scratch.
 
 Current live installation branch: `feature/jamroom-claude`, with code release
-v3.23 (recording play-along) released on 31 October 2026.
+v3.23.1 (recording count-in audio) released on 31 October 2026.
+Source release and live activation are separate; verify deployment status.
 `feature/timing-repair` is the historical implementation branch;
 use a separate development checkout/branch for new executable changes.
 The section-chart overhaul
@@ -74,6 +75,11 @@ ancestry first; never force-push or overwrite divergent changes. Pushing only
 `feature/timing-repair` does not deliver an update to standard installations.
 
 Current architecture:
+- v3.23.1 measures the installed click audio before its review sidecar and
+  ignores muted/rejected click items in favor of the armed song's BPM. It
+  continues the count-in pulse through missing opening beats to avoid a silent
+  gap at the song boundary. Confirmed count-in BPM is visible during capture.
+  Native output-capture evidence is in `docs/RECORDING_COUNTIN_AUDIO.md`.
 - v3.23 records song takes in the ordinary chart view with confirmed count-in,
   recording/pause status and normal Stop/Pause controls. Setup includes a song
   chooser; the controlling screen opens take review after capture completes.
