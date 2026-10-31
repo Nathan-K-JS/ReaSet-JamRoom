@@ -28,7 +28,7 @@ alignment. The current chart plan is `docs/UNIFIED_CHART_WORKFLOW_PLAN.md`.
 to it — we are not building a new app from scratch.
 
 Current live installation branch: `feature/jamroom-claude`, with code release
-v3.22.2 (`2604035`) installed on 23 October 2026.
+v3.23 (recording play-along) released on 31 October 2026.
 `feature/timing-repair` is the historical implementation branch;
 use a separate development checkout/branch for new executable changes.
 The section-chart overhaul
@@ -74,6 +74,13 @@ ancestry first; never force-push or overwrite divergent changes. Pushing only
 `feature/timing-repair` does not deliver an update to standard installations.
 
 Current architecture:
+- v3.23 records song takes in the ordinary chart view with confirmed count-in,
+  recording/pause status and normal Stop/Pause controls. Setup includes a song
+  chooser; the controlling screen opens take review after capture completes.
+  Capture coordinates independently invalidate native chart publication and
+  the browser can use the recording controller's coordinates before chart
+  chunks arrive. Other tablets keep their chart preferences and resume following
+  on each take. See `docs/RECORDING_PLAYALONG.md` for current acceptance evidence.
 - v3.22.2 derives song count-in from the installed click's opening beats and
   phase. Recording publishes capture coordinates so chart discovery and both
   browser views follow original song time during count-in/capture/pause.

@@ -39,8 +39,11 @@ screenshots.
 
 ## Recording and exporting
 
-- **Prepare** puts inputs and meters first, with Song/Free jam and click/count-in
-  settings. **Capture** shows the timer, selected inputs, Pause/Resume and Stop.
+- **Prepare** includes song selection, inputs/meters and Song/Free jam count-in
+  settings. Since v3.23, song **Capture** opens the ordinary chart with a compact
+  recording indicator and normal Pause/Resume/Stop. Take management opens after
+  capture finishes on the controlling screen. Free jam retains its timer and
+  meters. See [Recording play-along](RECORDING_PLAYALONG.md).
 - **Review** shows the selected arrangement and saved mix. Listen, Add part, New
   take and Export recording remain reachable while the parts scroll. Backing
   controls list only groups present in the song. Rename/reset are in each part's

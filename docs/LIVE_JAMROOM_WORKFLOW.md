@@ -13,7 +13,9 @@ their own environment rather than assume they are a test machine.
 - The inspected baseline is v3.21, commit `ee51aac`, on
   `feature/jamroom-claude`. The deployed and HTTP-served ReaSet HTML matched it.
   That is historical inspection evidence. Code release v3.22.2 (`2604035`) was
-  installed on this PC on 23 October 2026; verify current state each session.
+  installed on this PC on 23 October 2026. The subsequent v3.23 recording
+  play-along release is dated 31 October 2026; verify installed/running state
+  each session rather than treating release notes as deployment evidence.
 - Live REAPER serves port **8080**; the live Python importer serves **8765**.
   Neither is a test endpoint. Other loopback addresses do not provide isolation.
 - REAPER's configuration identifies the library at

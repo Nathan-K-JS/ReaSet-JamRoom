@@ -549,7 +549,7 @@ end
 
 -- ─── Main loop ───────────────────────────────────────────────────────────────
 local s_hb, s_hb_next, s_last_csc, s_last_proj, s_last_song = 0, 0, -1, nil, nil
-local s_last_want, s_force = nil, false
+local s_last_want, s_force, s_last_capture = nil, false, nil
 
 local function main_loop()
     if reaper.GetExtState(SEC,'instance')~=instance then return end
@@ -562,7 +562,10 @@ local function main_loop()
 
     -- Rebuild when the project changed, the tab changed, or the playhead moved
     -- into a different song (the payload only covers the current song).
-    local pos=chart_position()
+    -- Capture EXTSTATE can arrive after the last project edit. Its coordinates
+    -- must independently invalidate a chart already loaded for this same song.
+    local pos,capture=chart_position()
+    local capture_key=capture and J.encode(capture) or ''
     local song = song_at(pos)
     local song_id = song and song.id or nil
     if reaper.GetProjectStateChangeCount(0)~=s_last_csc or reaper.EnumProjects(-1,'')~=s_last_proj then ChartUndo.sync_all() end
@@ -582,9 +585,10 @@ local function main_loop()
     end
     local proj = reaper.EnumProjects(-1, "")
     local csc = reaper.GetProjectStateChangeCount(0)
-    if s_force or csc ~= s_last_csc or proj ~= s_last_proj or song_id ~= s_last_song then
+    if s_force or csc ~= s_last_csc or proj ~= s_last_proj or song_id ~= s_last_song or capture_key ~= s_last_capture then
         s_force = false
         s_last_csc, s_last_proj, s_last_song = csc, proj, song_id
+        s_last_capture = capture_key
         local ok, json = pcall(build_json)
         if not ok then reaper.ShowConsoleMsg(tostring(json) .. "\n"); json = '{"schema":1,"song":null,"error":"Chart could not be read; check the REAPER console"}' end
         if json ~= s_last_json then

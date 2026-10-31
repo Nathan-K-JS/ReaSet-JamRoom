@@ -742,8 +742,12 @@ class BrowserTests(unittest.TestCase):
         self.assertEqual(self.page.locator('#chartNow example').count(),0)
 
     def test_resumed_import_target_confirmation_and_safe_stop(self):
+        doc,_=chart.build_document({'duration':60},chart.parse_chart('[Verse]\n[ch]C[/ch]\nSynthetic words'),[])
         row={'id':'saved','song':'Band - Song','state':'review','revision':0,'target':'old-project',
-             'review':{'stems':[],'lyrics':{},'chords':[]},'draft':{}}
+             'review':{'stems':[{'file':'bass.wav','name':'Bass','slot':'BASS','duration':60}],
+                       'slot_choices':[['BASS','Bass']],'slot_labels':{'BASS':'Bass'},
+                       'duration':60,'document':doc,'lyrics':{},'chords':[]},
+             'draft':{'chart_document':doc,'chart_reviewed':True}}
         posts=[]
         def route(req):
             if serve_workspace(req): return
@@ -764,6 +768,8 @@ class BrowserTests(unittest.TestCase):
             req.fulfill(path=str(ROOT/'tools/importer.html'))
         self.page.route('**/*',route)
         self.page.goto('http://importer.test/')
+        # A resumed, reviewed import returns to its saved review step.
+        self.page.evaluate("localStorage.setItem('jamroom-review-tab:saved','review')")
         self.page.get_by_role('button',name='Open Band - Song',exact=True).click()
         self.page.once('dialog',lambda d:d.dismiss())
         self.page.locator('#applyBtn').click()

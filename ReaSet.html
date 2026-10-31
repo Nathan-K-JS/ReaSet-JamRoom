@@ -3464,6 +3464,12 @@
         .rec-feedback{padding:10px 26px;background:#23352e;color:#bdeed8;font-size:13px;flex-shrink:0;max-height:100px;overflow:auto}.rec-feedback:empty{display:none}.rec-feedback.error{background:#39272c;color:#ffbbc7}.rec-feedback .rec-btn{min-height:36px;padding:6px 10px}
         .rec-empty{max-width:600px;margin:40px auto;text-align:center;color:#b4c6d4}.rec-export-summary{max-width:680px;margin:20px auto;line-height:1.6}.rec-export-summary h3{font-size:24px;overflow-wrap:anywhere}
         .rec-capture{text-align:center;padding:26px}.rec-capture-state{color:#ff829c;font-weight:650;letter-spacing:.08em}.rec-clock{font-size:clamp(42px,8vw,76px);font-variant-numeric:tabular-nums;margin:12px 0}.rec-capture p{color:#afc0cd}.rec-capture-meters{max-width:900px;margin:auto}
+        .rec-song-choice{display:flex;flex-direction:column;gap:8px;margin-bottom:16px;font-weight:650}
+        .rec-song-choice select{width:100%;min-width:0;min-height:48px;font:inherit;color:#eef2f7;background:#202a32;border:1px solid #485464;border-radius:10px;padding:10px}
+        #rec-playing{padding:8px 14px;border-bottom:1px solid #57313b;color:#ffb0bf;background:#301e25;font-size:13px;line-height:1.4}
+        #rec-playing[hidden]{display:none}
+        #rec-playing small{display:block;color:#ddc0c6;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+        #rec-playing-error{display:block;color:#ffe4ab}
         @media(min-width:1100px){.rec-pane .rec-input-grid{grid-template-columns:repeat(2,minmax(0,1fr))}.rec-scroll>.rec-input-grid{grid-template-columns:repeat(3,minmax(0,1fr))}.rec-pane .rec-meter{width:48px}}
         @media(max-width:720px){.rec-work-head{padding:10px 14px;gap:8px;flex-wrap:wrap}.rec-work-head>div{flex-basis:100%}.rec-work-head nav{width:100%;justify-content:flex-start}.rec-work-head nav .rec-btn{flex:1;padding:6px;font-size:12px}.rec-eyebrow{display:none}.rec-work-head h2{font-size:21px}.rec-scroll{padding:14px}.rec-work-foot{padding:10px 14px max(10px,env(safe-area-inset-bottom));flex-wrap:wrap;gap:8px}.rec-work-foot .rec-btn{min-width:0;flex:1}.rec-foot-note{flex-basis:100%;max-height:32px}.rec-review-foot{grid-template-columns:repeat(2,minmax(0,1fr))}.rec-input-grid{grid-template-columns:1fr}.rec-prep-tabs{display:flex;gap:8px;margin-bottom:12px}.rec-prep-tabs .rec-btn{flex:1}.rec-split{display:block}.rec-split.show-inputs .rec-mix-pane,.rec-split.show-mix .rec-input-pane{display:none}.rec-pane{padding:12px}.rec-review-context{align-items:flex-start;flex-direction:column;gap:6px}.rec-review-context .rec-actions{width:100%}.rec-review-context .rec-btn{flex:1}.rec-take-row{display:block}.rec-take-row .rec-actions{margin-top:10px}.rec-options{gap:8px;padding:10px}.rec-options .rec-btn{font-size:13px;padding:8px 10px}.rec-options .rec-jam{gap:8px}.rec-jam label{font-size:13px}.rec-feedback{padding:8px 14px}}
         @media(max-height:500px){.rec-work-head{padding:6px 14px;flex-wrap:nowrap}.rec-work-head>div{flex-basis:auto}.rec-work-head h2{font-size:17px}.rec-work-head p,.rec-eyebrow{display:none}.rec-work-head nav{width:auto;flex-wrap:nowrap}.rec-work-head nav .rec-btn{font-size:11px;padding:6px}.rec-work-foot{padding:6px 12px;flex-wrap:nowrap}.rec-review-foot{grid-template-columns:repeat(4,minmax(0,1fr))}.rec-work-foot .rec-btn{font-size:12px;padding:6px}.rec-foot-note{display:none}.rec-capture{padding:8px}.rec-clock{font-size:36px;margin:4px}.rec-feedback{max-height:60px}}
@@ -4462,6 +4468,7 @@ global.ChartAuthor.audition=function(editor,query){
          tapped. -->
     <div id="recording-panel"><div class="panel-header"><span class="panel-title">Recording</span><button class="panel-close-btn" onclick="recTogglePanel()">✕</button></div><div id="recording-body"></div></div>
     <div id="perfBar">
+        <div id="rec-playing" hidden><strong id="rec-playing-label"></strong><small id="rec-playing-inputs"></small><span id="rec-playing-error" role="status"></span></div>
         <div id="perfChips" onclick="togglePerf()">
             <span class="pchip" id="pchipTempo">Tempo 100%</span>
             <span class="pchip" id="pchipKey">Key +0</span>
@@ -5817,7 +5824,7 @@ global.ChartAuthor.audition=function(editor,query){
         syncLeadSlider();
         tkRenderPanel();             // paints the performance chips on load
         // Shown in the sidebar so a stale cached page is obvious after a deploy.
-        var REASET_VERSION = "v3.22.2 - Recording count-in and charts";
+        var REASET_VERSION = "v3.23 - Recording play-along";
         var _rv = document.getElementById("reasetVer");
         if (_rv) _rv.textContent = REASET_VERSION;
         (function () { var t = localStorage.getItem("reasetlist_theme") || "dark"; setTheme(t, true); })();
@@ -7123,6 +7130,7 @@ global.ChartAuthor.audition=function(editor,query){
             // Rendering (including an import's region refresh) cannot drive
             // playback from the previous transport snapshot.
             var automate = fromTransport === true && transportSampleIsCurrent(requestStarted) && !recLocked();
+            var playbackPos=recPlaybackPosition();
             // Clear active state on song rows
             var prev = document.querySelector('.song-row.active');
             if (prev) prev.classList.remove('active');
@@ -7133,7 +7141,7 @@ global.ChartAuthor.audition=function(editor,query){
             var activeIdx = -1;
             for (var j = 0; j < displayList.length; j++) {
                 var r = displayList[j];
-                if (currentPos >= r.start && currentPos < r.end) { activeIdx = j; break; }
+                if (playbackPos >= r.start && playbackPos < r.end) { activeIdx = j; break; }
             }
             var activeRegion = (activeIdx !== -1) ? displayList[activeIdx] : null;
 
@@ -7142,7 +7150,7 @@ global.ChartAuthor.audition=function(editor,query){
                 var csubs = g_subRegionMap[activeRegion.name] || [];
                 var csub = null;
                 for (var s = 0; s < csubs.length; s++) {
-                    if (currentPos >= csubs[s].start && currentPos < csubs[s].end) { csub = csubs[s]; break; }
+                    if (playbackPos >= csubs[s].start && playbackPos < csubs[s].end) { csub = csubs[s]; break; }
                 }
                 isLooping = csub ? csub.loop : activeRegion.loop;
             }
@@ -7190,7 +7198,7 @@ global.ChartAuthor.audition=function(editor,query){
                     }
                 }
                 // Progress percentage
-                var pct = ((currentPos - activeRegion.start) / activeRegion.duration) * 100;
+                var pct = ((playbackPos - activeRegion.start) / activeRegion.duration) * 100;
                 pct = Math.min(100, Math.max(0, pct));
                 // Card BG fill
                 var bgFill = document.getElementById("bg-" + activeRegion.id);
@@ -7198,7 +7206,7 @@ global.ChartAuthor.audition=function(editor,query){
                 // Duration countdown
                 var durEl = document.getElementById("dur-" + activeRegion.id);
                 if (durEl) {
-                    var rem = activeRegion.end - currentPos; if (rem < 0) rem = 0;
+                    var rem = activeRegion.end - playbackPos; if (rem < 0) rem = 0;
                     durEl.innerText = "-" + formatTime(rem); durEl.classList.add("live-time");
                 }
                 // Section row highlight & sub-region progress
@@ -7207,7 +7215,7 @@ global.ChartAuthor.audition=function(editor,query){
                 if (subs) {
                     for (var s = 0; s < subs.length; s++) {
                         var sub = subs[s];
-                        if (currentPos >= sub.start && currentPos < sub.end) { activeSub = sub; break; }
+                        if (playbackPos >= sub.start && playbackPos < sub.end) { activeSub = sub; break; }
                     }
                     if (automate && isPlaying && activeSub && activeSub.skipped) {
                         wwr_req("SET/POS/" + activeSub.end);
@@ -7222,7 +7230,7 @@ global.ChartAuthor.audition=function(editor,query){
                         var subBg = document.getElementById("bg-" + subObj.id);
                         if (subBg) {
                             if (isThisActive) {
-                                var pctSub = ((currentPos - activeSub.start) / activeSub.duration) * 100;
+                                var pctSub = ((playbackPos - activeSub.start) / activeSub.duration) * 100;
                                 subBg.style.width = Math.min(100, Math.max(0, pctSub)) + "%";
                             } else {
                                 subBg.style.width = "0%";
@@ -7361,7 +7369,7 @@ global.ChartAuthor.audition=function(editor,query){
 
                 // Sub-region End-of-region logic
                 if (automate && activeSub && isPlaying) {
-                    var subTimeRem = activeSub.end - currentPos;
+                    var subTimeRem = activeSub.end - playbackPos;
 
                     // Clear loop-fire dedup key when we're safely away from the end boundary
                     // (meaning we've looped back and are playing through the section again)
@@ -7488,7 +7496,7 @@ global.ChartAuthor.audition=function(editor,query){
                 }
 
                 // End-of-region logic
-                var timeRem = activeRegion.end - currentPos;
+                var timeRem = activeRegion.end - playbackPos;
                 // Reset end-of-region dedup when safely inside the region.
                 // This allows the trigger to re-arm after a song loop (region.loop)
                 // jumps the playhead back to the start.
@@ -7775,7 +7783,7 @@ global.ChartAuthor.audition=function(editor,query){
             wwr_req("1016;SET/POS/" + start); flashRow(id); if(!silent)triggerMidi();
         }
         function smartStop() {
-            if (recLocked()) { recSend('stop'); return; }
+            if (recLocked()) { if(!recOnline())wwr_req(1016);else recSend('stop'); return; }
             cancelTransportActions();
             g_transportDesiredPlaying=false;
             queuedRegion=null;
@@ -9276,14 +9284,61 @@ global.ChartAuthor.audition=function(editor,query){
             return g_recState && Date.now()-g_recHb.at<4000 && (!g_stableId || g_recState.project===g_stableId);
         }
         function recLocked() {
-            return !!(g_recPending && ['record','recordPart','recordPrepared','retry','keep','listen'].indexOf(g_recPending.op)>=0 ||
+            return !!(isRecording || g_recPending && ['record','recordPart','recordPrepared','retry','keep','listen'].indexOf(g_recPending.op)>=0 ||
                 g_recState && (!g_stableId || g_recState.project===g_stableId) && g_recState.mode && g_recState.mode!=='idle');
         }
         function recSong() {
             if (!g_recState) return null;
+            if(g_recState.mode==='idle' && typeof g_recState.songKey==='string')
+                return (g_recState.songs||[]).find(function(s){return s.key===g_recState.songKey;})||null;
             return (g_recState.songs||[]).find(function(s){return currentPos>=s.start-.001 && currentPos<s.finish;}) || null;
         }
+        function recCapturing(){return !!(g_recState && (!g_stableId||g_recState.project===g_stableId) && ['countin','recording'].indexOf(g_recState.mode)>=0);}
+        function recCaptureContext(){
+            var c=recCapturing()&&g_recState.capture || isRecording&&g_clData&&g_clData.capture;
+            if(!c||!Number.isFinite(c.origin)||!Number.isFinite(c.start)||!Number.isFinite(c.finish)||c.finish<=c.start)return null;
+            if(c.project&&g_stableId&&c.project!==g_stableId)return null;
+            return c;
+        }
+        function recPlaybackPosition(){
+            var c=recCaptureContext();
+            return c?Math.max(c.start,Math.min(c.finish-.000001,c.start+currentPos-c.origin)):currentPos;
+        }
+        // Navigation follows confirmed take transitions, independently of chart/transport polls.
+        var g_recPresentation=null,g_recReviewAfterTake=false,g_recLegacyLyrics=false;
+        function recShowChart(){
+            document.getElementById('recording-panel').classList.remove('open');
+            if(g_recLegacyLyrics){if(!lyricsVisible)toggleLegacyLyricsPanel();}
+            else if(!chordsVisible)toggleChordsPanel();
+            updateTopTabs();
+            renderChordsView();renderLyricsView();
+        }
+        function recPresentTake(){
+            if(!recOnline())return;
+            var s=g_recState,busy=recCapturing(),panel=document.getElementById('recording-panel');
+            var key=busy?[s.project,s.selected,s.take].join('|'):null;
+            if(g_recPresentation&&g_recPresentation.project!==s.project){g_recPresentation=null;g_recReviewAfterTake=false;}
+            if(busy){
+                var fresh=!g_recPresentation||g_recPresentation.key!==key;
+                if(fresh){
+                    g_recReviewAfterTake=g_recReviewAfterTake||panel.classList.contains('open');
+                    g_recPresentation={project:s.project,key:key};
+                }
+                var session=(s.sessions||[]).find(function(v){return v.id===s.selected;});
+                if(session&&!session.song.free){
+                    if(panel.classList.contains('open') || fresh&&!lyricsVisible&&!chordsVisible&&!tracksPanelOpen)recShowChart();
+                    if(fresh)chartFollow();
+                }
+            }else if(g_recPresentation){
+                g_recPresentation=null;
+                if(g_recReviewAfterTake){
+                    g_recReviewAfterTake=false;g_recView='work';
+                    closeOtherPanels('recording');panel.classList.add('open');updateTopTabs();
+                }
+            }
+        }
         function recExplainLock() {
+            if(recCapturing()){g_recError='Recording this song. Stop the take before changing songs or playback settings.';recRender();return;}
             g_recError='Finish recording or choose Done before changing songs.';
             closeOtherPanels('recording');document.getElementById('recording-panel').classList.add('open');updateTopTabs();recRender();
         }
@@ -9312,6 +9367,13 @@ global.ChartAuthor.audition=function(editor,query){
             document.querySelector('.app-transport').classList.toggle('recording-context',!!context);
             document.body.classList.toggle('free-jam-screen',open&&state.recordMode==='freejam');
             document.body.classList.toggle('rec-workspace',open);
+            var capturing=recCapturing(),banner=document.getElementById('rec-playing');
+            if(banner){
+                banner.hidden=!capturing||open;
+                document.getElementById('rec-playing-label').textContent=(mode==='countin'?'Count-in':state.paused?'Recording paused':'Recording')+' · '+trTime(state.elapsed||0);
+                document.getElementById('rec-playing-inputs').textContent=(state.inputs||[]).filter(function(c){return c.selected;}).map(function(c){return c.name;}).join(' · ');
+                document.getElementById('rec-playing-error').textContent=capturing?(!recOnline()?'Connection lost. Check REAPER; Stop remains available.':g_recError||state.error||(g_recPending?'Waiting for REAPER…':'')):'';
+            }
             btn.disabled=false;
             if(!context){btn.textContent=isPlaying?'Ⅱ PAUSE':'▶ PLAY';return;}
             if(mode==='idle'){btn.textContent=isPlaying?'Stop playback first':'● RECORD';btn.disabled=!recCanStart();}
@@ -9327,6 +9389,7 @@ global.ChartAuthor.audition=function(editor,query){
             var command=Object.assign({op:op,project:g_recState.project,revision:g_recState.revision,nonce:nonce},extra||{});
             g_recProbe=null;
             g_recPending={nonce:nonce,op:op,at:Date.now()};g_recError='';
+            if(['record','recordPart','recordPrepared','retry','keep'].indexOf(op)>=0)g_recReviewAfterTake=true;
             if (['record','recordPart','recordPrepared','retry','keep','listen'].indexOf(op)>=0) { cancelTransportActions();queuedRegion=null;_reaperNativeLoopOff(); }
             wwr_req('SET/EXTSTATE/ReaSetRec/want/'+encodeURIComponent(JSON.stringify(command)));
             recRender();
@@ -9372,12 +9435,14 @@ global.ChartAuthor.audition=function(editor,query){
                     if(g_recPending.op==='done' && !state.error){document.getElementById('recording-panel').classList.remove('open');updateTopTabs();}
                     if(!state.error&&g_recPending.op==='review')g_recView='work';
                     if(state.error&&g_recPending.op==='listening'&&g_recCopy)g_recCopy.job=null;
+                    if(state.error&&!recCapturing())g_recReviewAfterTake=false;
                     g_recPending=null;
                     g_recError=state.error||'';
                 }
                 if(g_recProbe && state.recovery && state.recovery.nonce===g_recProbe.nonce){
                     g_recError=state.recovery.error|| (state.recovery.confirmed?'Current REAPER state checked.':'Current REAPER state checked. The unconfirmed request was cancelled; review the state before trying again.');
                     g_recPending=null;g_recProbe=null;
+                    if(!recCapturing())g_recReviewAfterTake=false;
                 }
                 recRender();recUpdateGain();
                 if(tracksPanelOpen){var gainNode=document.getElementById('playback-gain'),gainSong=recSong();if(!gainNode||(gainSong&&gainNode.parentElement.dataset.level!==JSON.stringify([gainSong.key,gainSong.level||null])&&document.activeElement!==gainNode))renderTracksPanel();}
@@ -9390,7 +9455,12 @@ global.ChartAuthor.audition=function(editor,query){
             return recButton(label,'mix',extra).replace('class="rec-btn"','class="rec-btn rec-switch" role="switch" aria-checked="'+!!on+'"');
         }
         function recTogglePanel() {
+            if(recCapturing()){
+                var session=(g_recState.sessions||[]).find(function(s){return s.id===g_recState.selected;});
+                if(session&&!session.song.free){recShowChart();return;}
+            }
             var panel=document.getElementById('recording-panel'),open=!panel.classList.contains('open');
+            if(open)g_recLegacyLyrics=lyricsVisible;
             if(open)closeOtherPanels('recording');
             panel.classList.toggle('open',open);updateTopTabs();recRender();
             if(recOnline() && g_recState.mode==='idle' && (g_recState.inputs||[]).every(function(c){return c.exists;}))recSend(open?'ready':'done');
@@ -9481,6 +9551,7 @@ global.ChartAuthor.audition=function(editor,query){
         }
         function recRender(){
             var host=document.getElementById('recording-body');if(!host)return;
+            recPresentTake();
             var state=g_recState||{},online=recOnline(),mode=state.mode||'idle',song=recSong(),busy=mode==='recording'||mode==='countin',review=mode==='review'||mode==='audition';
             var session=(state.sessions||[]).find(function(s){return s.id===state.selected;}),take=session&&(session.takes||[]).find(function(t){return t.id===state.take;});
             var prep=state.preparation||(state.overdub&&{kind:'part',parent:state.take,stopAtEnd:true}),free=review&&session?session.song.free:state.recordMode==='freejam',jam=state.jam||{bpm:100,beats:4,click:true};
@@ -9528,14 +9599,15 @@ global.ChartAuthor.audition=function(editor,query){
                 foot=listen+recButton('Add part','prepareTake',{kind:'part',session:session.id,take:take.id},mode==='audition')+recButton('New take','prepareTake',{kind:'new',session:session.id,take:take.id},mode==='audition')+recButton('Export recording','copy',{session:session.id,take:take.id},mode==='audition',true);
             }
             else{
-                content='<div class="rec-options"><div class="rec-segments">'+recButton('Song','recordMode',{value:'song'},!free)+recButton('Free jam','recordMode',{value:'freejam'},free)+'</div>';
+                if(!free)content='<label class="rec-song-choice">Song<select id="rec-song" '+(!online||isPlaying||g_recPending?'disabled':'')+'><option value="">Choose a song</option>'+(state.songs||[]).map(function(s){return '<option value="'+trEsc(s.key)+'" '+(song&&song.key===s.key?'selected':'')+'>'+trEsc(s.name)+'</option>';}).join('')+'</select></label>';
+                content+='<div class="rec-options"><div class="rec-segments">'+recButton('Song','recordMode',{value:'song'},!free)+recButton('Free jam','recordMode',{value:'freejam'},free)+'</div>';
                 if(free)content+='<div class="rec-jam"><label>Tempo <input id="rec-jam-bpm" type="number" min="40" max="240" step="1" value="'+jam.bpm+'"> BPM</label><label>Beats <select id="rec-jam-beats">'+[2,3,4,5,6,7].map(function(n){return '<option '+(n===jam.beats?'selected':'')+'>'+n+'</option>';}).join('')+'</select></label><label><input id="rec-jam-click" type="checkbox" '+(jam.click?'checked':'')+'> Click</label></div>';
                 content+=recButton('Count-in: '+(state.countin?'2 bars':'off'),'countin',{value:!state.countin})+'</div>';
                 if(state.device==='connecting')content+='<p class="rec-sub" role="status">Connecting recording inputs...</p>';
                 if(state.device==='unavailable')content+='<div class="rec-feedback error">Check X32 USB and REAPER audio inputs. '+recButton('Reconnect inputs','reconnect')+'</div>';
                 if(!(state.inputs||[]).some(function(c){return c.exists;}))content+=recButton('Set up recording tracks','setup',{},false,true);
                 else content+='<h3 class="rec-section-title">Recording inputs</h3>'+recInputs(state,false);
-                foot='<span class="rec-foot-note">'+selected.length+' inputs selected'+(state.device==='ready'?' / Ready':'')+'</span>'+recButton('Record','record',{song:song&&song.key},!recCanStart(),true)+(isPlaying?recLocal('Stop playback','emergency'):'');
+                foot='<span class="rec-foot-note">'+selected.length+' inputs selected'+(state.device==='ready'?' / Ready':'')+(free?'':' · Chart opens when recording starts')+'</span>'+recButton('Record','record',{song:song&&song.key},!recCanStart(),true)+(isPlaying?recLocal('Stop playback','emergency'):'');
             }
             if((g_recPending||!online||mode==='audition'&&view!=='work')&&foot.indexOf('data-rec-view="emergency"')<0)foot+=recLocal('Stop','emergency');
             html+='<main class="rec-scroll'+(prep&&view==='work'?' rec-preparing':'')+'" id="rec-scroll">'+content+'</main><footer class="rec-work-foot '+(busy?'rec-capture-foot':!prep&&review&&view==='work'?'rec-review-foot':'')+'">'+foot+'</footer>';
@@ -9589,7 +9661,8 @@ global.ChartAuthor.audition=function(editor,query){
             if(e.target.dataset.recPart){var value=Number(e.target.value);e.target.nextElementSibling.textContent=value<=-61?'Silent':value.toFixed(1)+' dB';}
         });
         document.getElementById('recording-body').addEventListener('change',function(e){
-            if(e.target.dataset.recPart){var db=Number(e.target.value);recSend('partMix',{part:e.target.dataset.recPart,gain:db<=-61?0:Math.pow(10,db/20)});}
+            if(e.target.id==='rec-song'){var song=(g_recState.songs||[]).find(function(s){return s.key===e.target.value;});if(song){cancelTransportActions();queuedRegion=null;recSend('song',{song:song.key});}recRender();}
+            else if(e.target.dataset.recPart){var db=Number(e.target.value);recSend('partMix',{part:e.target.dataset.recPart,gain:db<=-61?0:Math.pow(10,db/20)});}
             else if(e.target.dataset.recSession){g_recSelected[e.target.dataset.recSession]=e.target.checked;e.target.blur();recRender();}
             else if(e.target.dataset.recInput){var input=e.target.dataset.recInput,value=e.target.checked;e.target.blur();recSend('select',{input:input,value:value});}
         });
@@ -9783,9 +9856,9 @@ global.ChartAuthor.audition=function(editor,query){
         }
         function chartFollow(){g_chartPage=null;g_sectionBrowse=null;ChartDisplay.follow(document.getElementById('chords-live'));ChartDisplay.follow(document.getElementById('lyrics-live'));renderChordsView();renderLyricsView();}
         function chartSongPosition(){
-            var c=g_clData&&g_clData.capture,song=g_clData&&g_clData.song;
-            if(isRecording&&c&&song&&Number.isFinite(c.origin)&&Math.abs(c.start-song.start)<.001)
-                return song.start+Math.max(0,currentPos-c.origin);
+            var c=recCaptureContext(),song=g_clData&&g_clData.song;
+            if(c&&song&&Math.abs(c.start-song.start)<.001 && (!c.project||!g_clData.project||c.project===g_clData.project))
+                return song.start+Math.max(0,Math.min(c.finish-c.start,currentPos-c.origin));
             return currentPos;
         }
         function chartDisplayTime(doc){
